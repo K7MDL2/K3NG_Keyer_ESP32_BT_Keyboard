@@ -16,10 +16,10 @@ I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboa
 
 The K3NG USB and PS2 keyboards map a ton of functions, I plan to replicate those key mappings later.  For now I have coded all regular keys and their SHIFT+key codes also work.
 
+Tested with BLE keyboard Rii i8+ mini keyboard and the Logitech K380 which happens to use BT classic.
+
 Eventually I will merge these changes into the current K3NG repo and do a Pull Request there.
 
-WiIl be adding WIKI pages to show how I set up the IDE Tool options and placing the bt_keyboad library in the right place.
-
-Tested with BLE keyboard Rii i8+ mini keyboard.   Started testing Logitech K380 whci happears to use BT classic and is crashing during BT discovery during initial pairing, investigating....
+Will be adding WIKI pages here to show how I set up the IDE Tool options and placing the bt_keyboad library in the right place.  I do have Wiki pages to show how to upload precompiled firmware to your compatible CPU board eith of 2 tools.
 
 *************************************************************************
