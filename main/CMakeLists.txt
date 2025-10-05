@@ -20,15 +20,15 @@ idf_build_get_property(build_dir BUILD_DIR)
 idf_build_get_property(elf_name EXECUTABLE_NAME GENERATOR_EXPRESSION)
 set(app_bin "${build_dir}/${elf_name}.bin")
 
-#add_custom_command(OUTPUT "${out_path}/app.bin"
-#  POST_BUILD
-#  #DEPENDS "${build_dir}/.bin_timestamp"
+add_custom_command(OUTPUT "${out_path}/app.bin"
+  POST_BUILD
+  DEPENDS "${build_dir}/.bin_timestamp"
 #  DEPENDS "${app_bin}"
-#  COMMENT "Copying binary to precompiled_images/app.bin"
-#  COMMAND "${CMAKE_COMMAND}" -E copy "${app_bin}" "${out_path}"
-#  COMMAND "${CMAKE_COMMAND}" -E copy "${build_dir}/bootloader/bootloader.bin" "${out_path}" 
-#  COMMAND "${CMAKE_COMMAND}" -E copy "${build_dir}/partition_table/partition-table.bin" "${out_path}" 
-#)
+  COMMENT "Copying binary to precompiled_images/app.bin"
+  COMMAND "${CMAKE_COMMAND}" -E copy "${app_bin}" "${out_path}"
+  COMMAND "${CMAKE_COMMAND}" -E copy "${build_dir}/bootloader/bootloader.bin" "${out_path}" 
+  COMMAND "${CMAKE_COMMAND}" -E copy "${build_dir}/partition_table/partition-table.bin" "${out_path}" 
+)
 
-#add_custom_target(copy_app_binary ALL DEPENDS "${out_path}/app.bin")
-#add_dependencies(copy_app_binary gen_project_binary)
+add_custom_target(copy_app_binary ALL DEPENDS "${out_path}/app.bin")
+add_dependencies(copy_app_binary gen_project_binary)
