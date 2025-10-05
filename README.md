@@ -21,5 +21,6 @@ Tested with BLE keyboard Rii i8+ mini keyboard and the Logitech K380 which happe
 Eventually I will merge these changes into the current K3NG repo and do a Pull Request there.
 
 Will be adding WIKI pages here to show how I set up the IDE Tool options and placing the bt_keyboad library in the right place.  I do have Wiki pages to show how to upload precompiled firmware to your compatible CPU board eith of 2 tools.
+https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
 *************************************************************************
