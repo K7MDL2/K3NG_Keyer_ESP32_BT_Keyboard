@@ -39,3 +39,9 @@
 
 # debug information files
 *.dwo
+
+
+/build
+/libraries
+/managed_components
+
