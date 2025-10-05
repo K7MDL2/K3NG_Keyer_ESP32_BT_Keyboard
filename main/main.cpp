@@ -18228,7 +18228,7 @@ void keyboard_connected_handler() {
 void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for BLE and BT Classic
   esp_err_t ret;
   
-  esp_log_level_set(TAG, ESP_LOG_VERBOSE);
+  //esp_log_level_set(TAG, ESP_LOG_ERROR);
   pinMode(bt_keyboard_LED, OUTPUT);
   // To test the Pairing code entry, uncomment the following line as pairing info is
         // kept in the nvs. Pairing will then be required on every boot.
