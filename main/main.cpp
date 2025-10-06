@@ -15349,7 +15349,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
         }
       }
   
-      delay(100);
+      vTaskDelay(100/portTICK_PERIOD_MS);
       #ifdef FEATURE_BUTTONS
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
           loop1 = 0;
@@ -15361,7 +15361,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
           loop2 = 0;
         }    
       #endif //FEATURE_BUTTONS
-      delay(10);
+      vTaskDelay(10/portTICK_PERIOD_MS);
     } //loop2
   } //loop1
   
@@ -17953,7 +17953,7 @@ void initialize_default_modes(){
     Serial.println("Went here 3");
   #endif
 
-  delay(2500);  // wait a little bit for the caps to charge up on the paddle lines
+  vTaskDelay(2500/portTICK_PERIOD_MS);  // wait a little bit for the caps to charge up on the paddle lines
   #if defined DEBUG_SETUP
     Serial.println("Went here 4");
   #endif
@@ -18206,7 +18206,7 @@ void ps2int_write() {
 //--------------------------------------------------------------------- 
 #ifdef FEATURE_BT_KEYBOARD
 static bool BT_Keyboard_Lost = false;
-static const char *TAG = "BT_KEYER";
+//static const char *TAG = "BT_KEYER";
 
 void pairing_handler(uint32_t pid) {
     debug_serial_port->print("Please enter the following pairing code followed with ENTER on your keyboard: ");
@@ -22926,9 +22926,9 @@ void check_bt_keyboard(){
         //for (int n = 0; n < inf.size; n++) {
         if (inf.size == 8) {   // keyboard chars are len = 8, mousr and others are len=4
             ch = inf.keys[2];
-            #ifdef DEBUG_BT_KEYBOARD
-                //debug_serial_port->print(ch);
-                //debug_serial_port->print('-');
+            #ifdef DEBUG_BT_KEYBOARD_B
+                debug_serial_port->print(ch);
+                debug_serial_port->print('-');
             #endif
             if (ch != 0 && keyDN != true) 
                 keyDN = true;  // this is a valid alphanumeric key
@@ -22943,10 +22943,10 @@ void check_bt_keyboard(){
                 else 
                 {
                     keyDN = true;  // this is a valid alphanumeric key - send to processing
-                    //#ifdef DEBUG_BT_KEYBOARD
+                    #ifdef DEBUG_BT_KEYBOARD_A
                         debug_serial_port->print(ch,HEX);  // print our valid char
                         debug_serial_port->print(',');
-                    //#endif
+                    #endif
 
                     // inf.keys[0] where
                     // x=0 is normal key
@@ -23024,7 +23024,7 @@ void check_bt_keyboard(){
                             default   : break; //debug_serial_port->print(ch);   // filter out key up events
                         }  // end switch ch
                     }
-                    #ifdef DEBUG_BT_KEYBOARD
+                    #ifdef DEBUG_BT_KEYBOARD_C
                         debug_serial_port->print(ch);  // print our valid char
                         debug_serial_port->print(',');
                     #endif
@@ -23099,188 +23099,215 @@ void setup()
 
 }
 
-// --------------------------------------------------------------------------------------------
-//void loop()
-
-extern "C" 
-{ 
-    void app_main() 
+void main_loop(void * pvParameters ) 
 {
-  
-  // this is where the magic happens
-  
-  setup();
-  while (true){
+  /* The parameter value is expected to be 1 as 1 is passed in the
+    pvParameters value in the call to xTaskCreate() below. */
 
-  #ifdef OPTION_WATCHDOG_TIMER
-    wdt_reset();
-  #endif  //OPTION_WATCHDOG_TIMER
-  
-  #if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
-    if (keyer_machine_mode == BEACON) {
-      delay(201);                                                                   // an odd duration delay before we enter BEACON mode
-      #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-        unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
-      #endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
+  configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
 
-      while (keyer_machine_mode == BEACON) {                                        // if we're in beacon mode, just keep playing memory 1
-        if (!send_buffer_bytes) {
-          add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
-          add_to_send_buffer(0);
-        }
-        service_send_buffer(PRINTCHAR);
-        #ifdef OPTION_BEACON_MODE_PTT_TAIL_TIME
-          delay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
-          check_ptt_tail();                                                         // this resets things so that the ptt line will go high during the next playout
-          digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
-        #endif                                                                      // OPTION_BEACON_MODE_PTT_TAIL_TIME
+  for( ;; )
+  {
 
-        #ifdef FEATURE_SERIAL
-          check_serial();
-        #endif
-
-        #ifdef OPTION_WATCHDOG_TIMER
-          wdt_reset();
-        #endif                                                                      // OPTION_WATCHDOG_TIMER
-
+    #ifdef OPTION_WATCHDOG_TIMER
+      wdt_reset();
+    #endif  //OPTION_WATCHDOG_TIMER
+    
+    #if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
+      if (keyer_machine_mode == BEACON) {
+        delay(201);                                                                   // an odd duration delay before we enter BEACON mode
         #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-          if (time_to_delay > 0) delay(time_to_delay);                              // this provdes a delay between succesive playouts of the memory contents
-        #endif                                                                      // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-      }                                                                             // end while (keyer_machine_mode == BEACON)
-    }                                                                               // end if (keyer_machine_mode == BEACON)
-  #endif                                                                            // defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
+          unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
+        #endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
 
-  #if defined(FEATURE_BEACON_SETTING)
-    service_beacon();
-  #endif
+        while (keyer_machine_mode == BEACON) {                                        // if we're in beacon mode, just keep playing memory 1
+          if (!send_buffer_bytes) {
+            add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
+            add_to_send_buffer(0);
+          }
+          service_send_buffer(PRINTCHAR);
+          #ifdef OPTION_BEACON_MODE_PTT_TAIL_TIME
+            delay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
+            check_ptt_tail();                                                         // this resets things so that the ptt line will go high during the next playout
+            digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
+          #endif                                                                      // OPTION_BEACON_MODE_PTT_TAIL_TIME
 
-  if (keyer_machine_mode == KEYER_NORMAL) {
-    #ifdef FEATURE_BUTTONS
-      check_buttons();
-    #endif
-    check_paddles();
-    service_dit_dah_buffers();
+          #ifdef FEATURE_SERIAL
+            check_serial();
+          #endif
 
-    #if defined(FEATURE_SERIAL)      
-      check_serial();
-      check_paddles();           
-      service_dit_dah_buffers();
-    #endif
+          #ifdef OPTION_WATCHDOG_TIMER
+            wdt_reset();
+          #endif                                                                      // OPTION_WATCHDOG_TIMER
 
-    service_send_buffer(PRINTCHAR);
-    check_ptt_tail();
+          #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
+            if (time_to_delay > 0) delay(time_to_delay);                              // this provdes a delay between succesive playouts of the memory contents
+          #endif                                                                      // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
+        }                                                                             // end while (keyer_machine_mode == BEACON)
+      }                                                                               // end if (keyer_machine_mode == BEACON)
+    #endif                                                                            // defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
 
-    #ifdef FEATURE_POTENTIOMETER
-      check_potentiometer();
-    #endif
-    
-    #ifdef FEATURE_ROTARY_ENCODER
-      check_rotary_encoder();
-    #endif
-
-    #ifdef FEATURE_PS2_KEYBOARD
-      check_ps2_keyboard();
-    #endif
-    
-    #ifdef FEATURE_BT_KEYBOARD
-      check_bt_keyboard();
-    #endif
-    
-    #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
-      service_usb();
-    #endif  
-
-    check_for_dirty_configuration();
-
-    #ifdef FEATURE_DEAD_OP_WATCHDOG
-      check_for_dead_op();
+    #if defined(FEATURE_BEACON_SETTING)
+      service_beacon();
     #endif
 
-    #ifdef FEATURE_MEMORIES
-      check_memory_repeat();
-    #endif
-
-    #ifdef FEATURE_DISPLAY
+    if (keyer_machine_mode == KEYER_NORMAL) {
+      #ifdef FEATURE_BUTTONS
+        check_buttons();
+      #endif
       check_paddles();
+      service_dit_dah_buffers();
+
+      #if defined(FEATURE_SERIAL)      
+        check_serial();
+        check_paddles();           
+        service_dit_dah_buffers();
+      #endif
+
       service_send_buffer(PRINTCHAR);
-      service_display();
-    #endif
-    
-    #ifdef FEATURE_CW_DECODER
-      service_cw_decoder();
-    #endif
-    
-    #ifdef FEATURE_LED_RING
-      update_led_ring();
-    #endif 
+      check_ptt_tail();
+
+      #ifdef FEATURE_POTENTIOMETER
+        check_potentiometer();
+      #endif
       
-    #ifdef FEATURE_SLEEP
-      check_sleep();
-    #endif
-
-    #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-      check_backlight();
-    #endif
-
-    #ifdef FEATURE_PTT_INTERLOCK
-      service_ptt_interlock();
-    #endif
-    
-    #ifdef FEATURE_PADDLE_ECHO
-      service_paddle_echo();
-    #endif    
-
-    #ifdef FEATURE_STRAIGHT_KEY
-      service_straight_key();
-    #endif
-
-    #if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
-      service_competition_compression_detection();
-    #endif
-
-    #if defined(OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE) && defined(FEATURE_WINKEY_EMULATION)
-      service_winkey_breakin();
-    #endif  
-
-    #if defined(FEATURE_ETHERNET)
-      check_for_network_restart();
-      #if defined(FEATURE_WEB_SERVER)
-        service_web_server();
+      #ifdef FEATURE_ROTARY_ENCODER
+        check_rotary_encoder();
       #endif
-      #if defined(FEATURE_INTERNET_LINK)
-        service_udp_send_buffer();
-        service_udp_receive();
-        service_internet_link_udp_receive_buffer();
+
+      #ifdef FEATURE_PS2_KEYBOARD
+        check_ps2_keyboard();
       #endif
-    #endif  
+      
+      #ifdef FEATURE_BT_KEYBOARD
+        check_bt_keyboard();
+      #endif
+      
+      #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
+        service_usb();
+      #endif  
 
-    #ifdef FEATURE_SIDETONE_SWITCH
-      check_sidetone_switch();
-    #endif
+      check_for_dirty_configuration();
 
-    #if defined(FEATURE_4x4_KEYPAD) || defined(FEATURE_3x4_KEYPAD)
-      service_keypad();
-    #endif
+      #ifdef FEATURE_DEAD_OP_WATCHDOG
+        check_for_dead_op();
+      #endif
 
-    #ifdef FEATURE_SD_CARD_SUPPORT
-      service_sd_card();    
-    #endif
+      #ifdef FEATURE_MEMORIES
+        check_memory_repeat();
+      #endif
 
-    #ifdef FEATURE_SEQUENCER
-      check_sequencer_tail_time();
-    #endif  
+      #ifdef FEATURE_DISPLAY
+        check_paddles();
+        service_send_buffer(PRINTCHAR);
+        service_display();
+      #endif
+      
+      #ifdef FEATURE_CW_DECODER
+        service_cw_decoder();
+      #endif
+      
+      #ifdef FEATURE_LED_RING
+        update_led_ring();
+      #endif 
+        
+      #ifdef FEATURE_SLEEP
+        check_sleep();
+      #endif
 
-    #ifdef FEATURE_SO2R_SWITCHES
-      so2r_switches();
-    #endif
+      #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+        check_backlight();
+      #endif
 
-    service_async_eeprom_write();
-    
-  }
+      #ifdef FEATURE_PTT_INTERLOCK
+        service_ptt_interlock();
+      #endif
+      
+      #ifdef FEATURE_PADDLE_ECHO
+        service_paddle_echo();
+      #endif    
 
-  service_sending_pins();
+      #ifdef FEATURE_STRAIGHT_KEY
+        service_straight_key();
+      #endif
 
-  service_millis_rollover();
+      #if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
+        service_competition_compression_detection();
+      #endif
+
+      #if defined(OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE) && defined(FEATURE_WINKEY_EMULATION)
+        service_winkey_breakin();
+      #endif  
+
+      #if defined(FEATURE_ETHERNET)
+        check_for_network_restart();
+        #if defined(FEATURE_WEB_SERVER)
+          service_web_server();
+        #endif
+        #if defined(FEATURE_INTERNET_LINK)
+          service_udp_send_buffer();
+          service_udp_receive();
+          service_internet_link_udp_receive_buffer();
+        #endif
+      #endif  
+
+      #ifdef FEATURE_SIDETONE_SWITCH
+        check_sidetone_switch();
+      #endif
+
+      #if defined(FEATURE_4x4_KEYPAD) || defined(FEATURE_3x4_KEYPAD)
+        service_keypad();
+      #endif
+
+      #ifdef FEATURE_SD_CARD_SUPPORT
+        service_sd_card();    
+      #endif
+
+      #ifdef FEATURE_SEQUENCER
+        check_sequencer_tail_time();
+      #endif  
+
+      #ifdef FEATURE_SO2R_SWITCHES
+        so2r_switches();
+      #endif
+
+      service_async_eeprom_write();
+      
+    }
+
+    service_sending_pins();
+
+    service_millis_rollover();
   }
 }
+
+// --------------------------------------------------------------------------------------------
+//void loop()
+extern "C" 
+{ 
+  void app_main() 
+  {
+    BaseType_t xReturned;
+    TaskHandle_t xHandle = NULL;
+
+    initArduino();  // Initialize the Arduino environment
+
+    // this is where the magic happens
+    
+    setup(); // call setup for here when not in Arduino statup mode
+    
+    xReturned = xTaskCreate(
+                  main_loop,       /* Function that implements the task. */
+                  "Main_Loop",          /* Text name for the task. */
+                  10000,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  tskIDLE_PRIORITY,/* Priority at which the task is created. */
+                  &xHandle );  
+    
+    //if( xReturned == pdPASS )
+    //{
+        // The task was created. Use the task's handle to delete the task.
+        //vTaskDelete( xHandle );
+    //}
+  }
 }
