@@ -15205,7 +15205,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   char incoming_char = ' ';
   String user_entered_cw = "";
   byte practice_type = 0;
-  char word_buffer[10];
+  char word_buffer[25];
 
   randomSeed(millis());
 
@@ -15432,9 +15432,9 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
         #endif
         break;
       case PRACTICE_3_CHAR_WORDS:
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s3_table[random(0,s3_size)])));
+        //strcpy_P(word_buffer, (char*)pgm_read_word(&(s3_table[random(0,s3_size)])));
         cw_to_send_to_user = word_buffer;
-        #ifdef DEBUG_PRACTICE_SERIAL
+        #ifndef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_non_interactive: PRACTICE_3_CHAR_WORDS:");
         #endif        
         break;
