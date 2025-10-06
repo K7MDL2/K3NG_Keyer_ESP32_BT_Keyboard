@@ -12,7 +12,7 @@ https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 This repository is forked from https://github.com/aimeiz/k3ng_cw_keyer-master_2022 repository which was modified 3 years ago to work on some flavor of ESP32.  After changing the pin assignments it workes on my ESP32-WROOM-32 dev board.  
 
-I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.
+I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.   I was getting RTOS WDT warnings while dits and dahs were being sent, competing with the BT service task.   I put the main program loop into a RTOS task and thw problem seems to be solved.
 
 The K3NG USB and PS2 keyboards map a ton of functions, I plan to replicate those key mappings later.  For now I have coded all regular keys and their SHIFT+key codes also work.
 
