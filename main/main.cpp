@@ -8011,27 +8011,27 @@ void command_progressive_5_char_echo_practice() {
     //     break; 
     //   case ECHO_2_CHAR_WORDS: 
     //     //word_index = random(0,s2_size);  // min parm is inclusive, max parm is exclusive
-    //     strcpy_P(word_buffer, (char*)pgm_read_word(&(s2_table[random(0,s2_size)])));
+    //     strcpy_P(word_buffer, (char*)pgm_read_dword(&(s2_table[random(0,s2_size)])));
     //     cw_to_send_to_user = word_buffer;
     //     break;
     //   case ECHO_3_CHAR_WORDS: 
     //     //word_index = random(0,s3_size);  // min parm is inclusive, max parm is exclusive
-    //     strcpy_P(word_buffer, (char*)pgm_read_word(&(s3_table[random(0,s3_size)])));
+    //     strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[random(0,s3_size)])));
     //     cw_to_send_to_user = word_buffer;
     //     break;
     //   case ECHO_4_CHAR_WORDS: 
     //     //word_index = random(0,s4_size);  // min parm is inclusive, max parm is exclusive
-    //     strcpy_P(word_buffer, (char*)pgm_read_word(&(s4_table[random(0,s4_size)])));
+    //     strcpy_P(word_buffer, (char*)pgm_read_dword(&(s4_table[random(0,s4_size)])));
     //     cw_to_send_to_user = word_buffer;
     //     break;    
     //   case ECHO_NAMES: 
     //     //word_index = random(0,name_size);  // min parm is inclusive, max parm is exclusive
-    //     strcpy_P(word_buffer, (char*)pgm_read_word(&(name_table[random(0,name_size)])));
+    //     strcpy_P(word_buffer, (char*)pgm_read_dword(&(name_table[random(0,name_size)])));
     //     cw_to_send_to_user = word_buffer;
     //     break; 
     //   case ECHO_QSO_WORDS: 
     //     //word_index = random(0,qso_size);  // min parm is inclusive, max parm is exclusive
-    //     strcpy_P(word_buffer, (char*)pgm_read_word(&(qso_table[random(0,qso_size)])));
+    //     strcpy_P(word_buffer, (char*)pgm_read_dword(&(qso_table[random(0,qso_size)])));
     //     cw_to_send_to_user = word_buffer;
     //     break; 
     // } //switch (practice_mode)
@@ -13999,13 +13999,13 @@ String generate_callsign(byte callsign_mode) {
   } //CALLSIGN_US
 
   if (callsign_mode == CALLSIGN_CANADA){
-    strcpy_P(word_buffer, (char*)pgm_read_word(&(canadian_prefix_table[random(0,canadian_prefix_size)])));
+    strcpy_P(word_buffer, (char*)pgm_read_dword(&(canadian_prefix_table[random(0,canadian_prefix_size)])));
     callsign = word_buffer;
   }
 
   if (callsign_mode == CALLSIGN_EUROPEAN){
 
-    strcpy_P(word_buffer, (char*)pgm_read_word(&(eu_prefix_table[random(0,eu_prefix_size)])));
+    strcpy_P(word_buffer, (char*)pgm_read_dword(&(eu_prefix_table[random(0,eu_prefix_size)])));
     callsign = word_buffer;
   }
 
@@ -14476,23 +14476,23 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
         progressive_step_counter = 1;
         break; 
       case ECHO_2_CHAR_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s2_table[random(0,s2_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s2_table[random(0,s2_size)])));
         cw_to_send_to_user = word_buffer;
         break;
       case ECHO_3_CHAR_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s3_table[random(0,s3_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[random(0,s3_size)])));
         cw_to_send_to_user = word_buffer;
         break;
       case ECHO_4_CHAR_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s4_table[random(0,s4_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s4_table[random(0,s4_size)])));
         cw_to_send_to_user = word_buffer;
         break;    
       case ECHO_NAMES: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(name_table[random(0,name_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(name_table[random(0,name_size)])));
         cw_to_send_to_user = word_buffer;
         break; 
       case ECHO_QSO_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(qso_table[random(0,qso_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(qso_table[random(0,qso_size)])));
         cw_to_send_to_user = word_buffer;
         break; 
 
@@ -15074,23 +15074,23 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
     switch(practice_type){
       case WORDSWORTH_2_CHAR_WORDS: 
         word_index = random(0,s2_size);  // min parm is inclusive, max parm is exclusive
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s2_table[word_index])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s2_table[word_index])));
         break;
       case WORDSWORTH_3_CHAR_WORDS: 
         word_index = random(0,s3_size);  // min parm is inclusive, max parm is exclusive
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s3_table[word_index])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[word_index])));
         break;
       case WORDSWORTH_4_CHAR_WORDS: 
         word_index = random(0,s4_size);  // min parm is inclusive, max parm is exclusive
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s4_table[word_index])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s4_table[word_index])));
         break;    
       case WORDSWORTH_NAMES: 
         word_index = random(0,name_size);  // min parm is inclusive, max parm is exclusive
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(name_table[word_index])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(name_table[word_index])));
         break; 
       case WORDSWORTH_QSO_WORDS: 
         word_index = random(0,qso_size);  // min parm is inclusive, max parm is exclusive
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(qso_table[word_index])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(qso_table[word_index])));
         break; 
     }
 
@@ -15205,7 +15205,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   char incoming_char = ' ';
   String user_entered_cw = "";
   byte practice_type = 0;
-  char word_buffer[25];
+  char word_buffer[10];
 
   randomSeed(millis());
 
@@ -15251,35 +15251,35 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
         cw_to_send_to_user = generate_callsign(practice_type);
         break;
       case PRACTICE_2_CHAR_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s2_table[random(0,s2_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s2_table[random(0,s2_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_interactive: PRACTICE_2_CHAR_WORDS:");
         #endif
         break;
       case PRACTICE_3_CHAR_WORDS:
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s3_table[random(0,s3_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[random(0,s3_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_interactive: PRACTICE_3_CHAR_WORDS:");
         #endif        
         break;
       case PRACTICE_4_CHAR_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s4_table[random(0,s4_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s4_table[random(0,s4_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_interactive: PRACTICE_4_CHAR_WORDS:");
         #endif        
         break;    
       case PRACTICE_NAMES: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(name_table[random(0,name_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(name_table[random(0,name_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_interactive: PRACTICE_NAMES:");
         #endif        
         break; 
       case PRACTICE_QSO_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(qso_table[random(0,qso_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(qso_table[random(0,qso_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_interactive: PRACTICE_QSO_WORDS:");
@@ -15425,35 +15425,35 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
         cw_to_send_to_user = generate_callsign(practice_type);
         break;
       case PRACTICE_2_CHAR_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s2_table[random(0,s2_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s2_table[random(0,s2_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_non_interactive: PRACTICE_2_CHAR_WORDS:");
         #endif
         break;
       case PRACTICE_3_CHAR_WORDS:
-        //strcpy_P(word_buffer, (char*)pgm_read_word(&(s3_table[random(0,s3_size)])));
+        //strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[random(0,s3_size)])));
         cw_to_send_to_user = word_buffer;
         #ifndef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_non_interactive: PRACTICE_3_CHAR_WORDS:");
         #endif        
         break;
       case PRACTICE_4_CHAR_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(s4_table[random(0,s4_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s4_table[random(0,s4_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_non_interactive: PRACTICE_4_CHAR_WORDS:");
         #endif        
         break;    
       case PRACTICE_NAMES: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(name_table[random(0,name_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(name_table[random(0,name_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_non_interactive: PRACTICE_NAMES:");
         #endif        
         break; 
       case PRACTICE_QSO_WORDS: 
-        strcpy_P(word_buffer, (char*)pgm_read_word(&(qso_table[random(0,qso_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(qso_table[random(0,qso_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print("serial_practice_non_interactive: PRACTICE_QSO_WORDS:");
