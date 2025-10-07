@@ -22887,173 +22887,179 @@ void update_time(){
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
 
-void check_bt_keyboard(){
+void check_bt_keyboard(void * pvParameters){
 
+  /* The parameter value is expected to be 1 as 1 is passed in the
+  pvParameters value in the call to xTaskCreate() below. */
+
+  configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
+
+  for( ;; )
+  {
 //ToDo: Set up as a periodic scan for reconnect or new keyboard
-    if (BT_Keyboard_Lost == true) {
-        bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
-                                // Default duration is 5 seconds
-        return;
-    }
-    
-    #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval
-          //uint8_t ch = bt_keyboard.wait_for_ascii_char();
-            uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
+      if (BT_Keyboard_Lost == true) {
+          bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
+                                  // Default duration is 5 seconds
+          return;
+      }
+      
+      #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval
+            //uint8_t ch = bt_keyboard.wait_for_ascii_char();
+              uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
 
-        if ((ch >= ' ') && (ch < 127)) 
-            debug_serial_port->print(ch);  // << std::flush; 
-        else 
-        {
-            if (ch > 0) {
-              debug_serial_port->print('['); // << std::flush;
-              debug_serial_port->print(ch); // << std::flush;
-              debug_serial_port->print(']'); // << std::flush;
-            }
-        }
-    #else
-        char ch;
-        char ch_digit;
-        static bool keyDN = false;
-        static bool last_key = true;
+          if ((ch >= ' ') && (ch < 127)) 
+              debug_serial_port->print(ch);  // << std::flush; 
+          else 
+          {
+              if (ch > 0) {
+                debug_serial_port->print('['); // << std::flush;
+                debug_serial_port->print(ch); // << std::flush;
+                debug_serial_port->print(']'); // << std::flush;
+              }
+          }
+      #else
+          char ch;
+          static bool keyDN = false;
+          static bool last_key = true;
 
-        BTKeyboard::KeyInfo inf;
-        bt_keyboard.wait_for_low_event(inf, 1);  // 2nd argument is time to wait for chars
-        //debug_serial_port->print(inf.size);
-        //debug_serial_port->print(',');
+          BTKeyboard::KeyInfo inf;
+          bt_keyboard.wait_for_low_event(inf, 1);  // 2nd argument is time to wait for chars
+          //debug_serial_port->print(inf.size);
+          //debug_serial_port->print(',');
 
-        // simple decoding for Rii K08 BLE mini keyboard, aka Rii model i8+
-        //std::cout << "RECEIVED KEYBOARD EVENT: ";
-        //for (int n = 0; n < inf.size; n++) {
-        if (inf.size == 8) {   // keyboard chars are len = 8, mousr and others are len=4
-            ch = inf.keys[2];
-            #ifdef DEBUG_BT_KEYBOARD_B
-                debug_serial_port->print(ch);
-                debug_serial_port->print('-');
-            #endif
-            if (ch != 0 && keyDN != true) 
-                keyDN = true;  // this is a valid alphanumeric key
+          // simple decoding for Rii K08 BLE mini keyboard, aka Rii model i8+
+          //std::cout << "RECEIVED KEYBOARD EVENT: ";
+          //for (int n = 0; n < inf.size; n++) {
+          if (inf.size == 8) {   // keyboard chars are len = 8, mousr and others are len=4
+              ch = inf.keys[2];
+              #ifdef DEBUG_BT_KEYBOARD_B
+                  debug_serial_port->print(ch);
+                  debug_serial_port->print('-');
+              #endif
+              if (ch != 0 && keyDN != true) 
+                  keyDN = true;  // this is a valid alphanumeric key
 
-            if (keyDN != last_key) // only process new key events separated by key-up
-            {
-                if (ch == 0) // ignore keyups
-                {
-                    keyDN = false;
-                    //debug_serial_port->print(ch);
-                } 
-                else 
-                {
-                    keyDN = true;  // this is a valid alphanumeric key - send to processing
-                    #ifdef DEBUG_BT_KEYBOARD_A
-                        debug_serial_port->print(ch,HEX);  // print our valid char
-                        debug_serial_port->print(',');
-                    #endif
+              if (keyDN != last_key) // only process new key events separated by key-up
+              {
+                  if (ch == 0) // ignore keyups
+                  {
+                      keyDN = false;
+                      //debug_serial_port->print(ch);
+                  } 
+                  else 
+                  {
+                      keyDN = true;  // this is a valid alphanumeric key - send to processing
+                      #ifdef DEBUG_BT_KEYBOARD_A
+                          debug_serial_port->print("-0x");
+                          debug_serial_port->print(ch,HEX);  // print our valid char
+                          debug_serial_port->print(',');
+                      #endif
 
-                    // inf.keys[0] where
-                    // x=0 is normal key
-                    // x=2 is Sfift+key
-                    // x=1 is ctl+key
-                    // x=4 is Alt+key
-                        
-                    if (inf.keys[0] == 2) // shift key pressed
-                    {
-                        switch (ch) {     
-                            case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
-                                        if (isalpha(ch)) {
-                                            if (islower(ch)) 
-                                                ch = toupper(ch);
-                                        } else ch = 0;
-                                        break;                     
-                            case 0x1e : ch = '!'; break;      // '!'  key
-                            case 0x1f : ch = '@'; break;      // '@'  key
-                            case 0x20 : ch = '#'; break;      // '#'  key
-                            case 0x21 : ch = '$'; break;      // '$'  key
-                            case 0x22 : ch = '%'; break;      // '%'  key
-                            case 0x23 : ch = '^'; break;      // '^'  key
-                            case 0x24 : ch = '&'; break;      // '&'  key
-                            case 0x25 : ch = '*'; break;      // '*'  key                            
-                            case 0x26 : ch = '('; break;      // '('  key
-                            case 0x27 : ch = ')'; break;      // ')'  key                            
-                            case 0x2D : ch = '_'; break;      // '_'  key
-                            case 0x2E : ch = '+'; break;      // '+'  key
-                            case 0x2F : ch = '{'; break;      // '{'  key
-                            case 0x30 : ch = '}'; break;      // '}'  key    
-                            case 0x31 : ch = '|'; break;      // '|' key                        
-                            case 0x33 : ch = ':'; break;      // ':'  key
-                            case 0x34 : ch = '"'; break;      // '"'  key
-                            case 0x36 : ch = '<'; break;      // '<'  key
-                            case 0x37 : ch = '>'; break;      // '>'  key
-                            case 0x38 : ch = '?'; break;      // '?' cursor key
-                        }
-                    } 
-                    else
-                    {
-                        switch (ch) {
-                            case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
-                                        if (isalpha(ch)) {
-                                            if (islower(ch)) 
-                                                ch = toupper(ch);
-                                        } else ch = 0;
-                                        break;
-                            case 0x1e ... 0x26 : ch += 0x13;  // numbers 1-9
-                                        if (!isdigit(ch)) ch = 0;
-                                        break;
-                            case 0x27 : ch += 0x09;  // number 0
-                                        if (!isdigit(ch)) ch = 0;
-                                        break;
-                            case 0x28 : ch = '\n'; debug_serial_port->print(ch); break;   // enter key
-                            case 0x29 : ch = '\n'; break;   // ESC key - figure out how to erase a queue or stop senbding with this
-                            case 0x2A : ch = '\n'; break;   // BACK key
-                            case 0x2B : ch = '\t'; break; // TAB key
-                            case 0x2c : ch = ' '; break;    // space
-                            case 0x2D : ch = '-'; break;    // '-'  key
-                            case 0x2E : ch = '='; break;    // '='  key
-                            case 0x2F : ch = '['; break;    // '['  key                                                  
-                            case 0x30 : ch = '['; break;    // '['  key
-                            case 0x31 : ch = '\\'; break;   // '\' key
-                            case 0x33 : ch = ';'; break;    // ';'  key
-                            case 0x34 : ch = '\''; break;   // '''  key
-                            case 0x36 : ch = ','; break;    // ','  key
-                            case 0x37 : ch = '.'; break;    // '.'  key
-                            case 0x38 : ch = '/'; break;    // '/' cursor key
-                            case 0x39 : ch = '\n'; break;   // CAP LOCK toggle
-                            case 0x3A ... 0x43: ch = '\n'; break; // F1-F10 keys
-                            case 0x4F : ch = '\n'; break;   // right cursor key
-                            case 0x50 : ch = '\n'; break;   // left cursor key
-                            case 0x51 : ch = '\n'; break;   // down cursor key
-                            case 0x52 : ch = '\n'; break;   // up cursor key
-                            default   : break; //debug_serial_port->print(ch);   // filter out key up events
-                        }  // end switch ch
-                    }
-                    #ifdef DEBUG_BT_KEYBOARD_C
-                        debug_serial_port->print(ch);  // print our valid char
-                        debug_serial_port->print(',');
-                    #endif
+                      // inf.keys[0] where
+                      // x=0 is normal key
+                      // x=2 is Sfift+key
+                      // x=1 is ctl+key
+                      // x=4 is Alt+key
+                          
+                      if (inf.keys[0] == 2) // shift key pressed
+                      {
+                          switch (ch) {     
+                              case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
+                                          if (isalpha(ch)) {
+                                              if (islower(ch)) 
+                                                  ch = toupper(ch);
+                                          } else ch = 0;
+                                          break;                     
+                              case 0x1e : ch = '!'; break;      // '!'  key
+                              case 0x1f : ch = '@'; break;      // '@'  key
+                              case 0x20 : ch = '#'; break;      // '#'  key
+                              case 0x21 : ch = '$'; break;      // '$'  key
+                              case 0x22 : ch = '%'; break;      // '%'  key
+                              case 0x23 : ch = '^'; break;      // '^'  key
+                              case 0x24 : ch = '&'; break;      // '&'  key
+                              case 0x25 : ch = '*'; break;      // '*'  key                            
+                              case 0x26 : ch = '('; break;      // '('  key
+                              case 0x27 : ch = ')'; break;      // ')'  key                            
+                              case 0x2D : ch = '_'; break;      // '_'  key
+                              case 0x2E : ch = '+'; break;      // '+'  key
+                              case 0x2F : ch = '{'; break;      // '{'  key
+                              case 0x30 : ch = '}'; break;      // '}'  key    
+                              case 0x31 : ch = '|'; break;      // '|' key                        
+                              case 0x33 : ch = ':'; break;      // ':'  key
+                              case 0x34 : ch = '"'; break;      // '"'  key
+                              case 0x36 : ch = '<'; break;      // '<'  key
+                              case 0x37 : ch = '>'; break;      // '>'  key
+                              case 0x38 : ch = '?'; break;      // '?' cursor key
+                          }
+                      } 
+                      else
+                      {
+                          switch (ch) {
+                              case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
+                                          if (isalpha(ch)) {
+                                              if (islower(ch)) 
+                                                  ch = toupper(ch);
+                                          } else ch = 0;
+                                          break;
+                              case 0x1e ... 0x26 : ch += 0x13;  // numbers 1-9
+                                          if (!isdigit(ch)) ch = 0;
+                                          break;
+                              case 0x27 : ch += 0x09;  // number 0
+                                          if (!isdigit(ch)) ch = 0;
+                                          break;
+                              case 0x28 : ch = '\n'; break;   // enter key
+                              case 0x29 : ch = '\n'; break;   // ESC key - figure out how to erase a queue or stop senbding with this
+                              case 0x2A : ch = '\n'; break;   // BACK key
+                              case 0x2B : ch = '\t'; break; // TAB key
+                              case 0x2c : ch = ' '; break;    // space
+                              case 0x2D : ch = '-'; break;    // '-'  key
+                              case 0x2E : ch = '='; break;    // '='  key
+                              case 0x2F : ch = '['; break;    // '['  key                                                  
+                              case 0x30 : ch = '['; break;    // '['  key
+                              case 0x31 : ch = '\\'; break;   // '\' key
+                              case 0x33 : ch = ';'; break;    // ';'  key
+                              case 0x34 : ch = '\''; break;   // '''  key
+                              case 0x36 : ch = ','; break;    // ','  key
+                              case 0x37 : ch = '.'; break;    // '.'  key
+                              case 0x38 : ch = '/'; break;    // '/' cursor key
+                              case 0x39 : ch = '\n'; break;   // CAP LOCK toggle
+                              case 0x3A ... 0x43: ch = '\n'; break; // F1-F10 keys
+                              case 0x4F : ch = '\n'; break;   // right cursor key
+                              case 0x50 : ch = '\n'; break;   // left cursor key
+                              case 0x51 : ch = '\n'; break;   // down cursor key
+                              case 0x52 : ch = '\n'; break;   // up cursor key
+                              default   : break; //debug_serial_port->print(ch);   // filter out key up events
+                          }  // end switch ch
+                      }
+                      #ifdef DEBUG_BT_KEYBOARD_C
+                          debug_serial_port->print(ch);  // print our valid char
+                          debug_serial_port->print(',');
+                      #endif
 
-                    if ((ch > 31) && (ch < 255 /*123*/)) {
-                        //if (ps2_prosign_flag) {
-                        //    add_to_send_buffer(SERIAL_SEND_BUFFER_PROSIGN);
-                        //    ps2_prosign_flag = 0;
-                        //}
-                        //ch = uppercase(keystroke);
-                        add_to_send_buffer(ch);
-                        #ifdef FEATURE_MEMORIES
-                            repeat_memory = 255;
-                        #endif
-                    }
-                }
-            }
-        }
-        last_key = keyDN;
-        keyDN = false;
-            
-        #ifdef DEBUG_BT_KEYBOARD_A
-            debug_serial_port->print("[");
-            debug_serial_port->print(ch);
-            debug_serial_port->print("],");
-        #endif
-    
-
-    #endif
+                      if (((ch > 31) && (ch < 255 /*123*/)) || ch == '\n') {
+                          //if (ps2_prosign_flag) {
+                          //    add_to_send_buffer(SERIAL_SEND_BUFFER_PROSIGN);
+                          //    ps2_prosign_flag = 0;
+                          //}
+                          //ch = uppercase(keystroke);
+                          add_to_send_buffer(ch);
+                          #ifdef FEATURE_MEMORIES
+                              repeat_memory = 255;
+                          #endif
+                      }
+                  }
+              }
+          }
+          last_key = keyDN;
+          keyDN = false;
+              
+          #ifdef DEBUG_BT_KEYBOARD_A
+              debug_serial_port->print("[");
+              debug_serial_port->print(ch);
+              debug_serial_port->print("],");
+          #endif
+      #endif
+  }
 }
 #endif // FEATURE_BT_KEYBOARD
 
@@ -23180,7 +23186,7 @@ void main_loop(void * pvParameters )
       #endif
       
       #ifdef FEATURE_BT_KEYBOARD
-        check_bt_keyboard();
+        //check_bt_keyboard();
       #endif
       
       #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
@@ -23288,13 +23294,24 @@ extern "C"
   void app_main() 
   {
     BaseType_t xReturned;
-    TaskHandle_t xHandle = NULL;
+    TaskHandle_t xHandle_MAIN = NULL;
+    TaskHandle_t xHandle_BT = NULL;
 
     initArduino();  // Initialize the Arduino environment
 
     // this is where the magic happens
     
     setup(); // call setup for here when not in Arduino statup mode
+
+    #ifdef FEATURE_BT_KEYBOARD
+    xReturned = xTaskCreate(
+                  check_bt_keyboard,       /* Function that implements the task. */
+                  "Check_BT_Keyboard",          /* Text name for the task. */
+                  4000,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  tskIDLE_PRIORITY,/* Priority at which the task is created. */
+                  &xHandle_BT );  
+    #endif
     
     xReturned = xTaskCreate(
                   main_loop,       /* Function that implements the task. */
@@ -23302,7 +23319,7 @@ extern "C"
                   10000,      /* Stack size in words, not bytes. */
                   ( void * ) 1,    /* Parameter passed into the task. */
                   tskIDLE_PRIORITY,/* Priority at which the task is created. */
-                  &xHandle );  
+                  &xHandle_MAIN );  
     
     //if( xReturned == pdPASS )
     //{
