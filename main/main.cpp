@@ -22929,12 +22929,20 @@ void check_bt_keyboard(void * pvParameters){
 
           // simple decoding for Rii K08 BLE mini keyboard, aka Rii model i8+
           //std::cout << "RECEIVED KEYBOARD EVENT: ";
-          //for (int n = 0; n < inf.size; n++) {
+          for (int n = 0; n < inf.size; n++) {
+              #ifdef DEBUG_BT_KEYBOARD_E
+                  debug_serial_port->print(':');
+                  debug_serial_port->print(inf.keys[n],HEX);
+                  debug_serial_port->print(':');
+              #endif
+          }
+
           if (inf.size == 8) {   // keyboard chars are len = 8, mousr and others are len=4
               ch = inf.keys[2];
               #ifdef DEBUG_BT_KEYBOARD_B
-                  debug_serial_port->print(ch);
-                  debug_serial_port->print('-');
+                  debug_serial_port->print(':');
+                  debug_serial_port->print(ch,HEX);
+                  debug_serial_port->print(':');
               #endif
               if (ch != 0 && keyDN != true) 
                   keyDN = true;  // this is a valid alphanumeric key
@@ -22956,12 +22964,15 @@ void check_bt_keyboard(void * pvParameters){
                       #endif
 
                       // inf.keys[0] where
-                      // x=0 is normal key
-                      // x=2 is Sfift+key
-                      // x=1 is ctl+key
-                      // x=4 is Alt+key
+                      // x=0x00 is Normal key
+                      // x=0x02 is Left Shift+key
+                      // x=0x20 is Right Shift+key
+                      // x=0x01 is Ctl+key
+                      // x=0x10 is Ctl+key
+                      // x=0x04 is Alt+key
+                      // x=0x40 is Alt+key
                           
-                      if (inf.keys[0] == 2) // shift key pressed
+                      if (inf.keys[0] == 0x02 || inf.keys[0] == 0x20) // left or right side shift key pressed
                       {
                           switch (ch) {     
                               case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
