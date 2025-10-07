@@ -1,3 +1,17 @@
+| Support Targets | ![alt text][esp32] |
+| --- | --- |
+
+| Boards Used | ![alt text][esp32-WROOM-32]|
+| --- | --- |
+
+| Dev Environment Used | ![alt text][ESP-IDF]|
+| --- | --- |
+
+
+[esp32]: https://img.shields.io/badge/ESP32-green "ESP32"
+[esp32-WROOM-32]: https://img.shields.io/badge/ESP32--WROOM--32-orange "ESP32-WROOM-32"
+[ESP-IDF]: https://img.shields.io/badge/ESP--IDF-cyan "ESP-IDF"
+
 # k3ng_cw_keyer
 K3NG Arduino CW Keyer
 
@@ -10,9 +24,9 @@ https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 ***********************  Oct 4, 2025  K7MDL *****************************
 
-This repository is forked from https://github.com/aimeiz/k3ng_cw_keyer-master_2022 repository which was modified 3 years ago to work on some flavor of ESP32.  After changing the pin assignments it workes on my ESP32-WROOM-32 dev board.  
+This repository is forked from https://github.com/aimeiz/k3ng_cw_keyer-master_2022 repository which was modified 3 years ago to work on some flavor of ESP32.  After changing the pin assignments it workes on my ESP32-WROOM-32 dev board.  Using ESP-IDF to compile.  Arduino32 is added as a component.
 
-I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.   I was getting RTOS WDT warnings while dits and dahs were being sent, competing with the BT service task.   I put the main program loop into a RTOS task and thw problem seems to be solved.
+I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.   I was getting RTOS WDT warnings while dits and dahs were being sent, competing with the BT service task.   I put the main program loop and check_bt_keyboard() into their own RTOS tasks and the problem seems to be solved for now. Seem OK at 30WPM and 13WPM.  More testing required.
 
 The K3NG USB and PS2 keyboards map a ton of functions, I plan to replicate those key mappings later.  For now I have coded all regular keys and their SHIFT+key codes also work.
 
