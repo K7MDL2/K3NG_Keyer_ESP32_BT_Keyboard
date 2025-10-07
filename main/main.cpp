@@ -22923,7 +22923,7 @@ void check_bt_keyboard(void * pvParameters){
           static bool last_key = true;
 
           BTKeyboard::KeyInfo inf;
-          bt_keyboard.wait_for_low_event(inf, 1);  // 2nd argument is time to wait for chars
+          bt_keyboard.wait_for_low_event(inf); //, 1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
           //debug_serial_port->print(inf.size);
           //debug_serial_port->print(',');
 
