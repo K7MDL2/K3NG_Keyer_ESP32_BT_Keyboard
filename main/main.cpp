@@ -23000,7 +23000,7 @@ void check_bt_keyboard(){
                             case 0x27 : ch += 0x09;  // number 0
                                         if (!isdigit(ch)) ch = 0;
                                         break;
-                            case 0x28 : ch = '\n'; break;   // enter key
+                            case 0x28 : ch = '\n'; debug_serial_port->print(ch); break;   // enter key
                             case 0x29 : ch = '\n'; break;   // ESC key - figure out how to erase a queue or stop senbding with this
                             case 0x2A : ch = '\n'; break;   // BACK key
                             case 0x2B : ch = '\t'; break; // TAB key
