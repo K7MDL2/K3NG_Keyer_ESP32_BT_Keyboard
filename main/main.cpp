@@ -23016,7 +23016,7 @@ void check_bt_keyboard(){
                             case 0x37 : ch = '.'; break;    // '.'  key
                             case 0x38 : ch = '/'; break;    // '/' cursor key
                             case 0x39 : ch = '\n'; break;   // CAP LOCK toggle
-                            case 0x3A ...0x43: ch = '\n'; break; // F1-F10 keys
+                            case 0x3A ... 0x43: ch = '\n'; break; // F1-F10 keys
                             case 0x4F : ch = '\n'; break;   // right cursor key
                             case 0x50 : ch = '\n'; break;   // left cursor key
                             case 0x51 : ch = '\n'; break;   // down cursor key
