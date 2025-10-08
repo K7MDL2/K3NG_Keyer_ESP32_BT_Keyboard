@@ -1130,15 +1130,13 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
       uint16_t appearance = r->ble.appearance;
       std::cout << "  " << (r->transport == ESP_HID_TRANSPORT_BLE ? "BLE: " : "BT: ") << r->bda
                 << std::dec << ", RSSI: " << +r->rssi << ", USAGE: " << esp_hid_usage_str(r->usage);
-      
-                if (r->transport == ESP_HID_TRANSPORT_BLE) {
+      if (r->transport == ESP_HID_TRANSPORT_BLE) {
         std::cout << ", APPEARANCE: 0x" << std::hex << std::setw(4) << std::setfill('0')
                   << appearance << ", ADDR_TYPE: '" << ble_addr_type_str(r->ble.addr_type) << "'";
         if (appearance == ESP_BLE_APPEARANCE_HID_KEYBOARD) {
           cr = r.get();
         }
       }
-      
       if (r->transport == ESP_HID_TRANSPORT_BT) {
         std::cout << ", COD: " << esp_hid_cod_major_str(r->bt.cod.major) << "[";
         esp_hid_cod_minor_print(r->bt.cod.minor, stdout);
@@ -1164,10 +1162,8 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
 
     if (cr) {
       // open the selected entry
-      if (esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type) == ESP_OK)
-          std::cout << "Open BLE Entry" << std::endl;
-      else
-          std::cout << "Open BT/BLE Entry FAILED" << std::endl;
+      esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type);
+      std::cout << "Open BLE Entry";
     }
 
     // free the results
@@ -1286,6 +1282,7 @@ void BTKeyboard::push_key(uint8_t *keys, uint8_t size) {
   // enqueue
   inf.size = size;
   memcpy(&inf.keys, keys, size);
+  inf.modifier = (KeyModifier) *keys;
 
   xQueueSendToBack(event_queue_, &inf, 0);
 }
@@ -1313,15 +1310,10 @@ void BTKeyboard::push_key(uint8_t *keys, uint8_t size) {
  */
 char BTKeyboard::wait_for_ascii_char(bool forever) {
   KeyInfo inf;
-  
 
   while (true) {
-    //if (!wait_for_low_event(inf,
-    //                        ) {
-    TickType_t t = last_ch_ == 0 ? (forever ? portMAX_DELAY : 0) : repeat_period_;
-    if (wait_for_low_event(inf, 500)) {
-      
-      std::cout << '*' << last_ch_ << '*' << std::dec << std::flush;
+    if (!wait_for_low_event(inf,
+                            (last_ch_ == 0) ? (forever ? portMAX_DELAY : 0) : repeat_period_)) {
       repeat_period_ = pdMS_TO_TICKS(120);
       return last_ch_;
     }
