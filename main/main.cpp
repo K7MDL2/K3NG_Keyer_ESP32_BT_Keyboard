@@ -3628,7 +3628,7 @@ void repeat_memory_msg(byte memory_number){
 
 //-------------------------------------------------------------------------------------------------------
 
-#ifdef FEATURE_PS2_KEYBOARD
+#if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD_TEST)
 void check_ps2_keyboard()
 {
 
@@ -3645,10 +3645,17 @@ void check_ps2_keyboard()
              collapsing code correctly when while() statements are encapsulated in #ifdef/#endifs.                        */
   
   #ifdef FEATURE_MEMORIES
+  
+  #if defined (FEATURE_PS2_KEYBOARD)
+  
   while ((keyboard.available()) && (play_memory_prempt == 0)) {      
-    
     // read the next key
     keystroke = keyboard.read();
+
+    #else
+  while (1) {
+  // use BT keyboard char stream  
+    #endif
 
     #if defined(DEBUG_PS2_KEYBOARD)
       debug_serial_port->print("check_ps2_keyboard: keystroke: ");
@@ -22935,6 +22942,7 @@ void check_bt_keyboard(void * pvParameters){
         #else  // this one has 2 methods, both work the same.
             char ch;
             static bool keyDN = false;
+            static bool CMD_KEY = false;
             static bool last_key = true;
             uint8_t modifier = 0;
             TickType_t    repeat_period_;
@@ -22984,7 +22992,7 @@ void check_bt_keyboard(void * pvParameters){
                             debug_serial_port->print(',');
                         #endif
 
-                        #ifndef Key_LOOKUP_METHOD
+                        #ifdef Key_LOOKUP_METHOD
                             static char last_ch_;
                             bool caps_lock_ = false;
                             const char shift_trans_dict_[] =
@@ -23025,6 +23033,9 @@ void check_bt_keyboard(void * pvParameters){
                                         }
                                     }
                                 }
+                                debug_serial_port->print("<");
+                                debug_serial_port->print(ch);
+                                debug_serial_port->print(">");
                                 ch = last_ch_;
                                 last_ch_ = 0;
                             }
@@ -23080,12 +23091,14 @@ void check_bt_keyboard(void * pvParameters){
                                     case 0x36 : ch = '<'; break;      // '<'  key
                                     case 0x37 : ch = '>'; break;      // '>'  key
                                     case 0x38 : ch = '?'; break;      // '?' cursor key
+                                    case 0x3A ... 0x45: ch += 85; break; // F1-F12 keys
                                 }
                             } 
-                            else if (modifier == 0) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
+                            else if (modifier == 0) // normal key
                             {
-                                //debug_serial_port->print("normal key, modifier = 0x");
-                                //debug_serial_port->println(modifier, HEX);
+                                //debug_serial_port->print('<');
+                                //debug_serial_port->print(ch,HEX);
+                                //debug_serial_port->print('>');
                                 
                                 switch (ch) {
                                     case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
@@ -23097,10 +23110,10 @@ void check_bt_keyboard(void * pvParameters){
                                     case 0x27 : ch += 0x09;  // number 0
                                                 if (!isdigit(ch)) ch = 0;
                                                 break;
-                                    case 0x28 : ch = '\n'; break;   // enter key
-                                    case 0x29 : ch = '\n'; break;   // ESC key - figure out how to erase a queue or stop senbding with this
-                                    case 0x2A : ch = '\n'; break;   // BACK key
-                                    case 0x2B : ch = '\t'; break; // TAB key
+                                    case 0x28 : ch = BT_ENTER; break;   // enter key
+                                    case 0x29 : ch = BT_ESC; break;   // ESC key - figure out how to erase a queue or stop senbding with this
+                                    case 0x2A : ch = BT_BACKSPACE; break;   // BACK key
+                                    case 0x2B : ch = BT_TAB; break; // TAB key
                                     case 0x2c : ch = ' '; break;    // space
                                     case 0x2D : ch = '-'; break;    // '-'  key
                                     case 0x2E : ch = '='; break;    // '='  key
@@ -23112,12 +23125,13 @@ void check_bt_keyboard(void * pvParameters){
                                     case 0x36 : ch = ','; break;    // ','  key
                                     case 0x37 : ch = '.'; break;    // '.'  key
                                     case 0x38 : ch = '/'; break;    // '/' cursor key
-                                    case 0x39 : ch = '\n'; break;   // CAP LOCK toggle
-                                    case 0x3A ... 0x43: ch = '\n'; break; // F1-F10 keys
-                                    case 0x4F : ch = '\n'; break;   // right cursor key
-                                    case 0x50 : ch = '\n'; break;   // left cursor key
-                                    case 0x51 : ch = '\n'; break;   // down cursor key
-                                    case 0x52 : ch = '\n'; break;   // up cursor key
+                                    case 0x39 : ch = 0; break;   // CAP LOCK toggle
+                                    case 0x3A ... 0x45: ch += 72; break; // F1-F12 keys
+                                    case 0x4F : ch = BT_RIGHTARROW; break;   // right cursor key
+                                    case 0x50 : ch = BT_LEFTARROW; break;   // left cursor key
+                                    case 0x51 : ch = BT_DOWNARROW; break;   // down cursor key
+                                    case 0x52 : ch = BT_UPARROW; break;   // up cursor key
+                                    //case 0x53 : ch = BT_SCROLL; break;   // up cursor key
                                     default   : break; //debug_serial_port->print(ch);   // filter out key up events
                                 }  // end switch ch
                             } else  ch = 0;
@@ -23128,8 +23142,11 @@ void check_bt_keyboard(void * pvParameters){
                             debug_serial_port->print(ch);  // print our valid char
                             debug_serial_port->print(',');
                         #endif
+                        
+                        if (ch == BT_ESC) 
+                            CMD_KEY = false;
 
-                        if (((ch >= ' ') && (ch < 255 /*123*/)) || ch == '\n' || ch == '\r') {
+                        if (!CMD_KEY && (((ch != '\\') && (ch >= ' ') && (ch < 127 /*123*/)) || (ch == '\n') || (ch == '\r'))) {
                             //if (ps2_prosign_flag) {
                             //    add_to_send_buffer(SERIAL_SEND_BUFFER_PROSIGN);
                             //    ps2_prosign_flag = 0;
@@ -23140,6 +23157,18 @@ void check_bt_keyboard(void * pvParameters){
                             #ifdef FEATURE_MEMORIES
                                 repeat_memory = 255;
                             #endif
+                        }
+                        else if (CMD_KEY || ch > 126 || ch == '\\') {  // function key and ALT, CTRL, and special keys
+                            debug_serial_port->print("< Special key = ");
+                            
+                            if (ch == '\\'){
+                                debug_serial_port->println("Command Line Key Pressed.  To exit press ESC key");
+                                CMD_KEY = true;  // command line inerface will need to set this to false to allow CW to resume
+                            }
+                            else {
+                                debug_serial_port->print(ch, DEC);   
+                                debug_serial_port->println(" >");
+                            }
                         }
                     }
                 }

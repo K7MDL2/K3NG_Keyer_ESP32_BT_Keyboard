@@ -1,7 +1,6 @@
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
-#define FEATURE_BT_KEYBOARD  // ESP32-WROOM-32  BT 4.2 BLE and BT Classic Bluetooth using a BT Keyboard class library
 //#define FEATURE_BUTTONS
 //#define FEATURE_COMMAND_MODE
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
@@ -18,6 +17,7 @@
 //#define FEATURE_HELL
 ////// #define FEATURE_PS2_KEYBOARD        // Use a PS2 keyboard to send code - Change keyboard layout (non-US) in K3NG_PS2Keyboard.h.  Additional options below.
 ////// #define FEATURE_USB_KEYBOARD          // Use a USB keyboard to send code - Uncomment three lines in k3ng_keyer.ino (search for note_usb_uncomment_lines)
+#define FEATURE_BT_KEYBOARD  // ESP32-WROOM-32  BT 4.2 BLE and BT Classic Bluetooth using a BT Keyboard class library
 // #define FEATURE_CW_COMPUTER_KEYBOARD  // Have an Arduino Due or Leonardo act as a USB HID (Human Interface Device) keyboard and use the paddle to "type" characters on the computer -- uncomment this line in ino file: #include <Keyboard.h>
 #define FEATURE_DEAD_OP_WATCHDOG
 #define FEATURE_AUTOSPACE
@@ -90,8 +90,9 @@
 // #define OPTION_NON_ENGLISH_EXTENSIONS  // add support for additional CW characters (i.e. À, Å, Þ, etc.)
 // #define OPTION_DISPLAY_NON_ENGLISH_EXTENSIONS  // LCD display suport for non-English (NO/DK/DE) characters - Courtesy of OZ1JHM
 // #define OPTION_UNKNOWN_CHARACTER_ERROR_TONE
- #define OPTION_DO_NOT_SAY_HI
-// #define OPTION_PS2_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT // makes some non-English characters from the PS2 keyboard display correctly in the LCD display (donated by Marcin sp5iou)
+#define OPTION_DO_NOT_SAY_HI
+#define OPTION_BT_KEYBOARD_US  // for ESP32 BT keyboard
+ // #define OPTION_PS2_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT // makes some non-English characters from the PS2 keyboard display correctly in the LCD display (donated by Marcin sp5iou)
 // #define OPTION_PS2_KEYBOARD_RESET // reset the PS2 keyboard upon startup with 0xFF (contributed by Bill, W9BEL)
 // #define OPTION_SAVE_MEMORY_NANOKEYER
 ///#define OPTION_CW_KEYBOARD_CAPSLOCK_BEEP
@@ -135,3 +136,107 @@
 
 //  #define OPTION_WINKEY_PROSIGN_COMPATIBILITY  // Additional character mappings to support K1EL Winkey emulation prosigns
 
+//  These are for ESP32 BT Keyboard
+// Every call to read() returns a single byte for each
+// keystroke.  These configure what byte will be returned
+// for each "special" key.  To ignore a key, use zero.
+#define BT_TAB         9
+#define BT_ENTER       13
+#define BT_BACKSPACE   127
+#define BT_ESC         27
+#define BT_INSERT      128
+#define BT_DELETE      127
+#define BT_HOME        129
+#define BT_END         156
+#define BT_PAGEUP      25
+#define BT_PAGEDOWN    26
+#define BT_UPARROW     11
+#define BT_LEFTARROW   8
+#define BT_DOWNARROW   10
+#define BT_RIGHTARROW  21
+#define BT_F1          130
+#define BT_F2          131
+#define BT_F3          132
+#define BT_F4          133
+#define BT_F5          134
+#define BT_F6          135
+#define BT_F7          136
+#define BT_F8          137
+#define BT_F9          138
+#define BT_F10         139
+#define BT_F11         140
+#define BT_F12         141
+#define BT_SCROLL      142
+
+#define BT_F1_SHIFT          143
+#define BT_F2_SHIFT          144
+#define BT_F3_SHIFT          145
+#define BT_F4_SHIFT          146
+#define BT_F5_SHIFT          147
+#define BT_F6_SHIFT          148
+#define BT_F7_SHIFT          149
+#define BT_F8_SHIFT          150
+#define BT_F9_SHIFT          151
+#define BT_F10_SHIFT         152
+#define BT_F11_SHIFT         153
+#define BT_F12_SHIFT         154
+#define BT_TAB_SHIFT         9
+#define BT_ENTER_SHIFT       13
+#define BT_BACKSPACE_SHIFT   157
+
+#define BT_LEFT_ALT	    158
+#define BT_LEFT_CTRL	159
+#define BT_SCROLL_SHIFT 160
+
+#if defined(OPTION_BT_KEYBOARD_US)
+#define BT_A_CTRL 162
+#define BT_B_CTRL 163
+#define BT_C_CTRL 164
+#define BT_D_CTRL 165
+#define BT_E_CTRL 166
+#define BT_F_CTRL 167
+#define BT_G_CTRL 168
+#define BT_H_CTRL 169
+#define BT_I_CTRL 170
+#define BT_J_CTRL 171
+#define BT_K_CTRL 172
+#define BT_L_CTRL 173
+#define BT_M_CTRL 174
+#define BT_N_CTRL 175
+#define BT_O_CTRL 176
+#define BT_P_CTRL 177
+#define BT_Q_CTRL 178
+#define BT_R_CTRL 179
+#define BT_S_CTRL 180
+#define BT_T_CTRL 181
+#define BT_U_CTRL 182
+#define BT_V_CTRL 183
+#define BT_W_CTRL 184
+#define BT_X_CTRL 185
+#define BT_Y_CTRL 186
+#define BT_Z_CTRL 187
+#define BT_F1_CTRL 188
+#define BT_F2_CTRL 189
+#define BT_F3_CTRL 190
+#define BT_F4_CTRL 191
+#define BT_F5_CTRL 192
+#define BT_F6_CTRL 193
+#define BT_F7_CTRL 194
+#define BT_F8_CTRL 195
+#define BT_F9_CTRL 196
+#define BT_F10_CTRL 197
+#define BT_F11_CTRL 198
+#define BT_F12_CTRL 199
+#define BT_F1_ALT 200
+#define BT_F2_ALT 201
+#define BT_F3_ALT 202
+#define BT_F4_ALT 203
+#define BT_F5_ALT 204
+#define BT_F6_ALT 205
+#define BT_F7_ALT 206
+#define BT_F8_ALT 207
+#define BT_F9_ALT 208
+#define BT_F10_ALT 209
+#define BT_F11_ALT 210
+#define BT_F12_ALT 211
+#endif //OPTION_BT_KEYBOARD_US
