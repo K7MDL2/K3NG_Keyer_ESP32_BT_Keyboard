@@ -37,16 +37,13 @@ The K3NG USB and PS2 keyboards features map a ton of keys to functions, I plan t
 
 Tested with BLE keyboard Rii i8+ mini keyboard and the Logitech K380 which happens to use BT classic.
 
-Oct 8, 2025 : Working on extending BT Keyboard key mappings to resembe the PS2.  
-Today I added left, right arrow to increase/decrease dit-dah ratio, and up/down arrow to increase/decrease WPM speed.   
-Press '\' to enter CLI mode.  Keys pressed print their key code to the screen until I assign command functions to them.  
-Press 'ESC' key to exit CLI mode.
+Oct 8, 2025 : Working on extending BT Keyboard key mappings to resembe the existing PS2 Keyboard.  See this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/BT-Keyboard-Key-Assignments for the current key assignments. I update this page as I add more assignments.
 
 Eventually I will merge these changes into the current K3NG repo and do a Pull Request there.
 
 Will be adding more WIKI pages here to show how I set up the IDE Tool options and placing the bt_keyboad library in the right place.  
 
-I do have Wiki pages to show how to upload precompiled firmware to your compatible CPU board either of 2 tools so you do not have to compile the code.
+I do several Wiki pages about hardware and how to upload precompiled firmware to your compatible CPU board either of 2 tools so you do not have to compile the code.
 
 https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
