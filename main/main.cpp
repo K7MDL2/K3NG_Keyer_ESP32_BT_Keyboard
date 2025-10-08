@@ -1375,10 +1375,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "2025.10.4"
+#define CODE_VERSION "K7MDL-ESP32-2025.10.4 based on 2022 code"
 #define eeprom_magic_number 42              // you can change this number to have the unit re-initialize EEPROM
 //#include <arduino.h>
-//#include <stdio.h>
+#include <stdio.h>
 #include "keyer_hardware.h"
 
 #if defined(ARDUINO_SAM_DUE)  
@@ -22904,12 +22904,16 @@ void check_bt_keyboard(void * pvParameters){
       }
       
       #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval
-            //uint8_t ch = bt_keyboard.wait_for_ascii_char();
-              uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
+          uint8_t ch = bt_keyboard.wait_for_ascii_char(true);
+          //uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
+          debug_serial_port->print(ch); // << std::flush;
 
-          if ((ch >= ' ') && (ch < 127)) 
+          if (((ch >= ' ') && (ch < 127)) || ch == '\n') 
+          {
               debug_serial_port->print(ch);  // << std::flush; 
-          else 
+              add_to_send_buffer(ch);
+          }
+          else
           {
               if (ch > 0) {
                 debug_serial_port->print('['); // << std::flush;
@@ -22921,6 +22925,7 @@ void check_bt_keyboard(void * pvParameters){
           char ch;
           static bool keyDN = false;
           static bool last_key = true;
+          uint8_t modifier = 0;
 
           BTKeyboard::KeyInfo inf;
           bt_keyboard.wait_for_low_event(inf); //, 1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
@@ -22939,10 +22944,13 @@ void check_bt_keyboard(void * pvParameters){
 
           if (inf.size == 8) {   // keyboard chars are len = 8, mousr and others are len=4
               ch = inf.keys[2];
+              modifier = inf.keys[0]; 
               #ifdef DEBUG_BT_KEYBOARD_B
-                  debug_serial_port->print(':');
+                  debug_serial_port->print('<0x');
+                  debug_serial_port->print(modifier, HEX);
+                  debug_serial_port->print(':0x');
                   debug_serial_port->print(ch,HEX);
-                  debug_serial_port->print(':');
+                  debug_serial_port->print('>');
               #endif
               if (ch != 0 && keyDN != true) 
                   keyDN = true;  // this is a valid alphanumeric key
@@ -22971,9 +22979,24 @@ void check_bt_keyboard(void * pvParameters){
                       // x=0x10 is Ctl+key
                       // x=0x04 is Alt+key
                       // x=0x40 is Alt+key
-                          
-                      if (inf.keys[0] == 0x02 || inf.keys[0] == 0x20) // left or right side shift key pressed
+                      
+                      if (modifier & bt_keyboard.CTRL_MASK) // bt_keyboard.SHIFT_MASK) // left or right side key pressed
+                      { 
+                          ch = 0;
+                          debug_serial_port->print("CTRL key not supported yet - modifier = 0x");
+                          debug_serial_port->println((uint8_t) modifier, HEX);
+                      }
+                      else if (modifier & bt_keyboard.ALT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
+                      {   
+                          ch = 0;
+                          debug_serial_port->print("ALT key not supported yet - modifier = 0x");
+                          debug_serial_port->println(modifier, HEX);
+                      }
+                      else if (modifier & bt_keyboard.SHIFT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
                       {
+                          //debug_serial_port->print("SHIFT key  modifier = 0x");
+                          //debug_serial_port->println(modifier, HEX);
+
                           switch (ch) {     
                               case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
                                           if (isalpha(ch)) {
@@ -23003,8 +23026,11 @@ void check_bt_keyboard(void * pvParameters){
                               case 0x38 : ch = '?'; break;      // '?' cursor key
                           }
                       } 
-                      else
+                      else if (modifier == 0) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
                       {
+                          //debug_serial_port->print("normal key, modifier = 0x");
+                          //debug_serial_port->println(modifier, HEX);
+                          
                           switch (ch) {
                               case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
                                           if (isalpha(ch)) {
@@ -23041,7 +23067,8 @@ void check_bt_keyboard(void * pvParameters){
                               case 0x52 : ch = '\n'; break;   // up cursor key
                               default   : break; //debug_serial_port->print(ch);   // filter out key up events
                           }  // end switch ch
-                      }
+                      } else  ch = 0;
+
                       #ifdef DEBUG_BT_KEYBOARD_C
                           debug_serial_port->print(ch);  // print our valid char
                           debug_serial_port->print(',');
@@ -23321,7 +23348,7 @@ extern "C"
                   4000,      /* Stack size in words, not bytes. */
                   ( void * ) 1,    /* Parameter passed into the task. */
                   tskIDLE_PRIORITY,/* Priority at which the task is created. */
-                  &xHandle_BT );  
+                  &xHandle_BT );
     #endif
     
     xReturned = xTaskCreate(
@@ -23330,7 +23357,7 @@ extern "C"
                   10000,      /* Stack size in words, not bytes. */
                   ( void * ) 1,    /* Parameter passed into the task. */
                   tskIDLE_PRIORITY,/* Priority at which the task is created. */
-                  &xHandle_MAIN );  
+                  &xHandle_MAIN );
     
     //if( xReturned == pdPASS )
     //{
