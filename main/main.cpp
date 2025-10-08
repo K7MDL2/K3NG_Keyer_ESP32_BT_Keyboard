@@ -23142,32 +23142,39 @@ void check_bt_keyboard(void * pvParameters){
                             debug_serial_port->print(ch);  // print our valid char
                             debug_serial_port->print(',');
                         #endif
-                        
-                        if (ch == BT_ESC) 
-                            CMD_KEY = false;
 
-                        if (!CMD_KEY && (((ch != '\\') && (ch >= ' ') && (ch < 127 /*123*/)) || (ch == '\n') || (ch == '\r'))) {
-                            //if (ps2_prosign_flag) {
-                            //    add_to_send_buffer(SERIAL_SEND_BUFFER_PROSIGN);
-                            //    ps2_prosign_flag = 0;
-                            //}
-                            ch = uppercase(ch);
-                            add_to_send_buffer(ch);
-                        
-                            #ifdef FEATURE_MEMORIES
-                                repeat_memory = 255;
-                            #endif
-                        }
-                        else if (CMD_KEY || ch > 126 || ch == '\\') {  // function key and ALT, CTRL, and special keys
-                            debug_serial_port->print("< Special key = ");
-                            
-                            if (ch == '\\'){
-                                debug_serial_port->println("Command Line Key Pressed.  To exit press ESC key");
-                                CMD_KEY = true;  // command line inerface will need to set this to false to allow CW to resume
-                            }
-                            else {
-                                debug_serial_port->print(ch, DEC);   
-                                debug_serial_port->println(" >");
+                        switch (ch) {
+                            case BT_RIGHTARROW : adjust_dah_to_dit_ratio(int(configuration.dah_to_dit_ratio/10)); break;
+                            case BT_LEFTARROW : adjust_dah_to_dit_ratio(-1*int(configuration.dah_to_dit_ratio/10)); break;
+                            case BT_UPARROW : speed_set(configuration.wpm+1); break;
+                            case BT_DOWNARROW : speed_set(configuration.wpm-1); break;
+                            case BT_ESC: CMD_KEY = false; debug_serial_port->println("< Exiting CLI mode >"); break;
+                            default: {
+                            //  process the rest of the keys
+                                if (!CMD_KEY && (((ch != '\\') && (ch >= ' ') && (ch < 127 /*123*/)) || (ch == '\n') || (ch == '\r'))) {
+                                    //if (ps2_prosign_flag) {
+                                    //    add_to_send_buffer(SERIAL_SEND_BUFFER_PROSIGN);
+                                    //    ps2_prosign_flag = 0;
+                                    //}
+                                    ch = uppercase(ch);
+                                    add_to_send_buffer(ch);
+                                
+                                    #ifdef FEATURE_MEMORIES
+                                        repeat_memory = 255;
+                                    #endif
+                                }
+                                else if (CMD_KEY || ch > 126 || ch == '\\') {  // function key and ALT, CTRL, and special keys
+                                    debug_serial_port->print("< Special key = ");
+                                    
+                                    if (ch == '\\'){
+                                        debug_serial_port->println("Command Line Key Pressed.  To exit press ESC key");
+                                        CMD_KEY = true;  // command line inerface will need to set this to false to allow CW to resume
+                                    }
+                                    else {
+                                        debug_serial_port->print(ch, DEC);   
+                                        debug_serial_port->println(" >");
+                                    }
+                                }
                             }
                         }
                     }
