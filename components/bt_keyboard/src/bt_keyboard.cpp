@@ -1130,13 +1130,15 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
       uint16_t appearance = r->ble.appearance;
       std::cout << "  " << (r->transport == ESP_HID_TRANSPORT_BLE ? "BLE: " : "BT: ") << r->bda
                 << std::dec << ", RSSI: " << +r->rssi << ", USAGE: " << esp_hid_usage_str(r->usage);
-      if (r->transport == ESP_HID_TRANSPORT_BLE) {
+      
+                if (r->transport == ESP_HID_TRANSPORT_BLE) {
         std::cout << ", APPEARANCE: 0x" << std::hex << std::setw(4) << std::setfill('0')
                   << appearance << ", ADDR_TYPE: '" << ble_addr_type_str(r->ble.addr_type) << "'";
         if (appearance == ESP_BLE_APPEARANCE_HID_KEYBOARD) {
           cr = r.get();
         }
       }
+      
       if (r->transport == ESP_HID_TRANSPORT_BT) {
         std::cout << ", COD: " << esp_hid_cod_major_str(r->bt.cod.major) << "[";
         esp_hid_cod_minor_print(r->bt.cod.minor, stdout);
@@ -1162,8 +1164,10 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
 
     if (cr) {
       // open the selected entry
-      esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type);
-      std::cout << "Open BLE Entry";
+      if (esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type) == ESP_OK)
+          std::cout << "Open BLE Entry" << std::endl;
+      else
+          std::cout << "Open BT/BLE Entry FAILED" << std::endl;
     }
 
     // free the results
