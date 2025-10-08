@@ -13,15 +13,15 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #define bt_keyboard_LED 2  // indicates BT keyboard connection status
 #define paddle_left 25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
 #define paddle_right 26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-#define tx_key_line_1 0  // (high = key down/tx on)
+#define tx_key_line_1 17  // (high = key down/tx on)
 #define tx_key_line_2 0 
 #define tx_key_line_3 0
 #define tx_key_line_4 0
 #define tx_key_line_5 0
 #define tx_key_line_6 0
 #define sidetone_line 14 //23         // connect a speaker for sidetone
-#define potentiometer 0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-#define ptt_tx_1 0             // PTT ("push to talk") lines
+#define potentiometer 36 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+#define ptt_tx_1 16             // PTT ("push to talk") lines
 #define ptt_tx_2 0              //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
 #define ptt_tx_3 0              //   These are optional - set to 0 if unused
 #define ptt_tx_4 0
@@ -164,8 +164,8 @@ FEATURE_SIDETONE_SWITCH
 
 #define ptt_input_pin 0
 
-#define tx_inhibit_pin 17
-#define tx_pause_pin 16
+#define tx_inhibit_pin 9
+#define tx_pause_pin 10
 
 #define pin_sending_mode_automatic 0  // goes HIGH when keyer is sending code automatically
 #define pin_sending_mode_manual 0     // goes HIGH when keyer is sending code manually (i.e. the paddle or straight key)

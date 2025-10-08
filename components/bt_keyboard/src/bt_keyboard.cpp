@@ -1313,10 +1313,15 @@ void BTKeyboard::push_key(uint8_t *keys, uint8_t size) {
  */
 char BTKeyboard::wait_for_ascii_char(bool forever) {
   KeyInfo inf;
+  
 
   while (true) {
-    if (!wait_for_low_event(inf,
-                            (last_ch_ == 0) ? (forever ? portMAX_DELAY : 0) : repeat_period_)) {
+    //if (!wait_for_low_event(inf,
+    //                        ) {
+    TickType_t t = last_ch_ == 0 ? (forever ? portMAX_DELAY : 0) : repeat_period_;
+    if (wait_for_low_event(inf, 500)) {
+      
+      std::cout << '*' << last_ch_ << '*' << std::dec << std::flush;
       repeat_period_ = pdMS_TO_TICKS(120);
       return last_ch_;
     }

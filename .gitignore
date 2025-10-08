@@ -42,6 +42,5 @@
 
 
 /build
-/libraries
 /managed_components
-D:/esp-idf/v5.5/esp-idf/components
+D:/esp-idf/v5.5/esp-idf/components/**

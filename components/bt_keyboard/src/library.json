@@ -1,0 +1,29 @@
+{
+  "name": "BTKeyboard",
+  "keywords": "keyboard, emulation, bt, ble",
+  "description": "BTKeyboard (PS/2) allows you to use a BT keyboard for user input",
+  "authors":
+  [
+    {
+      "name": "Guy Turcotte",
+      "url": "https://github.com/turgu1/bt-keyboard",
+      "maintainer": false
+    }
+  ],
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/turgu1/bt-keyboard.git"
+  },
+  "version": "0.1",
+  "homepage": "https://github.com/turgu1/bt-keyboard",
+  "frameworks": "arduino",
+  "platforms":
+  [
+    "atmelavr",
+    "teensy",
+    "espidf"
+  ],
+  "examples": [
+  ]
+}
