@@ -25,7 +25,7 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 ***********************  Oct 4, 2025  K7MDL *****************************
 
-This repository is forked from https://github.com/aimeiz/k3ng_cw_keyer-master_2022 repository which was modified 3 years ago by SP5IOU to work on some flavor of ESP32.  After changing the pin assignments it worked on my ESP32-WROOM-32 dev board.  
+This repository is forked from https://github.com/aimeiz/k3ng_cw_keyer-master_2022 repository which was modified 3 years ago by SP5IOU to work on some flavor of ESP32.  After changing the pin assignments it worked on my ESP32-WROOM-32 dev board.  I used the board dsxribed in this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/CPU-Module
 
 I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.   
 
