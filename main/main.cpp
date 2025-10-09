@@ -3816,7 +3816,7 @@ void check_ps2_keyboard()
                                 clear_send_buffer();
                                 #ifdef FEATURE_MEMORIES
                                     //clear_memory_button_buffer();
-                                    play_memory_prempt = 1;
+                                    play_memory_prempt = 1;   // should stop playing memory
                                     repeat_memory = 255;
                                 #endif
                                 #ifdef FEATURE_DISPLAY
@@ -5013,7 +5013,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
       #endif
       #ifdef FEATURE_BT_KEYBOARD
         keystroke = queuepop();
-        debug_serial_port->println('[0x');
+        debug_serial_port->println("[0x");
         debug_serial_port->println(keystroke, HEX);
         debug_serial_port->println(']');
       #endif
@@ -9787,8 +9787,6 @@ void service_send_buffer(byte no_print)
   #ifdef FEATURE_MEMORIES
     play_memory_prempt = 0;
   #endif
-
-
 
 
   if (send_buffer_status == SERIAL_SEND_BUFFER_NORMAL) {
@@ -23038,11 +23036,11 @@ void update_time(){
                     modifier = inf.keys[0];  // capture shift, alt, ctrl state
 
                     #ifdef DEBUG_BT_KEYBOARD_B
-                        debug_serial_port->print('<0x');
-                        debug_serial_port->print(modifier, HEX);
-                        debug_serial_port->print(':0x');
-                        debug_serial_port->print(ch,HEX);
-                        debug_serial_port->print('>');
+                        debug_serial_port->print("<0x");
+                        debug_serial_port->print((uint8_t) modifier, HEX);
+                        debug_serial_port->print(":0x");
+                        debug_serial_port->print((uint8_t) ch,HEX);
+                        debug_serial_port->print(">");
                     #endif
 
                     if (ch != 0 && keyDN != true) 
@@ -23161,7 +23159,10 @@ void update_time(){
                                         case 0x24 : ch = '&'; break;      // '&'  key
                                         case 0x25 : ch = '*'; break;      // '*'  key                            
                                         case 0x26 : ch = '('; break;      // '('  key
-                                        case 0x27 : ch = ')'; break;      // ')'  key                            
+                                        case 0x27 : ch = ')'; break;      // ')'  key
+                                        case 0x28 : ch = PS2_ENTER_SHIFT; break; // PgDn key
+                                        case 0x2A : ch = PS2_BACKSPACE_SHIFT; break; // PgDn key   
+                                        case 0x2B : ch = PS2_TAB_SHIFT; break; // PgDn key                         
                                         case 0x2D : ch = '_'; break;      // '_'  key
                                         case 0x2E : ch = '+'; break;      // '+'  key
                                         case 0x2F : ch = '{'; break;      // '{'  key
@@ -23208,6 +23209,12 @@ void update_time(){
                                         case 0x38 : ch = '/'; break;    // '/' cursor key
                                         case 0x39 : ch = 0; break;   // CAP LOCK toggle
                                         case 0x3A ... 0x45: ch += 72; break; // F1-F12 keys
+                                        case 0x49 : ch = PS2_INSERT; break; // End key
+                                        case 0x4A : ch = PS2_HOME; break; // Home key
+                                        case 0x4C : ch = PS2_DELETE; break; // End key
+                                        case 0x4D : ch = PS2_END; break; // End key
+                                        case 0x4B : ch = PS2_PAGEUP; break; // PgUp key
+                                        case 0x4E : ch = PS2_PAGEDOWN; break; // PgDn key
                                         case 0x4F : ch = PS2_RIGHTARROW; break;   // right cursor key
                                         case 0x50 : ch = PS2_LEFTARROW; break;   // left cursor key
                                         case 0x51 : ch = PS2_DOWNARROW; break;   // down cursor key
