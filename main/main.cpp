@@ -16561,6 +16561,10 @@ byte play_memory(byte memory_number) {
       check_serial();
     #endif
 
+    #ifdef FEATURE_BT_KEYBOARD
+      check_ps2_keyboard();
+    #endif
+
     if ((play_memory_prempt == 0) && (pause_sending_buffer == 0)) {
 
       pause_sending_buffer_backspace = 0;
