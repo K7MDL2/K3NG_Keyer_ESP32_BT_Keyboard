@@ -33,7 +33,7 @@ I am using ESP-IDF to compile.  Arduino32 is added as a component.  I first trie
 
 I was getting RTOS WDT warnings while dits and dahs were being sent, competing with the BT service task.   I put the main program loop and check_bt_keyboard() into their own RTOS tasks and the problem seems to be solved for now. Seem OK at 30WPM and 13WPM.  More testing required.
 
-The BT keyboard translates BT key codes to match the PS2 keycodes and calls into the PS2 keyboard function.  See the K3NG docs for USB\PS2 Keyboard commands.
+The BT keyboard translates BT key codes to match the PS2 keycodes and calls into the PS2 keyboard function.  See the K3NG docs for USB\PS2 Keyboard commands. I have a copy of he BT keyboard commands on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/BT-Keyboard-Key-Assignments.   Not all keys on a PS2/USB keyboard are present on these compact BT keyboards.
 
 Tested with BLE keyboard Rii i8+ mini keyboard and the Logitech K380 which happens to use BT classic.
 
