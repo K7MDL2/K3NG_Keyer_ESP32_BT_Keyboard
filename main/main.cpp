@@ -1375,7 +1375,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-ESP32-2025.10.4 based on 2022 code"
+#define CODE_VERSION "K7MDL-ESP32-2025.10.9 based on 2022 era code"
 #define eeprom_magic_number 42              // you can change this number to have the unit re-initialize EEPROM
 //#include <arduino.h>
 #include <stdio.h>
@@ -4944,9 +4944,15 @@ void ps2_keyboard_program_memory(byte memory_number)
       if ((memory_start(memory_number) + x) == memory_end(memory_number)) {    // are we at last memory location?
         x = temp_memory_index;
       }
+
     }
     // write terminating 255
     EEPROM.write((memory_start(memory_number)+x),255);
+    debug_serial_port->print("\nWrote Keyboard Memory ");
+    debug_serial_port->println(memory_number);
+    #if defined(HARDWARE_ESP32_DEV)
+      EEPROM.commit();
+    #endif
     #ifdef FEATURE_DISPLAY
       lcd_center_print_timed("Done", 0, default_display_msg_delay);
     #else    
