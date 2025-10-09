@@ -1,5 +1,5 @@
-| Support Targets | ![alt text][esp32] |
-| --- | --- |
+| Support Targets | ![alt text][esp32] | ![alt text][Has_Precompiled_Firmware_Images] |
+| --- | --- | --- |
 
 | Boards Used | ![alt text][esp32-WROOM-32]|
 | --- | --- |
@@ -11,6 +11,7 @@
 [esp32]: https://img.shields.io/badge/ESP32-green "ESP32"
 [esp32-WROOM-32]: https://img.shields.io/badge/ESP32--WROOM--32-orange "ESP32-WROOM-32"
 [ESP-IDF]: https://img.shields.io/badge/ESP--IDF-cyan "ESP-IDF"
+[Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 
 # k3ng_cw_keyer
 K3NG Arduino CW Keyer
@@ -23,9 +24,11 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
 
-***********************  Oct 4, 2025  K7MDL *****************************
+***********************  Oct 9, 2025  K7MDL *****************************
+Update: This now seems to be fully functional for the features I have defined.  The 2 BT keyboards I have both work for all keys teh equivalent PS2 keyboard had assigned.  
+*************************************************************************
 
-This repository is forked from https://github.com/aimeiz/k3ng_cw_keyer-master_2022 repository which was modified 3 years ago by SP5IOU to work on some flavor of ESP32.  After changing the pin assignments it worked on my ESP32-WROOM-32 dev board.  I used the board dsxribed in this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/CPU-Module
+3 years ago (2022) SP5IOU modied the K3NG Keyer Arduino code to support an ESP32.  This repository is forked from his repositiry at https://github.com/aimeiz/k3ng_cw_keyer-master_2022.  After changing the pin assignments it worked on my ESP32-WROOM-32 dev board.  I used the board described in this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/CPU-Module
 
 I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.   
 
@@ -33,17 +36,19 @@ I am using ESP-IDF to compile.  Arduino32 is added as a component.  I first trie
 
 I was getting RTOS WDT warnings while dits and dahs were being sent, competing with the BT service task.   I put the main program loop and check_bt_keyboard() into their own RTOS tasks and the problem seems to be solved for now. Seem OK at 30WPM and 13WPM.  More testing required.
 
-The BT keyboard translates BT key codes to match the PS2 keycodes and calls into the PS2 keyboard function.  See the K3NG docs for USB\PS2 Keyboard commands. I have a copy of he BT keyboard commands on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/BT-Keyboard-Key-Assignments.   Not all keys on a PS2/USB keyboard are present on these compact BT keyboards.
+The BT keyboard translates BT key codes to match the PS2 keycodes and calls into the slightly modified PS2 keyboard function.  See the K3NG docs for USB\PS2 Keyboard commands. I have a copy of the BT keyboard commands on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/BT-Keyboard-Key-Assignments.   Not all keys on a PS2/USB keyboard are present on these compact BT keyboards.   I may alter some of teh key assignments over time.
 
 Tested with BLE keyboard Rii i8+ mini keyboard and the Logitech K380 which happens to use BT classic.
 
-Eventually I will merge these changes into the current K3NG repo and do a Pull Request there.
+I plan to fork the orignal K2NG repo then merge my changes into it so that this benefit from the updates to the original.  Since this version is currently compiled under esp-idf framework, it is not likely to be accepted into the main repo.
 
-Will be adding more WIKI pages here to show how I set up the IDE Tool options and placing the bt_keyboad library in the right place.  
+I plan to add more WIKI pages here to show how I set up the IDE Tool options.  The BT_keyboard files are included as a component so there shoudl be no need to find and download libraries and component unlike in Arduino.  When someone does a clean install and compile this can be verified.
 
-There are Wiki pages about hardware and how to upload precompiled firmware to your compatible CPU board either of 2 tools so you do not have to compile the code.
+I provide precompiled firmware for your compatible CPU board using either of 2 tools so you do not have to compile the code, jsut upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmeware:
 
 https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
+- Mike K7MDL
 
-*************************************************************************
+********************************
+*****************************************
