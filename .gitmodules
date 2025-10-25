@@ -1,0 +1,3 @@
+[submodule "components/esp32-st7789"]
+	path = components/esp32-st7789
+	url = https://github.com/wuying283/esp32-st7789.git
