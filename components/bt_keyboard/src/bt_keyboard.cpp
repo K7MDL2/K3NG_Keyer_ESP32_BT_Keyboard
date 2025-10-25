@@ -493,7 +493,7 @@ void BTKeyboard::add_bt_scan_result(esp_bd_addr_t bda, esp_bt_cod_t *cod, esp_bt
     return;
   }
 
-//  r->transport = ESP_HID_TRANSPORT_BT;  causes crash on BT keyboard peripheral disvoery, works fine without this.]
+  res->transport = ESP_HID_TRANSPORT_BT;  //  r->transport  causes crash on BT keyboard peripheral disvoery, works fine without this.]
 
   memcpy(res->bda, bda, sizeof(esp_bd_addr_t));
   memcpy(&res->bt.cod, cod, sizeof(esp_bt_cod_t));
@@ -1146,6 +1146,11 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
         if ((r->bt.cod.major == 5 /* PERIPHERAL */) &&
             (r->bt.cod.minor & ESP_HID_COD_MIN_KEYBOARD)) {
           cr = r.get();
+          std::cout << ", BT Keyboard Found " << std::endl;
+        }
+        else
+        {
+          std::cout << ", BT keyboard NOT Found ";
         }
       }
 
@@ -1163,7 +1168,10 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
     if (cr) {
       // open the selected entry
       esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type);
-      std::cout << "Open BLE Entry";
+      std::cout << "Open BLE/BT Entry for this Keyboard" << std::endl;
+    }
+    else  {
+      std::cout << "No Valid BLE/BT Keyboard Entry Found" << std::endl;
     }
 
     // free the results
