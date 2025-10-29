@@ -1,6 +1,10 @@
 #ifndef keyer_esp32_dev_h
 #define keyer_esp32_dev_h
 
+//#define CONFIG_BT_GATTC_NOTIF_REG_MAX 64  //needed for K380s BLE keyboard 
+//#define CONFIG_BT_SMP_MAX_BONDS 40
+//#define BTA_GATTC_CONN_MAX  64
+
 // Do not change these !
 
 // Variable macros

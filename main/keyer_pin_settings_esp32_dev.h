@@ -10,18 +10,50 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #ifndef keyer_pin_settings_esdp32_dev_h
 #define keyer_pin_settings_esdp32_dev_h
 
-#define bt_keyboard_LED 2  // indicates BT keyboard connection status
-#define paddle_left 25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-#define paddle_right 26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-#define tx_key_line_1 17  // (high = key down/tx on)
+// M5Stack Core2
+//#define M5STACK_CORE2 // provides sound and LCD touchscreen in one module
+
+#if defined (M5STACK_CORE2)
+  #define bt_keyboard_LED 19  // indicates BT keyboard connection status
+  #define paddle_left 32 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define paddle_right 33 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define tx_key_line_1 26  // (high = key down/tx on)
+  #define sidetone_line 0 //23         // connect a speaker for sidetone
+  #define potentiometer 35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+  #define ptt_tx_1 27     // PTT ("push to talk") lines
+  #define tx_inhibit_pin 13   //9
+  #define tx_pause_pin  14  //10
+  // 36 ADC input free - input only
+#elif defined (FEATURE_IDEASPARK_LCD)
+  #define bt_keyboard_LED  2  // indicates BT keyboard connection status
+  #define paddle_left     25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define tx_key_line_1   16  // (high = key down/tx on)
+  #define sidetone_line   17 //23         // connect a speaker for sidetone
+  #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+  #define ptt_tx_1         5     // PTT ("push to talk") lines
+  #define tx_inhibit_pin  13   //9
+  #define tx_pause_pin    14  //10
+  // 36 ADC input free - input only
+#else // ESP-WROOM-32, 27, 5 33
+  #define bt_keyboard_LED 2  // indicates BT keyboard connection status
+  #define paddle_left 25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define paddle_right 26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define tx_key_line_1 17  // (high = key down/tx on)
+  #define sidetone_line 14 //23         // connect a speaker for sidetone
+  #define potentiometer 36 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+  #define ptt_tx_1 16             // PTT ("push to talk") lines
+  #define tx_inhibit_pin 9
+  #define tx_pause_pin  10
+#endif
+
+//  common pins
 #define tx_key_line_2 0 
 #define tx_key_line_3 0
 #define tx_key_line_4 0
 #define tx_key_line_5 0
 #define tx_key_line_6 0
-#define sidetone_line 14 //23         // connect a speaker for sidetone
-#define potentiometer 36 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-#define ptt_tx_1 16             // PTT ("push to talk") lines
+
 #define ptt_tx_2 0              //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
 #define ptt_tx_3 0              //   These are optional - set to 0 if unused
 #define ptt_tx_4 0
@@ -66,7 +98,6 @@ FEATURE_SIDETONE_SWITCH
   #define lcd_d3 15 // 15 Note this pin can be used for Inline debugger
 #endif //FEATURE_LCD_4BIT || defined(FEATURE_LCD_8BIT)
 
-
 #ifdef FEATURE_LCD1602_N07DH
   #define lcd_rs 4 //32
   #define lcd_enable 16 //RX2 pin
@@ -75,6 +106,28 @@ FEATURE_SIDETONE_SWITCH
   #define lcd_d6 18
   #define lcd_d7 19
 #endif //FEATURE_LCD1602_N07DH
+
+#ifdef M5STACK_CORE2
+  #define SD_SPI_CS_PIN   4
+  #define SD_SPI_SCK_PIN  18
+  #define SD_SPI_MISO_PIN 38
+  #define SD_SPI_MOSI_PIN 23
+#endif  // M5STACK_CORE2
+
+#ifdef IDEASPARK_LCD
+  #define LCD_H_RES      320
+  #define LCD_V_RES      240
+  #define LCD_HOST VSPI_HOST
+  #define LCD_BUF_LINES   60
+  #define LV_TICK_PERIOD_MS 1
+  #define SD_SPI_CS_PIN   -1
+  #define SD_SPI_SCK_PIN  18
+  #define SD_SPI_MISO_PIN -1
+  #define SD_SPI_MOSI_PIN 23
+  #define SD_SPI_RST_PIN   4
+  #define SD_SPI_BLK_PIN  32
+  #define SD_SPI_DC_PIN    2
+#endif  // IDEASPARK_LCD
 
 //ps2 keyboard pins
 #ifdef FEATURE_PS2_KEYBOARD
@@ -109,9 +162,9 @@ FEATURE_SIDETONE_SWITCH
 
 // FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
 // See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details
-#define cw_decoder_pin 13             // This is for use with external decoding hardware
-#define cw_decoder_audio_input_pin 39 // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
-#define cw_decoder_indicator 0       // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
+//#define cw_decoder_pin 13             // This is for use with external decoding hardware
+//#define cw_decoder_audio_input_pin 39 // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
+//#define cw_decoder_indicator 0       // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
 
 
 #if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
@@ -163,9 +216,6 @@ FEATURE_SIDETONE_SWITCH
 #endif //FEATURE_SEQUENCER
 
 #define ptt_input_pin 0
-
-#define tx_inhibit_pin 9
-#define tx_pause_pin 10
 
 #define pin_sending_mode_automatic 0  // goes HIGH when keyer is sending code automatically
 #define pin_sending_mode_manual 0     // goes HIGH when keyer is sending code manually (i.e. the paddle or straight key)

@@ -1401,6 +1401,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   //#include <Tone32.h> // SP5IOU 2021/08/02 library Tone32h assure ESP32 compatibility with avr tone / no tone built in commands. 
                       // Download from here https://github.com/lbernstone/Tone32 - do not use, now included in Arduino library
   #include "keyer_esp32_dev.h"
+  #include <esp_task_wdt.h>
   //#define ARDUINO_ARCH_ESP32
 #else // end HARDWARE_ESP32_DEV
   #include <avr/pgmspace.h>
@@ -1560,9 +1561,13 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_BT_KEYBOARD)
-  #include "bt_keyboard.hpp"  // from esp-32 project compionent folder
+  #include "bt_keyboard.hpp"  // from esp-32 project component folder
   #include "esp_err.h"
   #include "nvs_flash.h"
+  #ifdef M5STACK_CORE2
+    //#include <M5ModuleDisplay.h>
+    #include <M5Unified.h>
+  #endif
 #endif
 
 #if defined(FEATURE_LCD_4BIT) || defined(FEATURE_LCD1602_N07DH) || defined (FEATURE_LCD_8BIT) // works on 3.2V supply and logic, but do not work on every pins (SP5IOU)
@@ -1660,7 +1665,6 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   extern uint32_t __get_MSP(void);
   #define SP __get_MSP()
 #endif  
-
 
 #define memory_area_start (sizeof(configuration)+5)
 
@@ -2141,7 +2145,7 @@ byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
 #endif  
 
 #if defined(FEATURE_LCD_MATHERTEL_PCF8574)
-  LiquidCrystal_PCF8574 lcd(lcd_i2c_address_mathertel_PCF8574);
+    LiquidCrystal_PCF8574 lcd(lcd_i2c_address_mathertel_PCF8574);
 #endif
 
 #if defined(FEATURE_LCD_I2C_FDEBRABANDER)
@@ -2170,6 +2174,27 @@ byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
 
 #if defined(FEATURE_BT_KEYBOARD)
   BTKeyboard bt_keyboard;
+#endif
+
+#if defined(FEATURE_IDEASPARK_LCD)
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <inttypes.h>
+  #include "esp_vfs.h"
+  #include "esp_err.h"
+  #include "esp_log.h"
+  #include "esp_system.h"
+  #include "esp_spiffs.h"
+  #include "st7789.h"
+  #include "fontx.h"
+  #include "Print.h"
+  #include "TFT_lcd.hpp"
+  #define INTERVAL 400
+  #define WAIT vTaskDelay(INTERVAL)
+  #include <Arduino.h>
+  TFT_t dev;
+  TFT_lcd lcd;
 #endif
 
 #if defined(FEATURE_USB_MOUSE)
@@ -3356,6 +3381,16 @@ void check_backlight() {
 }
 #endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 
+
+//-------------------------------------------------------------------------------------------------------
+#ifdef FEATURE_DISPLAY
+void lcd_clear() {
+  lcd.clear();
+  lcd.noCursor();//sp5iou 20180328
+  lcd_status = LCD_CLEAR;
+}
+#endif
+
 //-------------------------------------------------------------------------------------------------------
 
 #ifdef FEATURE_DISPLAY
@@ -3534,16 +3569,22 @@ void display_scroll_print_char(char charin){
 
 #endif //FEATURE_DISPLAY
 
-
 //-------------------------------------------------------------------------------------------------------
-#ifdef FEATURE_DISPLAY
-void lcd_clear() {
-  lcd.clear();
-  lcd.noCursor();//sp5iou 20180328
- lcd_status = LCD_CLEAR;
 
+#ifdef FEATURE_DISPLAY
+void clear_display_row(byte row_number)
+{
+  #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+    lcd.backlight();
+  #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
+  lcd.noCursor();//sp5iou 20180328
+  for (byte x = 0; x < LCD_COLUMNS; x++) {
+    lcd.setCursor(x,row_number);
+    lcd.print(" ");
+  }
 }
 #endif
+
 //-------------------------------------------------------------------------------------------------------
 #ifdef FEATURE_DISPLAY
 void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration)
@@ -3562,22 +3603,6 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
   lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
   lcd.print(lcd_print_string);
   lcd_timed_message_clear_time = millis() + duration;
-}
-#endif
-
-//-------------------------------------------------------------------------------------------------------
-
-#ifdef FEATURE_DISPLAY
-void clear_display_row(byte row_number)
-{
-  #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-    lcd.backlight();
-  #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
-  lcd.noCursor();//sp5iou 20180328
-  for (byte x = 0; x < LCD_COLUMNS; x++) {
-    lcd.setCursor(x,row_number);
-    lcd.print(" ");
-  }
 }
 #endif
 
@@ -6697,11 +6722,15 @@ void tx_and_sidetone_key (int state)
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
         #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-         #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-              tone(sidetone_line,configuration.hz_sidetone,0);                                              // generate a tone on the speaker pin
-         #else  
-        tone(sidetone_line, configuration.hz_sidetone);
-        #endif
+            #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
+                #ifdef M5STACK_CORE2
+                    M5.Speaker.tone(700, configuration.hz_sidetone);
+                #else
+                    tone(sidetone_line,configuration.hz_sidetone);
+                #endif                                            // generate a tone on the speaker pin
+            #else  
+                tone(sidetone_line, configuration.hz_sidetone);
+            #endif
         #else
           if (sidetone_line) {
             digitalWrite(sidetone_line, sidetone_line_active_state);
@@ -6723,7 +6752,14 @@ void tx_and_sidetone_key (int state)
         if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
           #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
           #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-            noTone(sidetone_line);
+                #ifdef M5STACK_CORE2
+                    if (M5.Speaker.isPlaying(0))
+                    {
+                        M5.Speaker.stop();
+                    }
+                #else
+                    noTone(sidetone_line);
+                #endif
           #else
             noTone(sidetone_line);
           #endif
@@ -7030,6 +7066,21 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
 
 } //void loop_element_lengths
 
+//-------------------------------------------------------------------------------------------------------
+
+#ifdef FEATURE_DISPLAY
+  void lcd_center_print_timed_wpm(){
+
+
+    #if defined(OPTION_ADVANCED_SPEED_DISPLAY)
+      lcd_center_print_timed(String(configuration.wpm) + " wpm - " + (configuration.wpm*5) + " cpm", 0, default_display_msg_delay);
+      lcd_center_print_timed(String(1200/configuration.wpm) + ":" + (((1200/configuration.wpm)*configuration.dah_to_dit_ratio)/100) + "ms 1:" + (float(configuration.dah_to_dit_ratio)/100.00), 1, default_display_msg_delay);
+    #else
+      lcd_center_print_timed(String(configuration.wpm) + " wpm", 0, default_display_msg_delay);
+    #endif
+
+  }
+#endif
 
 //-------------------------------------------------------------------------------------------------------
 
@@ -7038,8 +7089,6 @@ void speed_change(int change)
   if (((configuration.wpm + change) > wpm_limit_low) && ((configuration.wpm + change) < wpm_limit_high)) {
     speed_set(configuration.wpm + change);
   }
-  
-
 
   #ifdef FEATURE_DISPLAY
     lcd_center_print_timed_wpm();
@@ -7100,21 +7149,6 @@ void command_speed_set(int wpm_set) {
   }                                                        // end if
 }                                                          // end command_speed_set
 
-//-------------------------------------------------------------------------------------------------------
-
-#ifdef FEATURE_DISPLAY
-  void lcd_center_print_timed_wpm(){
-
-
-    #if defined(OPTION_ADVANCED_SPEED_DISPLAY)
-      lcd_center_print_timed(String(configuration.wpm) + " wpm - " + (configuration.wpm*5) + " cpm", 0, default_display_msg_delay);
-      lcd_center_print_timed(String(1200/configuration.wpm) + ":" + (((1200/configuration.wpm)*configuration.dah_to_dit_ratio)/100) + "ms 1:" + (float(configuration.dah_to_dit_ratio)/100.00), 1, default_display_msg_delay);
-    #else
-      lcd_center_print_timed(String(configuration.wpm) + " wpm", 0, default_display_msg_delay);
-    #endif
-
-  }
-#endif
 //-------------------------------------------------------------------------------------------------------
 
 long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
@@ -8607,10 +8641,14 @@ void command_sidetone_freq_adj() {
 
   while (looping) {
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
+        #ifdef M5STACK_CORE2
+            M5.Speaker.tone(700, configuration.hz_sidetone);
+        #else
               tone(sidetone_line,configuration.hz_sidetone,100);                                              // generate a tone on the speaker pin
-         #else  
-          tone(sidetone_line, configuration.hz_sidetone);
         #endif
+    #else  
+        tone(sidetone_line, configuration.hz_sidetone);
+    #endif
     if (paddle_pin_read(paddle_left) == LOW) {
       #ifdef FEATURE_DISPLAY
 	#ifdef OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
@@ -9183,7 +9221,11 @@ void beep()
     //   noTone(sidetone_line);
     // #else
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-      tone(sidetone_line,hz_high_beep,200);                                              // generate a tone on the speaker pin
+        #ifdef M5STACK_CORE2
+            M5.Speaker.tone(hz_high_beep, 200);
+        #else
+            tone(sidetone_line,hz_high_beep,200);                                              // generate a tone on the speaker pin
+        #endif
     #else  
       tone(sidetone_line, hz_high_beep, 200);
     #endif
@@ -9200,45 +9242,55 @@ void beep()
 
 void boop()
 {
-  #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-   #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-      tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
-    #else  
- tone(sidetone_line, hz_low_beep);
-    delay(100);
-    noTone(sidetone_line);
-    #endif
-  #else
-    if (sidetone_line) {
-      digitalWrite(sidetone_line, sidetone_line_active_state);
-      delay(100);
-      digitalWrite(sidetone_line, sidetone_line_inactive_state);
-    }
-  #endif    
+    #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
+        #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
+            #ifdef M5STACK_CORE2
+                M5.Speaker.tone(hz_low_beep, 100);
+            #else
+                tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+            #endif
+        #else  
+            tone(sidetone_line, hz_low_beep);
+            delay(100);
+            noTone(sidetone_line);
+        #endif
+
+    #else
+        if (sidetone_line) {
+        digitalWrite(sidetone_line, sidetone_line_active_state);
+        delay(100);
+        digitalWrite(sidetone_line, sidetone_line_inactive_state);
+        }
+    #endif    
 }
 
 //-------------------------------------------------------------------------------------------------------
 
 void beep_boop()
 {
-  #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-#if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
- tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
- tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
-#else  
-    tone(sidetone_line, hz_high_beep);
-    delay(100);
-    tone(sidetone_line, hz_low_beep);
-    delay(100);
-    noTone(sidetone_line);
-    #endif
-  #else
-    if (sidetone_line) {
-      digitalWrite(sidetone_line, sidetone_line_active_state);
-      delay(200);
-      digitalWrite(sidetone_line, sidetone_line_inactive_state);
-    }
-  #endif     
+    #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
+        #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
+            #ifdef M5STACK_CORE2
+                M5.Speaker.tone(hz_high_beep, 100);
+                M5.Speaker.tone(hz_low_beep, 100);
+            #else
+                tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
+                tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+            #endif
+        #else  
+            tone(sidetone_line, hz_high_beep);
+            delay(100);
+            tone(sidetone_line, hz_low_beep);
+            delay(100);
+            noTone(sidetone_line);
+        #endif
+    #else
+            if (sidetone_line) {
+            digitalWrite(sidetone_line, sidetone_line_active_state);
+            delay(200);
+            digitalWrite(sidetone_line, sidetone_line_inactive_state);
+            }
+    #endif     
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -9247,15 +9299,20 @@ void boop_beep()
 {
   #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
- tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
- tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
-  #else  
-    tone(sidetone_line, hz_low_beep);
-    delay(100);
-    tone(sidetone_line, hz_high_beep);
-    delay(100);
-    noTone(sidetone_line);
-  #endif
+        #ifdef M5STACK_CORE2
+            M5.Speaker.tone(hz_low_beep, 100);
+            M5.Speaker.tone(hz_high_beep, 100);
+        #else
+            tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+            tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
+        #endif
+     #else  
+        tone(sidetone_line, hz_low_beep);
+        delay(100);
+        tone(sidetone_line, hz_high_beep);
+        delay(100);
+        noTone(sidetone_line);
+    #endif
   #else
     if (sidetone_line) {
       digitalWrite(sidetone_line, sidetone_line_active_state);
@@ -14708,11 +14765,15 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
               unsigned int TONEduration          =   50;                                // define the duration of each tone element in the tone sequence to drive a speaker
               for (int k=0; k<6; k++) {                                                 // a loop to generate some increasing tones
                  #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220115
-                    tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
+                    #ifdef M5STACK_CORE2
+                        M5.Speaker.tone(NEWtone, TONEduration);
+                    #else
+                        tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
+                    #endif
                 #else  
-                tone(sidetone_line,NEWtone);                                            // generate a tone on the speaker pin
-                delay(TONEduration);                                                    // hold the tone for the specified delay period
-                noTone(sidetone_line);
+                    tone(sidetone_line,NEWtone);                                            // generate a tone on the speaker pin
+                    delay(TONEduration);                                                    // hold the tone for the specified delay period
+                    noTone(sidetone_line);
                 #endif                                                  // turn off the tone
                 NEWtone = NEWtone*1.25;                                                 // calculate a new value for the tone frequency
               }                                                                         // end for
@@ -17320,7 +17381,7 @@ int memory_end(byte memory_number) {
 
 void initialize_pins() {
   
-#if defined (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) ||defined(HARDWARE_ESP32_DEV) //sp5iou 20180329, sp5iou 20220129
+#if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) //sp5iou 20180329, sp5iou 20220129
   pinMode (paddle_left, INPUT_PULLUP);
   pinMode (paddle_right, INPUT_PULLUP);
 #else
@@ -18338,7 +18399,7 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
 
   debug_serial_port->println("BT and BLE device Scan Setup");
 
-  btStarted();  // attempted workarond to avoid bt_controller init failure 
+  btStarted();  // workarond to avoid bt_controller init failure #259
 
   //btStart();
   //btStartMode(BT_MODE_CLASSIC_BT);
@@ -18350,7 +18411,6 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
   }
   queueflush();
 }
-
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -18415,7 +18475,7 @@ void mydelay(unsigned long ms)
 void initialize_display(){
 
   #ifdef FEATURE_DISPLAY    
-    #if defined(FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_LCD_I2C_FDEBRABANDER)
+    #if defined(FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_LCD_I2C_FDEBRABANDER) || defined(FEATURE_IDEASPARK_LCD)
       lcd.begin();
       lcd.home();
     #else
@@ -19680,7 +19740,7 @@ int paddle_pin_read(int pin_to_read){
     }                                                     // end switch
 #endif                                                  // OPTION_SAVE_MEMORY_NANOKEYER
 #if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
-    return digitalRead(pin_to_read);                      // code using digitalRead
+    return digitalRead((uint8_t) pin_to_read);                      // code using digitalRead
 #endif                                                  // !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
 #else                                                     // !OPTION_INVERT_PADDLE_PIN_LOGIC
     return !digitalRead(pin_to_read);                       // we do the regular digitalRead() if none of the direct register read options are valid
@@ -22967,21 +23027,26 @@ void update_time(){
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
 
-    void check_bt_keyboard(void * pvParameters)
-    {
+#define USE_TASK
+
+    #ifndef USE_TASK
+     void check_bt_keyboard(void) {
+    #else
+     void check_bt_keyboard(void * pvParameters) {
 
         /* The parameter value is expected to be 1 as 1 is passed in the
         pvParameters value in the call to xTaskCreate() below. */
 
+
         configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
 
-        for( ;; )
+        while (1)
         {
+         #endif
             //ToDo: Set up as a periodic scan for reconnect or new keyboard
             if (BT_Keyboard_Lost == true) {
                 bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
                                     // Default duration is 5 seconds
-                return;
             }
         
             #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
@@ -23021,7 +23086,12 @@ void update_time(){
                 uint8_t modifier = 0;
                 TickType_t    repeat_period_;
                 BTKeyboard::KeyInfo inf;
-                bt_keyboard.wait_for_low_event(inf); //, 1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                #ifdef USE_TASK
+                  bt_keyboard.wait_for_low_event(inf); //, 10);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                #else
+                  bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                #endif
+                //debug_serial_port->print(',size=L');
                 //debug_serial_port->print(inf.size);
                 //debug_serial_port->print(',');
                 
@@ -23032,12 +23102,19 @@ void update_time(){
                     debug_serial_port->print(':');
                 }
                 #endif
-            
-                if (inf.size == 8) 
+                
+                ch = 0;
+                if (inf.size == 8 || inf.size == 7) 
                 {
-                    // keyboard chars are len = 8, mousr and others are len=4
-                    ch = inf.keys[2];  // capture normal keys
                     modifier = inf.keys[0];  // capture shift, alt, ctrl state
+                    if (inf.size == 8) {
+                      // keyboard chars are len = 8, mouse and others are len=4
+                      ch = inf.keys[2];  // capture normal keys
+                    }
+                    else if (inf.size == 7) {  // K380s has only 7 bytes.  1st is missing.
+                      // keyboard chars are len = 7
+                      ch = inf.keys[1];  // capture normal keys
+                    }
 
                     #ifdef DEBUG_BT_KEYBOARD_B
                         debug_serial_port->print("<0x");
@@ -23226,7 +23303,8 @@ void update_time(){
                                         //case 0x53 : ch = BT_SCROLL; break;   // up cursor key
                                         default   : break; //debug_serial_port->print(ch);   // filter out key up events
                                     }  // end switch ch
-                                } else  ch = 0;
+                                } 
+                                else  ch = 0;
 
                             #endif // WORKING CODE
 
@@ -23301,24 +23379,356 @@ void update_time(){
                             ch = 0;
                         } // end of key mapping                        
                     }  // end of valid keystroke
-                }
+                }  // inf size 7 or 8
                 last_key = keyDN;
                 keyDN = false;
                 ch = 0;
             #endif
+         #ifdef USE_TASK
         } // for ever
+      #endif
     } // check_bt_keyboard
 #endif // FEATURE_BT_KEYBOARD
 
+#ifdef M5STACK_CORE2
+static void m_volume_up(bool)
+{
+  int v = M5.Speaker.getVolume() + 1;
+  if (v < 256) { M5.Speaker.setVolume(v); }
+}
+
+static void m_volume_down(bool)
+{
+  int v = M5.Speaker.getVolume() - 1;
+  if (v >= 0) { M5.Speaker.setVolume(v); }
+}
+
+static int32_t w;
+static int32_t h;
+
+void initialize_m5stack_core2() 
+{
+    M5_LOGE("this is error LOG");
+    M5_LOGW("this is warning LOG");
+    M5_LOGI("this is info LOG");
+    M5_LOGD("this is debug LOG");
+    M5_LOGV("this is verbose LOG");
+
+    //auto cfg = M5.config();
+    
+    #ifdef TEST
+    cfg.clear_display = true;  // default=true. clear the screen when begin.
+    cfg.output_power  = true;  // default=true. use external port 5V output.
+    cfg.internal_imu  = false;  // default=true. use internal IMU.
+    cfg.internal_rtc  = true;  // default=true. use internal RTC.
+    cfg.internal_spk  = true;  // default=true. use internal speaker.
+    cfg.internal_mic  = true;  // default=true. use internal microphone.
+    cfg.external_imu  = false;  // default=false. use Unit Accel & Gyro.
+    cfg.external_rtc  = false;  // default=false. use Unit RTC.
+    cfg.led_brightness = 64;   // default= 0. system LED brightness (0=off / 255=max) (※ not NeoPixel)
+
+    // external speaker setting.
+    cfg.external_speaker.module_display = true;  // default=false. use ModuleDisplay AudioOutput
+    cfg.external_speaker.hat_spk        = true;  // default=false. use HAT SPK
+    cfg.external_speaker.hat_spk2       = true;  // default=false. use HAT SPK2
+    cfg.external_speaker.atomic_spk     = true;  // default=false. use ATOMIC SPK
+    cfg.external_speaker.atomic_echo    = true;  // default=false. use ATOMIC ECHO BASE
+    cfg.external_speaker.module_rca     = false; // default=false. use ModuleRCA AudioOutput
+
+    // external display setting. (Pre-include required)
+    cfg.external_display.module_display = true;  // default=true. use ModuleDisplay
+    cfg.external_display.atom_display   = false;  // default=true. use AtomDisplay
+    cfg.external_display.unit_glass     = false; // default=true. use UnitGLASS
+    cfg.external_display.unit_glass2    = false; // default=true. use UnitGLASS2
+    cfg.external_display.unit_oled      = false; // default=true. use UnitOLED
+    cfg.external_display.unit_mini_oled = false; // default=true. use UnitMiniOLED
+    cfg.external_display.unit_lcd       = false; // default=true. use UnitLCD
+    cfg.external_display.unit_rca       = false; // default=true. use UnitRCA VideoOutput
+    cfg.external_display.module_rca     = false; // default=true. use ModuleRCA VideoOutput
+    #endif
+
+    M5.begin(); //cfg);
+    
+    //M5.Power.begin();
+    
+    if (M5.Speaker.begin())
+        debug_serial_port->println(F("** M5 Speaker started"));
+    else
+        debug_serial_port->println(F("*** M5 Speaker startup failed"));
+
+    M5.Speaker.setVolume(100);  // 0 - 255
+    M5.Speaker.tone(700,1000);
+
+    M5.Display.println(F("primary display\n"));
+    
+    #ifdef TEST
+    // Get the number of available displays
+    int display_count = M5.getDisplayCount();
+
+    for (int i = 0; i < display_count; ++i) {
+        // All displays are available in M5.Lcds.
+        // ※ Note that the order of which displays are numbered is the order in which they are detected, so the order may change.
+        int textsize = M5.Displays(i).height() / 60;
+        if (textsize == 0) { textsize = 1; }
+        M5.Displays(i).setTextSize(textsize);
+        M5.Displays(i).printf("No.%d\n", i);
+    }
+    
+    // If an external display is to be used as the main display, it can be listed in order of priority.
+    M5.setPrimaryDisplayType( {
+        m5::board_t::board_M5ModuleDisplay,
+    //    m5::board_t::board_M5AtomDisplay,
+    //    m5::board_t::board_M5ModuleRCA,
+    //    m5::board_t::board_M5UnitGLASS,
+    //    m5::board_t::board_M5UnitGLASS2,
+    //    m5::board_t::board_M5UnitMiniOLED,
+    //    m5::board_t::board_M5UnitOLED,
+    //    m5::board_t::board_M5UnitLCD,
+    //    m5::board_t::board_M5UnitRCA,
+    } );
+
+    // The primary display can be used with M5.Display.
+   
+    M5.Display.print("primary display\n");
+    
+    // Examine the indexes of a given type of display
+    int index_module_display = M5.getDisplayIndex(m5::board_t::board_M5ModuleDisplay);
+
+    if (index_module_display >= 0) {
+        M5.Displays(index_module_display).print("This is a Module Display\n");
+    } 
+    
+    //M5.Display.clear(TFT_BLACK);
+    
+    //w = M5.Displays(0).width();
+    h = M5.Displays(0).height();
+    w = 320;
+    //h = 240;
+
+    //M5.Display.fillScreen(TFT_WHITE);
+    M5.Displays(0).setRotation(1);
+    M5.Displays(0).setTextColor(TFT_WHITE);
+    M5.Displays(0).setTextDatum(top_center);
+    M5.Displays(0).drawString("CW Keyer", w / 2, 0, &fonts::FreeMonoBold12pt7b);
+
+    #endif
+
+    if (!M5.Speaker.isEnabled())
+    {
+        M5.Display.println("Speaker not found...");
+    }
+    beep_boop();
+}
+#endif
+
+#ifdef FEATURE_IDEASPARK_LCD
+void traceHeap() {
+	static uint32_t _free_heap_size = 0;
+	if (_free_heap_size == 0) _free_heap_size = esp_get_free_heap_size();
+
+	int _diff_free_heap_size = _free_heap_size - esp_get_free_heap_size();
+	ESP_LOGI(__FUNCTION__, "_diff_free_heap_size=%d", _diff_free_heap_size);
+	ESP_LOGI(__FUNCTION__, "esp_get_free_heap_size() : %6"PRIu32"\n", esp_get_free_heap_size() );
+#if 0
+	printf("esp_get_minimum_free_heap_size() : %6"PRIu32"\n", esp_get_minimum_free_heap_size() );
+	printf("xPortGetFreeHeapSize() : %6zd\n", xPortGetFreeHeapSize() );
+	printf("xPortGetMinimumEverFreeHeapSize() : %6zd\n", xPortGetMinimumEverFreeHeapSize() );
+	printf("heap_caps_get_free_size(MALLOC_CAP_32BIT) : %6d\n", heap_caps_get_free_size(MALLOC_CAP_32BIT) );
+	// that is the amount of stack that remained unused when the task stack was at its greatest (deepest) value.
+	printf("uxTaskGetStackHighWaterMark() : %6d\n", uxTaskGetStackHighWaterMark(NULL));
+#endif
+}
+
+void ST7789(void *pvParameters)
+{
+    // set font file
+    FontxFile fx16G[2];
+    FontxFile fx24G[2];
+    FontxFile fx32G[2];
+    FontxFile fx32L[2];
+    InitFontx(fx16G,"/fonts/ILGH16XB.FNT",""); // 8x16Dot Gothic
+    InitFontx(fx24G,"/fonts/ILGH24XB.FNT",""); // 12x24Dot Gothic
+    InitFontx(fx32G,"/fonts/ILGH32XB.FNT",""); // 16x32Dot Gothic
+    InitFontx(fx32L,"/fonts/LATIN32B.FNT",""); // 16x32Dot Latin
+
+    FontxFile fx16M[2];
+    FontxFile fx24M[2];
+    FontxFile fx32M[2];
+    InitFontx(fx16M,"/fonts/ILMH16XB.FNT",""); // 8x16Dot Mincyo
+    InitFontx(fx24M,"/fonts/ILMH24XB.FNT",""); // 12x24Dot Mincyo
+    InitFontx(fx32M,"/fonts/ILMH32XB.FNT",""); // 16x32Dot Mincyo
+    
+    //TFT_t dev;
+
+    // Change SPI Clock Frequency
+    //spi_clock_speed(40000000); // 40MHz
+    //spi_clock_speed(60000000); // 60MHz
+    spi_master_init(&dev, CONFIG_MOSI_GPIO, CONFIG_SCLK_GPIO, CONFIG_CS_GPIO, CONFIG_DC_GPIO, CONFIG_RESET_GPIO, CONFIG_BL_GPIO);
+    lcdInit(&dev, CONFIG_WIDTH, CONFIG_HEIGHT, CONFIG_OFFSETX, CONFIG_OFFSETY);
+
+    #if CONFIG_INVERSION
+      ESP_LOGI(TAG, "Enable Display Inversion");
+      //lcdInversionOn(&dev);
+      lcdInversionOff(&dev);
+    #endif
+
+    //char file[32];
+    
+    while(1) {   // Do screen work here
+
+      //TextBoxTest(&dev, fx32G, CONFIG_WIDTH, CONFIG_HEIGHT);
+			//WAIT;
+
+        // Multi Font Test
+      uint16_t color;
+      uint8_t ascii[40];
+      uint16_t margin = 10;
+      lcdFillScreen(&dev, BLACK);
+      color = WHITE;
+      lcdSetFontDirection(&dev, 0);
+      uint16_t xpos = 0;
+      uint16_t ypos = 15;
+      int xd = 0;
+      int yd = 1;
+      if(CONFIG_WIDTH < CONFIG_HEIGHT) {
+        lcdSetFontDirection(&dev, 1);
+        xpos = (CONFIG_WIDTH-1)-16;
+        ypos = 0;
+        xd = 1;
+        yd = 0;
+      }
+      strcpy((char *)ascii, "16Dot Gothic Font");
+      lcdDrawString(&dev, fx16G, xpos, ypos, ascii, color);
+
+      xpos = xpos - (24 * xd) - (margin * xd);
+      ypos = ypos + (16 * yd) + (margin * yd);
+      strcpy((char *)ascii, "24Dot Gothic Font");
+      lcdDrawString(&dev, fx24G, xpos, ypos, ascii, color);
+
+      xpos = xpos - (32 * xd) - (margin * xd);
+      ypos = ypos + (24 * yd) + (margin * yd);
+      if (CONFIG_WIDTH >= 240) {
+        strcpy((char *)ascii, "32Dot Gothic Font");
+        lcdDrawString(&dev, fx32G, xpos, ypos, ascii, color);
+        xpos = xpos - (32 * xd) - (margin * xd);;
+        ypos = ypos + (32 * yd) + (margin * yd);
+      }
+
+      xpos = xpos - (10 * xd) - (margin * xd);
+      ypos = ypos + (10 * yd) + (margin * yd);
+      strcpy((char *)ascii, "16Dot Mincyo Font");
+      lcdDrawString(&dev, fx16M, xpos, ypos, ascii, color);
+
+      xpos = xpos - (24 * xd) - (margin * xd);;
+      ypos = ypos + (16 * yd) + (margin * yd);
+      strcpy((char *)ascii, "24Dot Mincyo Font");
+      lcdDrawString(&dev, fx24M, xpos, ypos, ascii, color);
+
+      if (CONFIG_WIDTH >= 240) {
+        xpos = xpos - (32 * xd) - (margin * xd);;
+        ypos = ypos + (24 * yd) + (margin * yd);
+        strcpy((char *)ascii, "32Dot Mincyo Font");
+        lcdDrawString(&dev, fx32M, xpos, ypos, ascii, color);
+      }
+      lcdDrawFinish(&dev);
+      lcdSetFontDirection(&dev, 0);
+      WAIT;
+    }
+
+    // never reach here
+	  while (1) {
+		  vTaskDelay(2000 / portTICK_PERIOD_MS);
+	  }
+}
+
+static void listSPIFFS(char * path) {
+	DIR* dir = opendir(path);
+	assert(dir != NULL);
+	while (true) {
+		struct dirent*pe = readdir(dir);
+		if (!pe) break;
+		ESP_LOGI(__FUNCTION__,"d_name=%s d_ino=%d d_type=%x", pe->d_name,pe->d_ino, pe->d_type);
+	}
+	closedir(dir);
+}
+
+esp_err_t mountSPIFFS(char * path, char * label, int max_files) {
+	esp_vfs_spiffs_conf_t conf = {
+		.base_path = path,
+		.partition_label = label,
+		.max_files = (size_t) max_files,
+		.format_if_mount_failed = true
+	};
+
+	// Use settings defined above to initialize and mount SPIFFS filesystem.
+	// Note: esp_vfs_spiffs_register is an all-in-one convenience function.
+	esp_err_t ret = esp_vfs_spiffs_register(&conf);
+
+	if (ret != ESP_OK) {
+		if (ret ==ESP_FAIL) {
+			ESP_LOGE(TAG, "Failed to mount or format filesystem");
+		} else if (ret== ESP_ERR_NOT_FOUND) {
+			ESP_LOGE(TAG, "Failed to find SPIFFS partition");
+		} else {
+			ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)",esp_err_to_name(ret));
+		}
+		return ret;
+	}
+
+#if 0
+	ESP_LOGI(TAG, "Performing SPIFFS_check().");
+	ret = esp_spiffs_check(conf.partition_label);
+	if (ret != ESP_OK) {
+		ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
+		return ret;
+	} else {
+			ESP_LOGI(TAG, "SPIFFS_check() successful");
+	}
+#endif
+
+	size_t total = 0, used = 0;
+	ret = esp_spiffs_info(conf.partition_label, &total, &used);
+	if (ret != ESP_OK) {
+		ESP_LOGE(TAG,"Failed to get SPIFFS partition information (%s)",esp_err_to_name(ret));
+	} else {
+		ESP_LOGI(TAG,"Mount %s to %s success", path, label);
+		ESP_LOGI(TAG,"Partition size: total: %d, used: %d", total, used);
+	}
+
+	return ret;
+}
+
+void initialize_st7789_lcd()
+{
+    ESP_LOGI(TAG, "Initializing SPIFFS");
+    // Maximum files that could be open at the same time is 7.
+    ESP_ERROR_CHECK(mountSPIFFS((char *) "/fonts", (char *) "storage1", 7));
+    listSPIFFS((char *) "/fonts/");
+
+    // Maximum files that could be open at the same time is 1.
+    ESP_ERROR_CHECK(mountSPIFFS((char *) "/icons", (char *) "storage2", 1));
+    listSPIFFS((char *) "/icons/");
+
+    xTaskCreate(ST7789, "ST7789", 1024*6, NULL, 2, NULL);
+}
+#endif
+
 void setup()
 {
-    initialize_pins();
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU fix for nothing on serial port for ESP32_dev
         initialize_serial_ports();        // Goody - this is available for testing startup issues
         #if defined(FEATURE_BT_KEYBOARD)
-            initialize_bt_keyboard();
+          #ifdef M5STACK_CORE2
+            initialize_m5stack_core2();
+          #endif
+          initialize_bt_keyboard();
+        #endif
+        #ifdef FEATURE_IDEASPARK_LCD
+          initialize_st7789_lcd();
         #endif
     #endif
+
+    initialize_pins();
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues
     initialize_keyer_state();
@@ -23351,6 +23761,7 @@ void setup()
     initialize_debug_startup();
 }
 
+#ifdef USE_TASK
 void main_loop(void * pvParameters ) 
 {
   /* The parameter value is expected to be 1 as 1 is passed in the
@@ -23359,177 +23770,184 @@ void main_loop(void * pvParameters )
   configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
 
   for( ;; )
+ #else
+  void main_loop(void) 
   {
-
-    #ifdef OPTION_WATCHDOG_TIMER
-      wdt_reset();
-    #endif  //OPTION_WATCHDOG_TIMER
-    
-    #if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
-        if (keyer_machine_mode == BEACON) {
-            delay(201);                                                                   // an odd duration delay before we enter BEACON mode
-            #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-                unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
-            #endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-
-            while (keyer_machine_mode == BEACON) {                                        // if we're in beacon mode, just keep playing memory 1
-                if (!send_buffer_bytes) {
-                    add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
-                    add_to_send_buffer(0);
-                }
-                service_send_buffer(PRINTCHAR);
-                #ifdef OPTION_BEACON_MODE_PTT_TAIL_TIME
-                    delay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
-                    check_ptt_tail();                                                         // this resets things so that the ptt line will go high during the next playout
-                    digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
-                #endif                                                                      // OPTION_BEACON_MODE_PTT_TAIL_TIME
-
-                #ifdef FEATURE_SERIAL
-                    check_serial();
-                #endif
-
-                #ifdef OPTION_WATCHDOG_TIMER
-                    wdt_reset();
-                #endif                                                                      // OPTION_WATCHDOG_TIMER
-
-                #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-                    if (time_to_delay > 0) delay(time_to_delay);                              // this provdes a delay between succesive playouts of the memory contents
-                #endif                                                                      // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-            }                                                                             // end while (keyer_machine_mode == BEACON)
-        }                                                                               // end if (keyer_machine_mode == BEACON)
-    #endif                                                                            // defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
-
-    #if defined(FEATURE_BEACON_SETTING)
-        service_beacon();
+    if (1)
     #endif
+    {
+      #ifdef OPTION_WATCHDOG_TIMER
+        wdt_reset();
+      #endif  //OPTION_WATCHDOG_TIMER
+      
+      #if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
+          if (keyer_machine_mode == BEACON) {
+              delay(201);                                                                   // an odd duration delay before we enter BEACON mode
+              #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
+                  unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
+              #endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
 
-    if (keyer_machine_mode == KEYER_NORMAL) {
-        #ifdef FEATURE_BUTTONS
-            check_buttons();
-        #endif
-        check_paddles();
-        service_dit_dah_buffers();
+              while (keyer_machine_mode == BEACON) {                                        // if we're in beacon mode, just keep playing memory 1
+                  if (!send_buffer_bytes) {
+                      add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
+                      add_to_send_buffer(0);
+                  }
+                  service_send_buffer(PRINTCHAR);
+                  #ifdef OPTION_BEACON_MODE_PTT_TAIL_TIME
+                      delay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
+                      check_ptt_tail();                                                         // this resets things so that the ptt line will go high during the next playout
+                      digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
+                  #endif                                                                      // OPTION_BEACON_MODE_PTT_TAIL_TIME
 
-        #if defined(FEATURE_SERIAL)      
-            check_serial();
-            check_paddles();           
-            service_dit_dah_buffers();
-        #endif
+                  #ifdef FEATURE_SERIAL
+                      check_serial();
+                  #endif
 
-        service_send_buffer(PRINTCHAR);
-        check_ptt_tail();
+                  #ifdef OPTION_WATCHDOG_TIMER
+                      wdt_reset();
+                  #endif                                                                      // OPTION_WATCHDOG_TIMER
 
-        #ifdef FEATURE_POTENTIOMETER
-            check_potentiometer();
-        #endif
-        
-        #ifdef FEATURE_ROTARY_ENCODER
-            check_rotary_encoder();
-        #endif
+                  #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
+                      if (time_to_delay > 0) delay(time_to_delay);                              // this provdes a delay between succesive playouts of the memory contents
+                  #endif                                                                      // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
+              }                                                                             // end while (keyer_machine_mode == BEACON)
+          }                                                                               // end if (keyer_machine_mode == BEACON)
+      #endif                                                                            // defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
 
-        #if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD)
-            check_ps2_keyboard();
-        #endif
-        
-        #ifdef FEATURE_BT_KEYBOARD
-            //check_bt_keyboard();// moved to separate RTOS task
-        #endif
-        
-        #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
-            service_usb();
-        #endif  
+      #if defined(FEATURE_BEACON_SETTING)
+          service_beacon();
+      #endif
 
-        check_for_dirty_configuration();
+      if (keyer_machine_mode == KEYER_NORMAL) {
+          #ifdef FEATURE_BUTTONS
+              check_buttons();
+          #endif
+          check_paddles();
+          service_dit_dah_buffers();
 
-        #ifdef FEATURE_DEAD_OP_WATCHDOG
-            check_for_dead_op();
-        #endif
+          #if defined(FEATURE_SERIAL)      
+              check_serial();
+              check_paddles();           
+              service_dit_dah_buffers();
+          #endif
 
-        #ifdef FEATURE_MEMORIES
-            check_memory_repeat();
-        #endif
+          service_send_buffer(PRINTCHAR);
+          check_ptt_tail();
 
-        #ifdef FEATURE_DISPLAY
-            check_paddles();
-            service_send_buffer(PRINTCHAR);
-            service_display();
-        #endif
-        
-        #ifdef FEATURE_CW_DECODER
-            service_cw_decoder();
-        #endif
-        
-        #ifdef FEATURE_LED_RING
-            update_led_ring();
-        #endif 
-            
-        #ifdef FEATURE_SLEEP
-            check_sleep();
-        #endif
+          #ifdef FEATURE_POTENTIOMETER
+              check_potentiometer();
+          #endif
+          
+          #ifdef FEATURE_ROTARY_ENCODER
+              check_rotary_encoder();
+          #endif
 
-        #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-            check_backlight();
-        #endif
-
-        #ifdef FEATURE_PTT_INTERLOCK
-            service_ptt_interlock();
-        #endif
-        
-        #ifdef FEATURE_PADDLE_ECHO
-            service_paddle_echo();
-        #endif    
-
-        #ifdef FEATURE_STRAIGHT_KEY
-            service_straight_key();
-        #endif
-
-        #if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
-            service_competition_compression_detection();
-        #endif
-
-        #if defined(OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE) && defined(FEATURE_WINKEY_EMULATION)
-            service_winkey_breakin();
-        #endif  
-
-        #if defined(FEATURE_ETHERNET)
-            check_for_network_restart();
-            #if defined(FEATURE_WEB_SERVER)
-            service_web_server();
+          #if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD)
+              check_ps2_keyboard();
+          #endif
+          
+          #ifdef FEATURE_BT_KEYBOARD
+            #ifdef M5STACK_CORE2
+              M5.update();
             #endif
-            #if defined(FEATURE_INTERNET_LINK)
-            service_udp_send_buffer();
-            service_udp_receive();
-            service_internet_link_udp_receive_buffer();
-            #endif
-        #endif  
+              //check_bt_keyboard();// moved to separate RTOS task
+          #endif
+          
+          #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
+              service_usb();
+          #endif  
 
-        #ifdef FEATURE_SIDETONE_SWITCH
-            check_sidetone_switch();
-        #endif
+          check_for_dirty_configuration();
 
-        #if defined(FEATURE_4x4_KEYPAD) || defined(FEATURE_3x4_KEYPAD)
-            service_keypad();
-        #endif
+          #ifdef FEATURE_DEAD_OP_WATCHDOG
+              check_for_dead_op();
+          #endif
 
-        #ifdef FEATURE_SD_CARD_SUPPORT
-            service_sd_card();    
-        #endif
+          #ifdef FEATURE_MEMORIES
+              check_memory_repeat();
+          #endif
 
-        #ifdef FEATURE_SEQUENCER
-            check_sequencer_tail_time();
-        #endif  
+          #ifdef FEATURE_DISPLAY
+              check_paddles();
+              service_send_buffer(PRINTCHAR);
+              service_display();
+          #endif
+          
+          #ifdef FEATURE_CW_DECODER
+              service_cw_decoder();
+          #endif
+          
+          #ifdef FEATURE_LED_RING
+              update_led_ring();
+          #endif 
+              
+          #ifdef FEATURE_SLEEP
+              check_sleep();
+          #endif
 
-        #ifdef FEATURE_SO2R_SWITCHES
-            so2r_switches();
-        #endif
+          #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+              check_backlight();
+          #endif
 
-        service_async_eeprom_write();
-        
+          #ifdef FEATURE_PTT_INTERLOCK
+              service_ptt_interlock();
+          #endif
+          
+          #ifdef FEATURE_PADDLE_ECHO
+              service_paddle_echo();
+          #endif    
+
+          #ifdef FEATURE_STRAIGHT_KEY
+              service_straight_key();
+          #endif
+
+          #if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
+              service_competition_compression_detection();
+          #endif
+
+          #if defined(OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE) && defined(FEATURE_WINKEY_EMULATION)
+              service_winkey_breakin();
+          #endif  
+
+          #if defined(FEATURE_ETHERNET)
+              check_for_network_restart();
+              #if defined(FEATURE_WEB_SERVER)
+              service_web_server();
+              #endif
+              #if defined(FEATURE_INTERNET_LINK)
+              service_udp_send_buffer();
+              service_udp_receive();
+              service_internet_link_udp_receive_buffer();
+              #endif
+          #endif  
+
+          #ifdef FEATURE_SIDETONE_SWITCH
+              check_sidetone_switch();
+          #endif
+
+          #if defined(FEATURE_4x4_KEYPAD) || defined(FEATURE_3x4_KEYPAD)
+              service_keypad();
+          #endif
+
+          #ifdef FEATURE_SD_CARD_SUPPORT
+              service_sd_card();    
+          #endif
+
+          #ifdef FEATURE_SEQUENCER
+              check_sequencer_tail_time();
+          #endif  
+
+          #ifdef FEATURE_SO2R_SWITCHES
+              so2r_switches();
+          #endif
+
+          service_async_eeprom_write();
+          
         }
 
         service_sending_pins();
 
-        service_millis_rollover();
+        service_millis_rollover(); 
     }
 }
 
@@ -23549,24 +23967,35 @@ extern "C"
     
     setup(); // call setup for here when not in Arduino statup mode
 
-    #ifdef FEATURE_BT_KEYBOARD
-    xReturned = xTaskCreate(
-                  check_bt_keyboard,       /* Function that implements the task. */
-                  "Check_BT_Keyboard",          /* Text name for the task. */
-                  4000,      /* Stack size in words, not bytes. */
-                  ( void * ) 1,    /* Parameter passed into the task. */
-                  tskIDLE_PRIORITY,/* Priority at which the task is created. */
-                  &xHandle_BT );
+    #if defined (FEATURE_BT_KEYBOARD) && defined (USE_TASK)
+        xReturned = xTaskCreate(
+                    check_bt_keyboard,       /* Function that implements the task. */
+                    "Check_BT_Keyboard",          /* Text name for the task. */
+                    4000,      /* Stack size in words, not bytes. */
+                    ( void * ) 1,    /* Parameter passed into the task. */
+                    tskIDLE_PRIORITY,/* Priority at which the task is created. */
+                    &xHandle_BT );
     #endif
     
+    #ifdef USE_TASK
     xReturned = xTaskCreate(
-                  main_loop,       /* Function that implements the task. */
-                  "Main_Loop",          /* Text name for the task. */
-                  10000,      /* Stack size in words, not bytes. */
-                  ( void * ) 1,    /* Parameter passed into the task. */
-                  tskIDLE_PRIORITY,/* Priority at which the task is created. */
-                  &xHandle_MAIN );
-    
+                main_loop,       /* Function that implements the task. */
+                "Main_Loop",          /* Text name for the task. */
+                10000,      /* Stack size in words, not bytes. */
+                ( void * ) 1,    /* Parameter passed into the task. */
+                tskIDLE_PRIORITY,/* Priority at which the task is created. */
+                &xHandle_MAIN );
+    #endif
+    while (1)
+    {
+      vTaskDelay(1);
+      #ifndef USE_TASK
+        check_bt_keyboard();
+        main_loop();
+      #endif
+      //esp_task_wdt_reset();
+    }
+
     //if( xReturned == pdPASS )
     //{
         // The task was created. Use the task's handle to delete the task.

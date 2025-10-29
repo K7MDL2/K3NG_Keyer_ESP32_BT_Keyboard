@@ -90,6 +90,9 @@
     "cinttypes": "cpp",
     "complex": "cpp",
     "typeinfo": "cpp",
-    "variant": "cpp"
-  }
+    "variant": "cpp",
+    "st7789.h": "c",
+    "fontx.h": "c"
+  },
+  "idf.currentSetup": "D:\\esp-idf\\v5.5\\esp-idf"
 }

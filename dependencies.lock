@@ -9,8 +9,74 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.3
+  esp-idf-lib/esp_idf_lib_helpers:
+    component_hash: a8049b1e609679fb54b2d57b0399dd29c4d1fda09a797edac9926f7810aa5703
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32
+    - esp32c2
+    - esp32c3
+    - esp32c5
+    - esp32c6
+    - esp32c61
+    - esp32h2
+    - esp32p4
+    - esp32s2
+    - esp32s3
+    version: 1.3.10
+  esp-idf-lib/i2cdev:
+    component_hash: 11c08f9e1a7d346b5dd763196dc2567cf2209ae49042402c2c2d296624601c14
+    dependencies:
+    - name: esp-idf-lib/esp_idf_lib_helpers
+      registry_url: https://components.espressif.com
+      require: private
+      version: '*'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32
+    - esp32c2
+    - esp32c3
+    - esp32c5
+    - esp32c6
+    - esp32c61
+    - esp32h2
+    - esp32p4
+    - esp32s2
+    - esp32s3
+    version: 2.0.8
+  esp-idf-lib/pcf8574:
+    component_hash: 2a140534f8867ab4ae8a9f6bcb9deffa68031b410b397eadc2956629e5f4de4d
+    dependencies:
+    - name: esp-idf-lib/esp_idf_lib_helpers
+      registry_url: https://components.espressif.com
+      require: private
+      version: '*'
+    - name: esp-idf-lib/i2cdev
+      registry_url: https://components.espressif.com
+      require: private
+      version: '*'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32c2
+    - esp32c3
+    - esp32c5
+    - esp32c6
+    - esp32c61
+    - esp32h2
+    - esp32p4
+    - esp32s2
+    - esp32s3
+    version: 1.0.8
   espressif/arduino-esp32:
-    component_hash: 5b9aac526ad1107952b6249e89755340529b5c1699f5ba7509cd8984674e9528
+    component_hash: 61db028af7b50fa58e31e28b8601f0bd8382f3dafebde3cb341651aa32f7614c
     dependencies:
     - name: chmorgan/esp-libhelix-mp3
       registry_url: https://components.espressif.com
@@ -142,7 +208,7 @@ dependencies:
     - esp32h2
     - esp32p4
     - esp32c5
-    version: 3.3.1
+    version: 3.3.2
   espressif/cbor:
     component_hash: 440f4ee4504841cc9b4f3a8ef755776a612ac9dace355514c68b999868f990ff
     dependencies:
@@ -153,6 +219,16 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 0.6.0~1
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
   espressif/esp-dsp:
     component_hash: 42dce32d46ac93dc11f60d368e29a830e9661c7345d794b8a45c343479cae636
     dependencies:
@@ -253,7 +329,7 @@ dependencies:
       type: service
     version: 1.2.2
   espressif/esp_modem:
-    component_hash: b541c3f5765d3ba062c0d004b9ca6da6d0af908293421c2dbe046c537fb2a011
+    component_hash: dca5a8d8cf80dd88dc91bb22cbea52956950f1e80488996c5b41168d3cdefbb6
     dependencies:
     - name: idf
       require: private
@@ -261,7 +337,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.4.0
+    version: 1.4.1
   espressif/esp_rainmaker:
     component_hash: f6fe458fc7a0102ee2879f0247da4b41419e6c07de12031f66e5e9454d25baaa
     dependencies:
@@ -445,6 +521,30 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.4.6
+  espressif/spi_bus:
+    component_hash: bd0b4500a9b9cb5f7cc230b157ac006435a5515a7136d6920cceee3186263e8f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.0'
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.0
+  iamflinks/i2c_lcd_pcf8574:
+    component_hash: ae9c5a92cbfa22b78fcd426922583536eed28adba4ea8f7577cad27e206d4149
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.1
   idf:
     source:
       type: idf
@@ -459,9 +559,47 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.20.1
+  m5stack/m5gfx:
+    component_hash: a44875eb6d6577bddcf1669ad5dec35e1afa425b7ca8e99af6b38505f37840e6
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.2.9
+  m5stack/m5unified:
+    component_hash: 9ff51561f550bf6061597fef38bd023654f98502d79c68e286cca07fadb249fd
+    dependencies:
+    - name: m5stack/m5gfx
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^0.2.8
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.2.7
+  panigrah/esp32-idf-hd44780:
+    component_hash: f5e8c25c335cd362d1ac9613138cdea7d98a4a6e272a1365b6f1117a27bfbefd
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.0'
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.0.3
 direct_dependencies:
+- esp-idf-lib/pcf8574
 - espressif/arduino-esp32
+- espressif/spi_bus
+- iamflinks/i2c_lcd_pcf8574
 - idf
-manifest_hash: 0bb669186e426fdbdc1d1d8ef7e1aabafc492d20b49c6341e16cb1b88eb8eed0
+- m5stack/m5gfx
+- m5stack/m5unified
+- panigrah/esp32-idf-hd44780
+manifest_hash: 9cd0386d9b0914560c75abf9a2e8f839c656346142effa5dd3ed578783c36a4d
 target: esp32
 version: 2.0.0

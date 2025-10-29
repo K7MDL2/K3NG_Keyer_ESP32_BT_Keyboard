@@ -43,4 +43,7 @@
 /build
 /managed_components
 D:/esp-idf/v5.5/esp-idf/components/**
+.vscode/settings.json
+.vscode/launch.json
+K3NG_Keyer_ESP32_BT_Keyboard.code-workspace
 

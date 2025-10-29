@@ -23,6 +23,7 @@
 #define FEATURE_AUTOSPACE
 #define FEATURE_FARNSWORTH
 // #define FEATURE_DL2SBA_BANKSWITCH       // Switch memory banks feature as described here: http://dl2sba.com/index.php?option=com_content&view=article&id=131:nanokeyer&catid=15:shack&Itemid=27#english
+//#define FEATURE_IDEASPARK_LCD             // ESP32-WROOM with onboard 320x170 color LCD graphics display, uses SPI bus
 //#define FEATURE_LCD_4BIT                // classic LCD disidefplay using 4 I/O lines
 // #define FEATURE_LCD_8BIT                // classic LCD display using 8 I/O lines
 // #define FEATURE_LCD_ADAFRUIT_I2C          // Adafruit I2C LCD display using MCP23017 at addr 0x20
@@ -31,7 +32,7 @@
 // #define FEATURE_LCD1602_N07DH      // http://linksprite.com/wiki/index.php5?title=16_X_2_LCD_Keypad_Shield_for_Arduino
 // #define FEATURE_LCD_SAINSMART_I2C
 // #define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
-// #define FEATURE_LCD_MATHERTEL_PCF8574 // https://github.com/mathertel/LiquidCrystal_PCF8574
+//#define FEATURE_LCD_MATHERTEL_PCF8574 // https://github.com/mathertel/LiquidCrystal_PCF8574
 // #define FEATURE_LCD_I2C_FDEBRABANDER //https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library
 // #define FEATURE_LCD_HD44780
 //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  

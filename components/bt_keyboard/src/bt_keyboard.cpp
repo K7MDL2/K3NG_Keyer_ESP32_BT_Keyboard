@@ -816,7 +816,7 @@ void BTKeyboard::handle_ble_device_result(esp_ble_gap_cb_param_t *param) {
   if (adv_name_len) {
     std::cout << ", NAME: '" << name << "'\n";
   }
-  if (appearance == ESP_BLE_APPEARANCE_HID_KEYBOARD) {
+  if (appearance == ESP_BLE_APPEARANCE_HID_KEYBOARD) { // && (uuid == ESP_GATT_UUID_HID_SVC || uuid == 0)) {
         add_ble_scan_result(scan_rst.bda, scan_rst.ble_addr_type, appearance, adv_name, adv_name_len,
                         scan_rst.rssi);
   }
@@ -1168,10 +1168,10 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
     if (cr) {
       // open the selected entry
       esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type);
-      std::cout << "Open BLE/BT Entry for this Keyboard" << std::endl;
+      std::cout << "Open BLE/BT Entry for this Keyboard\n" << std::endl;
     }
     else  {
-      std::cout << "No Valid BLE/BT Keyboard Entry Found" << std::endl;
+      std::cout << "No Valid BLE/BT Keyboard Entry Found\n" << std::endl;
     }
 
     // free the results
@@ -1236,7 +1236,7 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
                    ESP_BD_ADDR_HEX(bda), esp_hid_usage_str(param->input.usage),
                    param->input.map_index, param->input.report_id, param->input.length);
           ESP_LOG_BUFFER_HEX_LEVEL(TAG, param->input.data, param->input.length, ESP_LOG_DEBUG);
-          bt_keyboard_->push_key(param->input.data, param->input.length);
+            bt_keyboard_->push_key(param->input.data, param->input.length);
         }
         break;
       }

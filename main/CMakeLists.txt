@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.5)
 
 #include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 file(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/main/*.*)
-set(include_dirs ${CMAKE_SOURCE_DIR}/include
-                  D:/Documents/Arduino/libraries)
+set(include_dirs ${CMAKE_SOURCE_DIR}/.
+                  ${CMAKE_SOURCE_DIR}/components/*.*)
 
 set(CMAKE_CXX_STANDARD "20")
 
@@ -13,8 +13,11 @@ set(SDKCONFIG ${CMAKE_SOURCE_DIR}/build/sdkconfig)
 
 idf_component_register(SRCS "main.cpp" "${app_sources}"
     INCLUDE_DIRS "."
+    #REQUIRES nvs_flash bt_keyboard bt st7789 spiffs TFT_lcd LiquidCrystal_PCF8574)
     REQUIRES nvs_flash bt_keyboard bt)
 
+
+#  create precompiled files
 set(out_path "${CMAKE_SOURCE_DIR}/precompiled_images")
 idf_build_get_property(build_dir BUILD_DIR)
 idf_build_get_property(elf_name EXECUTABLE_NAME GENERATOR_EXPRESSION)
