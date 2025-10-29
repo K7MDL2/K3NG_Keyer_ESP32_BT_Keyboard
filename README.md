@@ -12,7 +12,7 @@
 
 [esp32]: https://img.shields.io/badge/ESP32-green "ESP32"
 [esp32-WROOM-32]: https://img.shields.io/badge/ESP32--WROOM--32-orange "ESP32-WROOM-32"
-[ESP-IDF]: https://img.shields.io/badge/ESP--IDF-cyan "ESP-IDF"
+[ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5-cyan "ESP-IDF v5.5"
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 [K380]: https://img.shields.io/badge/K380-violet "K380"
 [K380s]: https://img.shields.io/badge/K380s-violet "K380s"
@@ -30,7 +30,21 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
 ***********************  Oct 9, 2025  K7MDL *****************************
-Update: Oct 29, 2025:  This is fully functional for the features I have defined.  Tested 3 BT keyboards.  The K380s is a BLE keyboard and curerntl;y does not reconnect so it required you to poair it each connection for now.  All keys for the equivalent PS2 keyboard are assigned.    See Wiki pages.
+
+Update: Oct 29, 2025:  This is fully functional for the features I have defined.  Tested 3 BT keyboards.  The K380s is a BLE keyboard and curerntly does not reconnect so it required you to poair it each connection for now.  All keys for the equivalent PS2 keyboard are assigned.    See Wiki pages.
+This requires certain settings.
+
+There are 2 relevant bugs.  
+https://github.com/espressif/esp-idf/issues/15379  - BLE-HID-Device Re-Connection not working with the esp_hid_host (unresolved)
+https://github.com/espressif/esp-idf/issues/12401  - HID Host fails to connect to a BLE keyboard (solved - see details of settings required)
+
+These config values must be changed:
+   
+    #define CONFIG_BT_GATTC_NOTIF_REG_MAX 64  //needed for K380s BLE keyboard 
+    #define CONFIG_BT_SMP_MAX_BONDS 40
+    #define BTA_GATTC_CONN_MAX  64
+
+    Working on enabled a LCD display.  This currently does not work if compiled under Arduino IDE.
 *************************************************************************
 
 3 years ago (2022) SP5IOU modied the K3NG Keyer Arduino code to support an ESP32.  This repository is forked from his repositiry at https://github.com/aimeiz/k3ng_cw_keyer-master_2022.  After changing the pin assignments it worked on my ESP32-WROOM-32 dev board.  I used the board described in this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/CPU-Module
