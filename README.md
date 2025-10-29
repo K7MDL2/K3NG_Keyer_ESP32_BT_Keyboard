@@ -30,6 +30,7 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
 ***********************  Oct 9, 2025  K7MDL *****************************
+
 Update: Oct 29, 2025:  This is fully functional for the features I have defined.  Tested 3 BT keyboards.  The K380s is a BLE keyboard and curerntly does not reconnect so it required you to poair it each connection for now.  All keys for the equivalent PS2 keyboard are assigned.    See Wiki pages.
 This requires certain settings.
 
