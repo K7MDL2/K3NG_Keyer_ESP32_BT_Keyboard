@@ -20,4 +20,4 @@ dependencies:
   espressif/spi_bus: ^1.0.0
   esp-idf-lib/pcf8574: ^1.0.8
   panigrah/esp32-idf-hd44780: ^0.0.3
-  iamflinks/i2c_lcd_pcf8574: ^1.0.1
+  #iamflinks/i2c_lcd_pcf8574: ^1.0.1

@@ -1375,9 +1375,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-ESP32-2025.10.9 based on 2022 era code"
-#define eeprom_magic_number 42              // you can change this number to have the unit re-initialize EEPROM
-//#include <arduino.h>
+#define CODE_VERSION "K7MDL-ESP32-2025.10.30 based on 2022 era code"
+#define eeprom_magic_number 43              // you can change this number to have the unit re-initialize EEPROM
+#include <Arduino.h>
 #include <stdio.h>
 #include "keyer_hardware.h"
 
@@ -1580,7 +1580,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_LCD_YDv1)
-  #include <LiquidCrystal_I2C.h>
+  #include "../components/arduino/libraries/LiquidCrystal_I2C/LiquidCrystal_I2C.h"
 #endif
 
 #if defined(FEATURE_LCD_ADAFRUIT_I2C)
@@ -1589,7 +1589,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_LCD_ADAFRUIT_BACKPACK)
-  #include <Adafruit_LiquidCrystal.h>
+  #include "../components/arduino/libraries/Adafruit_LiquidCrystal/Adafruit_LiquidCrystal.h"
 #endif
 
 #if defined(FEATURE_LCD_SAINSMART_I2C)
@@ -1601,11 +1601,12 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif  
 
 #if defined(FEATURE_LCD_MATHERTEL_PCF8574)
-  #include <LiquidCrystal_PCF8574.h>
+  #include "../components/arduino/libraries/LiquidCrystal_PCF8574/src/LiquidCrystal_PCF8574.h"
 #endif
 
 #if defined(FEATURE_LCD_I2C_FDEBRABANDER)
-  #include <LiquidCrystal_I2C.h>
+  #include <Wire.h>
+  #include "LiquidCrystal_I2C.h"
 #endif
 
 #if defined(FEATURE_LCD_HD44780)
@@ -2149,7 +2150,18 @@ byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
 #endif
 
 #if defined(FEATURE_LCD_I2C_FDEBRABANDER)
-  LiquidCrystal_I2C lcd(lcd_i2c_address_fdebrander_lcd, LCD_COLUMNS, LCD_ROWS, /*charsize*/ LCD_5x8DOTS);
+  //LiquidCrystal_I2C lcd(lcd_i2c_address_fdebrander_lcd, LCD_COLUMNS, LCD_ROWS, /*charsize*/ LCD_5x8DOTS);
+  //LiquidCrystal_I2C lcd(lcd_i2c_address_fdebrander_lcd);
+   #define I2C_ADDR      0x27
+   #define BACKLIGHT_PIN 3
+   #define En_pin        2
+   #define Rw_pin        1
+   #define Rs_pin        0
+   #define D4_pin        4
+   #define D5_pin        5
+   #define D6_pin        6
+   #define D7_pin        7
+  LiquidCrystal_I2C lcd(I2C_ADDR,En_pin,Rw_pin,Rs_pin,D4_pin,D5_pin,D6_pin,D7_pin, BACKLIGHT_PIN, POSITIVE);  
 #endif
 
 #if defined(FEATURE_LCD_HD44780)
@@ -18475,10 +18487,11 @@ void mydelay(unsigned long ms)
 void initialize_display(){
 
   #ifdef FEATURE_DISPLAY    
-    #if defined(FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_LCD_I2C_FDEBRABANDER) || defined(FEATURE_IDEASPARK_LCD)
+    #if defined(FEATURE_LCD_SAINSMART_I2C) || !defined(FEATURE_LCD_I2C_FDEBRABANDER) || defined(FEATURE_IDEASPARK_LCD)
       lcd.begin();
       lcd.home();
     #else
+      Wire.begin(21, 22, 100000); // SDA = GPIO 25, SCL = GPIO 26 for ESp32-WROOM32 Dev Module
       lcd.begin(LCD_COLUMNS, LCD_ROWS);
     #endif
     #ifdef FEATURE_LCD_ADAFRUIT_I2C
@@ -23952,20 +23965,20 @@ void main_loop(void * pvParameters )
 }
 
 // --------------------------------------------------------------------------------------------
-//void loop()
-extern "C" 
-{ 
-  void app_main() 
+void loop()
+//extern "C"  
+//{
+//  void app_main(void) 
   {
     BaseType_t xReturned;
     TaskHandle_t xHandle_MAIN = NULL;
     TaskHandle_t xHandle_BT = NULL;
 
-    initArduino();  // Initialize the Arduino environment
+    //initArduino();  // Initialize the Arduino environment
 
     // this is where the magic happens
     
-    setup(); // call setup for here when not in Arduino statup mode
+    //setup(); // call setup for here when not in Arduino statup mode
 
     #if defined (FEATURE_BT_KEYBOARD) && defined (USE_TASK)
         xReturned = xTaskCreate(
@@ -24002,4 +24015,5 @@ extern "C"
         //vTaskDelete( xHandle );
     //}
   }
-}
+
+//}
