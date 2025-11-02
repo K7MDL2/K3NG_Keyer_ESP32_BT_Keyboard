@@ -1,8 +1,8 @@
 | Support Targets | ![alt text][esp32] | ![alt text][Has_Precompiled_Firmware_Images] |
 | --- | --- | --- |
 
-| Boards Used | ![alt text][esp32-WROOM-32]|
-| --- | --- |
+| Boards Used | ![alt text][esp32-WROOM]| ![alt text][esp32-WROOM_with_st7789_Color_TFT_display]|
+| --- | --- | --- |
 
 | Dev Environment Used | ![alt text][ESP-IDF]|
 | --- | --- |
@@ -11,7 +11,8 @@
 | --- | --- | --- | --- |
 
 [esp32]: https://img.shields.io/badge/ESP32-green "ESP32"
-[esp32-WROOM-32]: https://img.shields.io/badge/ESP32--WROOM--32-orange "ESP32-WROOM-32"
+[esp32-WROOM]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
+[esp32-WROOM_with_st7789_Color_TFT_display]: https://img.shields.io/badge/esp32--WROOM--with--st7789--Color--TFT--display-orange "ESP32-WROOM-TFT"
 [ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5-cyan "ESP-IDF v5.5"
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 [K380]: https://img.shields.io/badge/K380-violet "K380"
@@ -30,7 +31,16 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
 
-***********************  Oct 9, 2025  K7MDL *****************************
+***********************  Nov 2, 2025  K7MDL *****************************
+
+Now have a 1.9" Color TFT display working.  Uses st7789 and is bright and sharp.  I have it configures for 5 lines at 17 characters per line.  
+
+<img width="1067" height="601" alt="image" src="https://github.com/user-attachments/assets/2773d19a-17c4-4a90-83e8-cc4be92991ab" />
+
+There is a status bar with BT connection, Pause, TX/TX, Keyer mode, grid square (hard coded for now) and WPM rate. 
+
+<img width="447" height="252" alt="image" src="https://github.com/user-attachments/assets/2ff16fb4-11a8-4e83-a45c-eaaef0f9fdd8" />
+
 Update Oct 30, 2025.  Now have a 4 lne by 20 column LCD working.  Display is connected on pins I2C pins 21 and 22 driving a Hitachi 44780 compatible display.  Uses the LCD class structure so can swap in different libraries for different devices.
 
 Update: Oct 29, 2025:  This is fully functional for the features I have defined.  Tested 3 BT keyboards.  The K380s is a BLE keyboard and curerntly does not reconnect so it required you to poair it each connection for now.  All keys for the equivalent PS2 keyboard are assigned.    See Wiki pages.
