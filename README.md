@@ -33,7 +33,7 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 ***********************  Nov 2, 2025  K7MDL *****************************
 
-Now have a 1.9" Color TFT display working.  Uses st7789 and is bright and sharp.  I have it configures for 5 lines at 17 characters per line.  
+Now have a 1.9" Color TFT display working.  Uses st7789 and is bright and sharp.  I have it configures for 5 lines at 17 characters per line.  I added Wiki page for details on how I configured this in the project.  I took a lot of trial and error. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Color-TFT-Display-Info
 
 <img width="1067" height="601" alt="image" src="https://github.com/user-attachments/assets/2773d19a-17c4-4a90-83e8-cc4be92991ab" />
 
