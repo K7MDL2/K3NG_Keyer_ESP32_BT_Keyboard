@@ -1,15 +1,21 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.16.0)
 
 #include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 file(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/main/.
                   ${CMAKE_SOURCE_DIR}/components/.
-                  ${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/LiquidCrystal_I2C.cpp
-                  ${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/LCD.cpp
-                  ${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/I2CIO.cpp)
+                  ${CMAKE_SOURCE_DIR}/components/TFT_lcd/src/TFT_lcd.cpp
+                  ${CMAKE_SOURCE_DIR}/components/TFT_lcd/src/I2CIO.cpp)
+                  #${CMAKE_SOURCE_DIR}/components/st7789/src/st7789.cpp
+                  #${CMAKE_SOURCE_DIR}/components/st7789/src/fontx.cpp)
+                  #${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/LiquidCrystal_I2C.cpp
+                  #${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/LCD.cpp
+                  #${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/I2CIO.cpp)
                   
-set(include_dirs ${CMAKE_SOURCE_DIR}/main/.
-                  ${CMAKE_SOURCE_DIR}/components/.
-                  ${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/include/.)
+set(include_dirs ${CMAKE_SOURCE_DIR}/main
+                  ${CMAKE_SOURCE_DIR}/components
+                  ${CMAKE_SOURCE_DIR}/components/TFT_lcd/src)
+                  #${CMAKE_SOURCE_DIR}/components/st7789/src)
+                  #${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/include/.)
 
 set(CMAKE_CXX_STANDARD "20")
 
@@ -24,9 +30,8 @@ set(SDKCONFIG ${CMAKE_SOURCE_DIR}/build/sdkconfig)
 idf_component_register(SRCS "main.cpp" ${app_sources}
 #idf_component_register(SRCS "main.cpp" "LiquidCrystal_I2C.cpp" I2CIO.cpp LCD.cpp ${app_sources}
     INCLUDE_DIRS "."  ${include_dirs}
-    #REQUIRES nvs_flash bt_keyboard bt st7789 spiffs TFT_lcd LiquidCrystal_PCF8574)
-    REQUIRES nvs_flash bt_keyboard bt LiquidCrystal_I2C arduino-esp32)
-
+    REQUIRES nvs_flash bt_keyboard bt TFT_eSPI LiquidCrystal_I2C arduino-esp32)
+    #REQUIRES nvs_flash bt_keyboard bt LiquidCrystal_I2C arduino-esp32)
 
 #  create precompiled files
 set(out_path "${CMAKE_SOURCE_DIR}/precompiled_images")

@@ -25,7 +25,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define tx_pause_pin  14  //10
   // 36 ADC input free - input only
 #elif defined (FEATURE_IDEASPARK_LCD)
-  #define bt_keyboard_LED  2  // indicates BT keyboard connection status
+  #define bt_keyboard_LED  3  // indicates BT keyboard connection status
   #define paddle_left     25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
   #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
   #define tx_key_line_1   16  // (high = key down/tx on)

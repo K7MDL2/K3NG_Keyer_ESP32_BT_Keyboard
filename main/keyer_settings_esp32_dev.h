@@ -46,8 +46,13 @@ GENERIC STM32F103C
 #define winkey_xoff_threshold 20         // the number of chars in the buffer when we begin sending XOFFs
 #define winkey_xon_threshold 10          // the number of chars in the buffer below which we deactivate XOFF
 #define default_memory_repeat_time 3000  // time in milliseconds
-#define LCD_COLUMNS 20
-#define LCD_ROWS 4
+#ifdef FEATURE_IDEASPARK_LCD
+  #define LCD_COLUMNS 17
+  #define LCD_ROWS 5
+#else
+  #define LCD_COLUMNS 20
+  #define LCD_ROWS 4
+#endif
 #define lcd_i2c_address_mathertel_PCF8574 0x27             // I2C address of display for FEATURE_LCD_MATHERTEL_PCF8574
 #define lcd_i2c_address_fdebrander_lcd 0x27                // I2C address of display for FEATURE_LCD_I2C_FDEBRABANDER
 #define lcd_i2c_address_ydv1_lcd 0x27                      // I2C address of display for FEATURE_LCD_YDv1
@@ -306,7 +311,7 @@ GENERIC STM32F103C
 #define sidetone_volume_low_limit 10
 #define sidetone_volume_high_limit 500
 
-#define custom_startup_field CODE_VERSION //"your custom text here"   // an example could be callsign and name, eg. "AB1XYZ Bob", (or "Worlds best operator" which requires a 20 column display), string length shouldo be no more than the number of columns on the display
+#define custom_startup_field CODE_VERSION "K7MDL" //"your custom text here"   // an example could be callsign and name, eg. "AB1XYZ Bob", (or "Worlds best operator" which requires a 20 column display), string length shouldo be no more than the number of columns on the display
 
 #define command_mode_acknowledgement_character 'E'
 

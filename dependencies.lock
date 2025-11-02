@@ -549,24 +549,6 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.20.1
-  m5stack/m5gfx:
-    component_hash: a44875eb6d6577bddcf1669ad5dec35e1afa425b7ca8e99af6b38505f37840e6
-    dependencies: []
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 0.2.9
-  m5stack/m5unified:
-    component_hash: 9ff51561f550bf6061597fef38bd023654f98502d79c68e286cca07fadb249fd
-    dependencies:
-    - name: m5stack/m5gfx
-      registry_url: https://components.espressif.com
-      require: private
-      version: ^0.2.8
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 0.2.7
   panigrah/esp32-idf-hd44780:
     component_hash: f5e8c25c335cd362d1ac9613138cdea7d98a4a6e272a1365b6f1117a27bfbefd
     dependencies:
@@ -586,9 +568,7 @@ direct_dependencies:
 - espressif/arduino-esp32
 - espressif/spi_bus
 - idf
-- m5stack/m5gfx
-- m5stack/m5unified
 - panigrah/esp32-idf-hd44780
-manifest_hash: 3228547f332d48dce0b30e93ea54608d97c05d15fe0b3aac292a1be762cea315
+manifest_hash: 130a55681818ce5c42ee0a2c5735798db3b7ab503036647a91055abb3afa51e0
 target: esp32
 version: 2.0.0
