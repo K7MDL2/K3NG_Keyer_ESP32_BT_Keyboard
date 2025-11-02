@@ -75,7 +75,7 @@ I plan to fork the orignal K2NG repo then merge my changes into it so that this 
 
 I plan to add more WIKI pages here to show how I set up the IDE Tool options.  The BT_keyboard files are included as a component so there shoudl be no need to find and download libraries and component unlike in Arduino.  When someone does a clean install and compile this can be verified.
 
-I provide precompiled firmware for your compatible CPU board using either of 2 tools so you do not have to compile the code, jsut upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmeware:
+I provide precompiled firmware using the 4x20 line classic LCD display for your compatible CPU board using either of 2 tools so you do not have to compile the code, jsut upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmware: 
 
 https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
