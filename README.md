@@ -30,7 +30,12 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
 
-***********************  Oct 9, 2025  K7MDL *****************************
+***********************  Nov 2, 2025  K7MDL *****************************
+
+Now have a 1.9" Color TFT display working.  Uses st7789 and is bright and sharp.  I have it configures for 5 lines at 17 characters per line.  There is a status bar with BT connection, Pause, TX/TX, Keyer mode, grid square (hard coded for now) and WPM rate. 
+
+
+
 Update Oct 30, 2025.  Now have a 4 lne by 20 column LCD working.  Display is connected on pins I2C pins 21 and 22 driving a Hitachi 44780 compatible display.  Uses the LCD class structure so can swap in different libraries for different devices.
 
 Update: Oct 29, 2025:  This is fully functional for the features I have defined.  Tested 3 BT keyboards.  The K380s is a BLE keyboard and curerntly does not reconnect so it required you to poair it each connection for now.  All keys for the equivalent PS2 keyboard are assigned.    See Wiki pages.
