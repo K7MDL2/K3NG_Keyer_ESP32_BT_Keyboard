@@ -3393,7 +3393,8 @@ void check_backlight() {
 #ifdef FEATURE_DISPLAY
  void lcd_clear() {
   #ifdef FEATURE_IDEASPARK_LCD
-    lcd.fillSmoothRoundRect(2, 29, 315, 139, 6, TFT_BLACK);
+    lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
   #else
     lcd.clear();
     lcd.noCursor();//sp5iou 20180328
@@ -3598,14 +3599,16 @@ void testlcd(char status, int x, int y) {
       switch (lcd_status) {
         case LCD_CLEAR:
             #ifdef FEATURE_IDEASPARK_LCD         
-              lcd.fillSmoothRoundRect(2, 29, 315, 139, 6, TFT_BLACK);
+              lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+              lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
             #else
               lcd_clear(); 
             #endif
             break;
         case LCD_SCROLL_MSG:   // this is called after a timed message clears the display and the buffer has to be redrawn onscreen.  Also at start of Pause
             #ifdef FEATURE_IDEASPARK_LCD
-              lcd.fillSmoothRoundRect(2, 29, 315, 139, 6, TFT_BLACK);    
+              lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+              lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
             #else
               lcd.clear();
             #endif       
@@ -3625,7 +3628,8 @@ void testlcd(char status, int x, int y) {
           if (lcd_scroll_buffer_dirty) { 
             if (lcd_scroll_flag) {
               #ifdef FEATURE_IDEASPARK_LCD
-                lcd.fillSmoothRoundRect(2, 29, 315, 139, 6, TFT_BLACK);
+                lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+                lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
               #else
                 lcd.clear();
               #endif 
@@ -3675,7 +3679,8 @@ void display_scroll_print_char(char charin){
   if (lcd_status != LCD_SCROLL_MSG) {
     lcd_status = LCD_SCROLL_MSG;
     #ifdef FEATURE_IDEASPARK_LCD
-      lcd.fillSmoothRoundRect(2, 29, 315, 139, 6, TFT_BLACK);
+      lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+      lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
     #else
       lcd.clear();
     #endif 
@@ -3762,15 +3767,17 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
     lcd_previous_status = lcd_status;
     lcd_status = LCD_TIMED_MESSAGE;
     #ifdef FEATURE_IDEASPARK_LCD
-      lcd.fillSmoothRoundRect(2, 29, 315, 139, 6, TFT_BLACK);
+    lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
     #else
       lcd.clear();
     #endif
   } else {
     clear_display_row(row_number);
   }
-  #ifdef FEATURE_IDEASPARK_LCD  
-    lcd.drawCentreString(lcd_print_string, lcd.width()/2, 35+(row_number*lcd.fontHeight()), 4); // 35+(row_number*lcd.fontHeight()), 2);
+  #ifdef FEATURE_IDEASPARK_LCD 
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
+    lcd.drawCentreString(lcd_print_string, lcd.width()/2, 35+(row_number*lcd.fontHeight()), 4);
   #else
     lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
     lcd.print(lcd_print_string);
@@ -3945,13 +3952,13 @@ void check_ps2_keyboard()
                                     pause_sending_buffer = 0;
                                     #ifdef FEATURE_DISPLAY
                                     #ifdef OPTION_MORE_DISPLAY_MSGS
-                                        lcd_center_print_timed("Resume", 0, default_display_msg_delay);
+                                        lcd_center_print_timed(" Resume ", 0, default_display_msg_delay);
                                     #endif
                                     #endif                 
                                 } else {
                                     pause_sending_buffer = 1;
                                     #ifdef FEATURE_DISPLAY
-                                    lcd_center_print_timed("Pause", 0, default_display_msg_delay);
+                                    lcd_center_print_timed("  Pause  ", 0, default_display_msg_delay);
                                     #endif            
                                 }
                                 break;  // pause
@@ -18549,11 +18556,11 @@ void pairing_handler(uint32_t pid) {
 void keyboard_lost_connection_handler() {
     debug_serial_port->println("====> Lost connection with keyboard <====");
     BT_Keyboard_Lost = true;
-    digitalWrite(bt_keyboard_LED, 0);
+    digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
 }
 void keyboard_connected_handler() {
    debug_serial_port->println("----> Connected to keyboard <----");
-   digitalWrite(bt_keyboard_LED, 1);
+   digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_active_state);
    BT_Keyboard_Lost = false;
 }
 
@@ -18562,6 +18569,7 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
   
   //esp_log_level_set(TAG, ESP_LOG_ERROR);
   pinMode(bt_keyboard_LED, OUTPUT);
+  digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
   // To test the Pairing code entry, uncomment the following line as pairing info is
         // kept in the nvs. Pairing will then be required on every boot.
   //ESP_ERROR_CHECK(nvs_flash_erase());
@@ -18714,6 +18722,7 @@ void initialize_display(){
       #endif                                                        // OPTION_PERSONALIZED_STARTUP_SCREEN
       if (LCD_ROWS > 3) lcd_center_print_timed("V: " + String(CODE_VERSION), 3, 4000);      // display the code version on the fourth line of the display
     }
+
 #if defined(FEATURE_WIFI) //SP5IOU 20220129
      delay(1000);
      char IPString[18];
@@ -18768,13 +18777,10 @@ void blink_ptt_dits_and_dahs(char const * cw_to_send){
         break;        
     }
 
-
     #ifdef OPTION_WATCHDOG_TIMER
       wdt_reset();
     #endif  //OPTION_WATCHDOG_TIMER
-
   }
-
 }
 #endif //defined(OPTION_BLINK_HI_ON_PTT) || (defined(OPTION_WINKEY_BLINK_PTT_ON_HOST_OPEN) && defined(FEATURE_WINKEY_EMULATION))
 
@@ -23905,7 +23911,7 @@ void initialize_st7789_lcd()
   void initialize_TFT_LCD_display(void) 
   {
         lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
-        lcd.setRotation(1);
+        lcd.setRotation(3);
         lcd.fillScreen(TFT_BLACK);
         lcd.setTextColor(TFT_YELLOW, TFT_BLACK);  
         lcd.setTextFont(2);
@@ -23951,7 +23957,6 @@ void setup()
           #endif
           initialize_bt_keyboard();
         #endif
-
     #endif
 
     initialize_pins();
@@ -23980,13 +23985,24 @@ void setup()
         wifiConnect(configuration.wifissid,configuration.wifipassword);
     #endif
     initialize_ethernet();
+
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
+    lcd.drawCentreString("                                             ", lcd.width()/2, lcd.height()/2, 2);
+    lcd.drawCentreString("Search Complete", lcd.width()/2, lcd.height()/2, 2);
+    vTaskDelay(portTICK_PERIOD_MS*1000);
+
     initialize_display();
+    
     #ifdef FEATURE_IDEASPARK_LCD
         lcd.drawSmoothRoundRect(0, 0, 8, 6, 319, 169, TFT_RED, TFT_BLACK);  // Redraw border due to startup messages size overwriting border
         lcd.drawFastHLine(0, 27, 319, TFT_RED);
         lcd.drawFastHLine(0, 28, 319, TFT_RED);
         lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
+        lcd.drawCentreString("                                    ", lcd.width()/2, lcd.height()/2, 2);
+        lcd.drawCentreString("Done", lcd.width()/2, lcd.height()/2, 2);
+        vTaskDelay(portTICK_PERIOD_MS*1000);
     #endif
+    
     initialize_udp();
     initialize_web_server();
     initialize_sd_card();  
