@@ -31,8 +31,8 @@
 // #define FEATURE_LCD1602_N07DH      // http://linksprite.com/wiki/index.php5?title=16_X_2_LCD_Keypad_Shield_for_Arduino
 //#define FEATURE_LCD_SAINSMART_I2C
 
-#define FEATURE_LCD_LIQUIDCRYSTAL_I2C   // for K7MDL version on ESP32-WROOM32 usng esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
-//#define FEATURE_IDEASPARK_LCD             // K7MDL version on ESP32-WROOM with onboard 320x170 color LCD graphics display, uses SPI bus
+//#define FEATURE_LCD_LIQUIDCRYSTAL_I2C   // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+#define FEATURE_IDEASPARK_LCD             // K7MDL version on ESP32-WROOM with onboard 320x170 color LCD graphics display, uses SPI bus
 
 // #define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
 //#define FEATURE_LCD_MATHERTEL_PCF8574 // https://github.com/mathertel/LiquidCrystal_PCF8574

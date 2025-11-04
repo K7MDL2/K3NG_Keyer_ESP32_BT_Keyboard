@@ -13,8 +13,8 @@ GENERIC STM32F103C
 #define hz_high_beep 1500                // frequency in hertz of high beep
 #define hz_low_beep 400                  // frequency in hertz of low beep
 #define initial_dah_to_dit_ratio 300     // 300 = 3 / normal 3:1 ratio
-#define initial_ptt_lead_time_tx1 0         // PTT lead time in mS
-#define initial_ptt_tail_time_tx1 0 //10         // PTT tail time in mS //SP5IOU - better to change it by CLI
+#define initial_ptt_lead_time_tx1 30         // PTT lead time in mS
+#define initial_ptt_tail_time_tx1 30 //10         // PTT tail time in mS //SP5IOU - better to change it by CLI
 #define initial_ptt_lead_time_tx2 0         // PTT lead time in mS
 #define initial_ptt_tail_time_tx2 0 //10         // PTT tail time in mS
 #define initial_ptt_lead_time_tx3 0         // PTT lead time in mS
@@ -285,12 +285,14 @@ GENERIC STM32F103C
 
 #endif
 
+#define bt_keyboard_LED_pin_active_state LOW
+#define bt_keyboard_LED_pin_inactive_state HIGH
 #define sequencer_pins_active_state HIGH
 #define sequencer_pins_inactive_state LOW
-#define ptt_line_active_state HIGH
-#define ptt_line_inactive_state LOW
-#define tx_key_line_active_state HIGH
-#define tx_key_line_inactive_state LOW
+#define ptt_line_active_state LOW
+#define ptt_line_inactive_state HIGH
+#define tx_key_line_active_state LOW
+#define tx_key_line_inactive_state HIGH
 #define ptt_input_pin_active_state LOW
 #define ptt_input_pin_inactive_state HIGH
 #define tx_inhibit_pin_active_state LOW
