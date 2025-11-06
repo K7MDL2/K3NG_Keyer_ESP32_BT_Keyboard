@@ -47,7 +47,7 @@ GENERIC STM32F103C
 #define winkey_xon_threshold 10          // the number of chars in the buffer below which we deactivate XOFF
 #define default_memory_repeat_time 3000  // time in milliseconds
 #ifdef FEATURE_IDEASPARK_LCD
-  #define LCD_COLUMNS 17
+  #define LCD_COLUMNS 20
   #define LCD_ROWS 5
 #else
   #define LCD_COLUMNS 20
