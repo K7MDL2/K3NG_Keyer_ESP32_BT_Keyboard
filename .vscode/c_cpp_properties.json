@@ -12,7 +12,9 @@
                 "${workspaceFolder}",
                 "${workspaceFolder}/managed_components/espressif__arduino-esp32/cores/esp32/**",
                 "${workspaceFolder}/components/**",
-                "D:/esp-idf/v5.5/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertos"
+                "D:/esp-idf/v5.5/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertosents/Arduino",
+                "D:/Documents/Arduino/libraries",
+                "${workspaceFolder}/managed_components/espressif__arduino-esp32/libraries/EEPROM/src"
             ],
             "browse": {
                 "path": [

@@ -1396,14 +1396,13 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #elif defined(ARDUINO_SAMD_VARIANT_COMPLIANCE)
   #include <FlashAsEEPROM.h> 
 #elif defined(HARDWARE_ESP32_DEV)
-  #include <Wire.h>
   #include "EEPROM.h"
   #include "Preferences.h"
   //#include <Tone32.h> // SP5IOU 2021/08/02 library Tone32h assure ESP32 compatibility with avr tone / no tone built in commands. 
                       // Download from here https://github.com/lbernstone/Tone32 - do not use, now included in Arduino library
   #include "keyer_esp32_dev.h"
   #include <esp_task_wdt.h>
-  #define ARDUINO_ARCH_ESP32
+  //#define ARDUINO_ARCH_ESP32
 #else // end HARDWARE_ESP32_DEV
   #include <avr/pgmspace.h>
   #include <avr/wdt.h>
@@ -1581,7 +1580,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_LCD_YDv1)
-  #include "\LiquidCrystal_I2C.h"
+  #include "LiquidCrystal_I2C.h"
 #endif
 
 #if defined(FEATURE_LCD_ADAFRUIT_I2C)
@@ -1614,11 +1613,22 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "LiquidCrystal_I2C.h"
 #endif
 
-#if defined(FEATURE_IDEASPARK_LCD)  // 1.9" Color TFT st7789 graphics display on ESP32-WROOM CPU
-#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
-#include <SPI.h>
-#define TFT_GREY 0x5AEB // New colour
-TFT_eSPI lcd = TFT_eSPI();  // Invoke library
+#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+  #define CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION
+  #include "SPI.h"
+  #include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
+  //#include "Free_Fonts.h" // Include the header file attached to this sketch  
+  #define GFXFF 1
+  #define FM9 &FreeMono9pt7b
+  #define FMB12 &FreeMonoBold12pt7b
+  #define TFT_FONT_SMALL FM9
+  #define TFT_FONT_MEDIUM FMB12
+  #define COLUMN_WIDTH 15
+  #define MY_DATUM ML_DATUM
+  #define SCROLL_TOP_LINE 52
+  #define SCROLL_LEFT_SIDE 10
+  #define TFT_GREY 0x5AEB // New colour
+  TFT_eSPI lcd = TFT_eSPI();  // Invoke library
 #endif
 
 #if defined(FEATURE_LCD_HD44780)
@@ -3390,9 +3400,10 @@ void check_backlight() {
 
 
 //-------------------------------------------------------------------------------------------------------
+// claer the scrollable text area of the display
 #ifdef FEATURE_DISPLAY
  void lcd_clear() {
-  #ifdef FEATURE_IDEASPARK_LCD
+  #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
     lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
     lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
   #else
@@ -3403,12 +3414,13 @@ void check_backlight() {
 }
 #endif
 
-#ifdef FEATURE_IDEASPARK_LCD
+#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
 void update_icons(void) {
     
     static char GridSq[12] = "CN87xs\0";
     static char last_GridSq[12] = "\0";
     
+    lcd.setTextDatum(TL_DATUM);
     if (strncmp(GridSq, last_GridSq, 8))  // grid changed. update display
     {
       lcd.setTextColor(TFT_DARKCYAN, TFT_BLACK);
@@ -3497,31 +3509,35 @@ void update_icons(void) {
       last_pause_sending_buffer = pause_sending_buffer;
     }
 
+    
+    #if defined (FEATURE_BT_KEYBOARD) 
     static bool last_BT_Connected = 0;
-
-    if (last_BT_Connected != bt_keyboard.is_connected())
-    {
-      if (bt_keyboard.is_connected()) {
-          lcd.setTextColor(TFT_BLUE, TFT_BLACK, true);
-          lcd.drawChar('B', 300, 8, 2); // BT connected status
-      } else {
-          lcd.setTextColor(TFT_BLACK, TFT_BLACK, true);
-          lcd.drawChar('B', 300, 8, 2);
+      if (last_BT_Connected != bt_keyboard.is_connected())
+      {
+        if (bt_keyboard.is_connected()) {
+            lcd.setTextColor(TFT_BLUE, TFT_BLACK, true);
+            lcd.drawChar('B', 300, 8, 2); // BT connected status
+        } else {
+            lcd.setTextColor(TFT_BLACK, TFT_BLACK, true);
+            lcd.drawChar('B', 300, 8, 2);
+        }
+        last_BT_Connected = bt_keyboard.is_connected();
       }
-      last_BT_Connected = bt_keyboard.is_connected();
-    }
+    #endif
     
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);   // set back to normal size and color
-    lcd.setTextFont(4);
+    //lcd.setTextFont(4);
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
 }
 #endif
 
-#ifdef FEATURE_IDEASPARK_LCD
+#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
 void testlcd(char status, int x, int y) {
-  int y1=35+(y*lcd.fontHeight());
-  int x1=6+(x*18);
-  lcd.setTextFont(4);
-  debug_serial_port->printf("-char [%c] x=%d y=%d x1=%d y1=%d value=%c --\n", status, x, y, x1, y1, (char)lcd_scroll_buffer[y].charAt(x));
+  int y1=SCROLL_TOP_LINE+(y*lcd.fontHeight());
+  int x1=SCROLL_LEFT_SIDE+(x*COLUMN_WIDTH);
+  //lcd.setTextFont(4);
+  lcd.setFreeFont(TFT_FONT_MEDIUM);
+  //debug_serial_port->printf("-char [%c] x=%d y=%d x1=%d y1=%d value=%c --\n", status, x, y, x1, y1, (char)lcd_scroll_buffer[y].charAt(x));
   lcd.drawChar(status, x1, y1);
 }
 #endif
@@ -3544,13 +3560,13 @@ void testlcd(char status, int x, int y) {
 
   static byte screen_refresh_status = SCREEN_REFRESH_IDLE;
   
-  #ifdef FEATURE_IDEASPARK_LCD
+  #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
     update_icons();
   #endif
 
-  if (screen_refresh_status == SCREEN_REFRESH_INIT){   // active at begging of a even llike pause
-    #ifdef FEATURE_IDEASPARK_LCD
-      lcd.setCursor(6, 35);
+  if (screen_refresh_status == SCREEN_REFRESH_INIT) {   // active at begging of a even llike pause
+    #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+      lcd.setCursor(SCROLL_LEFT_SIDE, SCROLL_TOP_LINE);
     #else
       lcd.setCursor(0,0);
     #endif
@@ -3560,7 +3576,7 @@ void testlcd(char status, int x, int y) {
     return;
   }
 
-  if (screen_refresh_status == SCREEN_REFRESH_IN_PROGRESS){
+  if (screen_refresh_status == SCREEN_REFRESH_IN_PROGRESS) {
     if (x > lcd_scroll_buffer[y].length()){  // used to draw buffer on screen when pause type event started
       y++;  // move to new row
       if (y >= LCD_ROWS){   // ran out of screen rows, trigger scroll up
@@ -3569,8 +3585,8 @@ void testlcd(char status, int x, int y) {
         return;
       } else {   // start a new row
         x = 0;  
-        #ifdef FEATURE_IDEASPARK_LCD
-          lcd.setCursor(6, 35+(y*lcd.fontHeight()));
+        #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+          lcd.setCursor(SCROLL_LEFT_SIDE, SCROLL_TOP_LINE+(y*lcd.fontHeight()));
         #else
           lcd.setCursor(0,y);
         #endif         
@@ -3580,10 +3596,11 @@ void testlcd(char status, int x, int y) {
         #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
           lcd.backlight();
         #endif  // FEATURE_LCD_BACKLIGHT_AUTO_DIM
-        #ifdef FEATURE_IDEASPARK_LCD-UNUSED
-          int y1=35+(y*lcd.fontHeight());
-          int x1=6+(x*18);
-          lcd.setTextFont(4);
+        #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+          int y1=SCROLL_TOP_LINE+(y*lcd.fontHeight());
+          int x1=SCROLL_LEFT_SIDE+(x*COLUMN_WIDTH);
+          //lcd.setTextFont(4);
+          lcd.setFreeFont(TFT_FONT_MEDIUM);
           lcd.drawChar((char)lcd_scroll_buffer[y].charAt(x), x1, y1);  // use char in scroll buffer and place at x1, y1 on graphics screen
         #else
           lcd.print(lcd_scroll_buffer[y].charAt(x));          
@@ -3593,20 +3610,20 @@ void testlcd(char status, int x, int y) {
     }
   }
 
-  if (screen_refresh_status == SCREEN_REFRESH_IDLE){ 
+  if (screen_refresh_status == SCREEN_REFRESH_IDLE) { 
     if (lcd_status == LCD_REVERT) {
       lcd_status = lcd_previous_status;
       switch (lcd_status) {
         case LCD_CLEAR:
-            #ifdef FEATURE_IDEASPARK_LCD         
+            #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
               lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
               lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
             #else
-              lcd_clear(); 
+              lcd.clear(); 
             #endif
             break;
         case LCD_SCROLL_MSG:   // this is called after a timed message clears the display and the buffer has to be redrawn onscreen.  Also at start of Pause
-            #ifdef FEATURE_IDEASPARK_LCD
+            #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
               lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
               lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
             #else
@@ -3614,7 +3631,7 @@ void testlcd(char status, int x, int y) {
             #endif       
             screen_refresh_status = SCREEN_REFRESH_INIT;
             lcd_scroll_flag = 0; 
-            //lcd_scroll_buffer_dirty = 0;         
+            lcd_scroll_buffer_dirty = 0;         
             break;
       }
     } else {
@@ -3627,7 +3644,7 @@ void testlcd(char status, int x, int y) {
         case LCD_SCROLL_MSG:
           if (lcd_scroll_buffer_dirty) { 
             if (lcd_scroll_flag) {
-              #ifdef FEATURE_IDEASPARK_LCD
+              #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
                 lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
                 lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
               #else
@@ -3635,7 +3652,7 @@ void testlcd(char status, int x, int y) {
               #endif 
               lcd_scroll_flag = 0;
             }
-            //lcd_scroll_buffer_dirty = 0;
+            lcd_scroll_buffer_dirty = 0;
             screen_refresh_status = SCREEN_REFRESH_INIT;
           }
         break;
@@ -3658,10 +3675,10 @@ void display_scroll_print_char(char charin){
   int y1 = 0;
 
   #ifdef DEBUG_DISPLAY_SCROLL_PRINT_CHAR
-  debug_serial_port->print(F("display_scroll_print_char: "));
-  debug_serial_port->write(charin);
-  debug_serial_port->print(" ");
-  debug_serial_port->println(charin);
+    debug_serial_port->print(F("display_scroll_print_char: "));
+    debug_serial_port->write(charin);
+    debug_serial_port->print(" ");
+    debug_serial_port->println(charin);
   #endif //DEBUG_DISPLAY_SCROLL_PRINT_CHAR
 
   #ifdef OPTION_DISPLAY_NON_ENGLISH_EXTENSIONS
@@ -3675,10 +3692,10 @@ void display_scroll_print_char(char charin){
     case 209: charin = 7;break; // N-tilde (EA) 
   }
   #endif //OPTION_DISPLAY_NON_ENGLISH_EXTENSIONS
-
+  
   if (lcd_status != LCD_SCROLL_MSG) {
     lcd_status = LCD_SCROLL_MSG;
-    #ifdef FEATURE_IDEASPARK_LCD
+    #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
       lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
       lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
     #else
@@ -3739,13 +3756,13 @@ void clear_display_row(byte row_number)
   #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
     lcd.backlight();
   #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
-  #ifndef FEATURE_IDEASPARK_LCD  
+  #if !defined (FEATURE_IDEASPARK_LCD) && !defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
     lcd.noCursor();//sp5iou 20180328
   #endif
   for (byte x = 0; x < LCD_COLUMNS; x++) {
-    #ifdef FEATURE_IDEASPARK_LCD  
+    #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-      lcd.drawChar(' ', 6+(x*18), 35+(row_number*lcd.fontHeight()));
+      lcd.drawChar(' ', SCROLL_LEFT_SIDE+(x*COLUMN_WIDTH), SCROLL_TOP_LINE+(row_number*lcd.fontHeight()));
       lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     #else
       lcd.setCursor(x,row_number);
@@ -3766,18 +3783,18 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
   if (lcd_status != LCD_TIMED_MESSAGE) {
     lcd_previous_status = lcd_status;
     lcd_status = LCD_TIMED_MESSAGE;
-    #ifdef FEATURE_IDEASPARK_LCD
-    lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
+    #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+      lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+      lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
     #else
       lcd.clear();
     #endif
   } else {
     clear_display_row(row_number);
   }
-  #ifdef FEATURE_IDEASPARK_LCD 
+  #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
     lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
-    lcd.drawCentreString(lcd_print_string, lcd.width()/2, 35+(row_number*lcd.fontHeight()), 4);
+    lcd.drawCentreString(lcd_print_string, lcd.width()/2, SCROLL_TOP_LINE+(row_number*lcd.fontHeight()), 4);
   #else
     lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
     lcd.print(lcd_print_string);
@@ -4028,9 +4045,13 @@ void check_ps2_keyboard()
                                     play_memory_prempt = 1;   // should stop playing memory
                                     repeat_memory = 255;
                                 #endif
-                                #ifdef FEATURE_DISPLAY
+
+                                #ifdef FEATURE_DISPLAY   // clear out the old text on the scrollable portion of display
                                     lcd_center_print_timed("Abort", 0, default_display_msg_delay);
-                                #endif          
+                                    for (uint16_t i = 0; i < (LCD_ROWS); i++) {
+                                        lcd_scroll_buffer[i].clear();
+                                }         
+                                #endif
                                 break;
 
                                 #ifdef FEATURE_MEMORIES
@@ -5163,7 +5184,7 @@ void ps2_keyboard_program_memory(byte memory_number)
       EEPROM.commit();
     #endif
     #ifdef FEATURE_DISPLAY
-      lcd_center_print_timed("Done", LCD_ROWS-1, default_display_msg_delay);
+      lcd_center_print_timed("Done", LCD_ROWS-2, default_display_msg_delay);
     #else    
       beep();
     #endif
@@ -6533,8 +6554,6 @@ void check_dit_paddle()
 void check_dah_paddle()
 {
 
-  
-
   byte pin_value = 0;
   byte dah_paddle;
 
@@ -6579,8 +6598,6 @@ void check_dah_paddle()
     clear_send_buffer();
     manual_ptt_invoke = 0;
   }
-
-
 
 }
 
@@ -6881,9 +6898,6 @@ void tx_and_sidetone_key (int state)
       compression_detection_key_down_time = 0;
       compression_detection_key_up_time = 0;
     }
-
-
-
 
 
   #endif //defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
@@ -17536,7 +17550,7 @@ void program_memory(int memory_number)
   #endif
 
   #ifdef FEATURE_DISPLAY
-    lcd_center_print_timed("Done", LCD_ROWS-1, default_display_msg_delay);
+    lcd_center_print_timed("Done", LCD_ROWS-2, default_display_msg_delay);
   #endif
 
   play_memory(memory_number);
@@ -18556,46 +18570,57 @@ void pairing_handler(uint32_t pid) {
 void keyboard_lost_connection_handler() {
     debug_serial_port->println("====> Lost connection with keyboard <====");
     BT_Keyboard_Lost = true;
-    digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
+    if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
 }
 void keyboard_connected_handler() {
    debug_serial_port->println("----> Connected to keyboard <----");
-   digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_active_state);
+   if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_active_state);
    BT_Keyboard_Lost = false;
 }
+#endif
+
 
 void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for BLE and BT Classic
   esp_err_t ret;
   
-  //esp_log_level_set(TAG, ESP_LOG_ERROR);
-  pinMode(bt_keyboard_LED, OUTPUT);
-  digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
-  // To test the Pairing code entry, uncomment the following line as pairing info is
-        // kept in the nvs. Pairing will then be required on every boot.
-  //ESP_ERROR_CHECK(nvs_flash_erase());
-  
-  ret = nvs_flash_init();
-  if ((ret == ESP_ERR_NVS_NO_FREE_PAGES) || (ret == ESP_ERR_NVS_NEW_VERSION_FOUND)) {
-    ESP_ERROR_CHECK(nvs_flash_erase());
+  #if !defined(FEATURE_BT_KEYBOARD)
+    return;
+  #else
+    #ifdef M5STACK_CORE2
+      initialize_m5stack_core2();
+    #endif
+
+    //esp_log_level_set(TAG, ESP_LOG_ERROR);
+    pinMode(bt_keyboard_LED, OUTPUT);
+    digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
+    // To test the Pairing code entry, uncomment the following line as pairing info is
+          // kept in the nvs. Pairing will then be required on every boot.
+    //ESP_ERROR_CHECK(nvs_flash_erase());
+    
     ret = nvs_flash_init();
-  }
-  ESP_ERROR_CHECK(ret);
+    if ((ret == ESP_ERR_NVS_NO_FREE_PAGES) || (ret == ESP_ERR_NVS_NEW_VERSION_FOUND)) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
 
-  debug_serial_port->println("BT and BLE device Scan Setup");
+    debug_serial_port->println("BT and BLE device Scan Setup");
 
-  btStarted();  // workarond to avoid bt_controller init failure #259
+    btStarted();  // workarond to avoid bt_controller init failure #259
 
-  //btStart();
-  //btStartMode(BT_MODE_CLASSIC_BT);
+    //btStart();
+    //btStartMode(BT_MODE_CLASSIC_BT);
 
-  if (bt_keyboard.setup(pairing_handler, keyboard_connected_handler,
-                        keyboard_lost_connection_handler)) { // Must be called once
-      bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
-                                // Default duration is 5 seconds
-  }
-  queueflush();
+    if (bt_keyboard.setup(pairing_handler, keyboard_connected_handler,
+                          keyboard_lost_connection_handler)) { // Must be called once
+        bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
+                                  // Default duration is 5 seconds
+    }
+    queueflush();
+  #endif
 }
 
+#if defined(FEATURE_BT_KEYBOARD)
 ////////////////////////////////////////////////////////////////////////
 //
 // Here is a queue to store the characters that I've typed.
@@ -18660,13 +18685,15 @@ void initialize_display(){
 
   #ifdef FEATURE_DISPLAY    
     #ifdef HARDWARE_ESP32_DEV
-      Wire.begin(21, 22, 100000); // SDA = GPIO 25, SCL = GPIO 26 for ESp32-WROOM32 Dev Module
+      #ifdef FEATURE_LCD_LIQUIDCRYSTAL_I2C
+        Wire.begin(21, 22, 100000); // SDA = GPIO 25, SCL = GPIO 26 for ESp32-WROOM32 Dev Module
+      #endif
     #endif
 
     #if defined (FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_LCD_I2C_FDEBRABANDER)
       lcd.begin();
       lcd.home();
-    #elif !defined (FEATURE_IDEASPARK_LCD)
+    #elif !defined (FEATURE_IDEASPARK_LCD) && !defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
       lcd.begin(LCD_COLUMNS, LCD_ROWS);
     #endif
 
@@ -23212,7 +23239,7 @@ void update_time(){
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
 
-#define USE_TASK
+ #define USE_TASK
 
     #ifndef USE_TASK
      void check_bt_keyboard(void) {
@@ -23238,9 +23265,9 @@ void update_time(){
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
                 //uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
 
-                //debug_serial_port->print("0x");
-                //debug_serial_port->print(ch,HEX); // << std::flush;
-                //debug_serial_port->print(',');
+                debug_serial_port->print("0x");
+                debug_serial_port->print(ch,HEX); // << std::flush;
+                debug_serial_port->print(',');
 
                 if (((ch >= ' ') && (ch < 255)) || ch == '\n' || ch == '\r') 
                 {
@@ -23271,14 +23298,21 @@ void update_time(){
                 uint8_t modifier = 0;
                 TickType_t    repeat_period_;
                 BTKeyboard::KeyInfo inf;
+                vTaskDelay(10);
                 #ifdef USE_TASK
                   bt_keyboard.wait_for_low_event(inf); //, 10);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                 #else
-                  bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  bt_keyboard.wait_for_low_event(inf,10);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  //bt_keyboard.get_ascii_char();
                 #endif
-                //debug_serial_port->print(',size=L');
-                //debug_serial_port->print(inf.size);
-                //debug_serial_port->print(',');
+
+                #ifdef DEBUG_BT_KEYBOARD_A
+                    debug_serial_port->print(',');
+                    debug_serial_port->print(inf.size);
+                    debug_serial_port->print(',');
+                    debug_serial_port->print(inf.keys[1]);
+                    debug_serial_port->print(',');
+                #endif
                 
                 #ifdef DEBUG_BT_KEYBOARD_A
                 for (int n = 0; n < inf.size; n++) {
@@ -23289,7 +23323,7 @@ void update_time(){
                 #endif
                 
                 ch = 0;
-                if (inf.size > 0)   //(inf.size == 8 || inf.size == 7 || inf.size == 4 || inf.size == 3) 
+                if (inf.size > 0 && inf.size < 9)   //(inf.size == 8 || inf.size == 7 || inf.size == 4 || inf.size == 3) 
                 {
                     modifier = inf.keys[0];  // capture shift, alt, ctrl state
                     if (inf.size == 8) {
@@ -23390,10 +23424,10 @@ void update_time(){
                                 // x=0x00 is Normal key
                                 // x=0x02 is Left Shift+key
                                 // x=0x20 is Right Shift+key
-                                // x=0x01 is Ctl+key
-                                // x=0x10 is Ctl+key
-                                // x=0x04 is Alt+key
-                                // x=0x40 is Alt+key
+                                // x=0x01 is Left Ctl+key
+                                // x=0x10 is Right Ctl+key
+                                // x=0x04 is Left Alt+key
+                                // x=0x40 is Right Alt+key
                                 
                                 if (modifier & bt_keyboard.CTRL_MASK) // bt_keyboard.SHIFT_MASK) // left or right side key pressed
                                 {                                     
@@ -23410,6 +23444,9 @@ void update_time(){
                                     switch (ch) 
                                     {
                                         case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
+                                        case 0x06 : ch = PS2_ESC; 
+                                                    queueflush();
+                                                    break;  // ALT-C, clear the LCD scrollable area
                                     }
                                     //debug_serial_port->print("ALT key = 0x");
                                     //debug_serial_port->println(ch, HEX);
@@ -23576,6 +23613,7 @@ void update_time(){
                 keyDN = false;
                 ch = 0;
             #endif
+         vTaskDelay(100);   
          #ifdef USE_TASK
         } // for ever
       #endif
@@ -23907,15 +23945,17 @@ void initialize_st7789_lcd()
 }
 #endif
 
-#ifdef FEATURE_IDEASPARK_LCD
+#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
   void initialize_TFT_LCD_display(void) 
   {
         lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
         lcd.setRotation(3);
+        //lcd.invertDisplay(1);
         lcd.fillScreen(TFT_BLACK);
         lcd.setTextColor(TFT_YELLOW, TFT_BLACK);  
         lcd.setTextFont(2);
-        lcd.drawString("K7MDL Keyer", 6, 8);  
+        //lcd.setFreeFont(TFT_FONT_SMALL);     // Select the orginal small TomThumb font
+        lcd.drawString("K7MDL Keyer", SCROLL_LEFT_SIDE, 8);  
         lcd.drawSmoothRoundRect(0, 0, 8, 6, 319, 169, TFT_RED, TFT_BLACK);
         lcd.drawFastHLine(0, 27, 319, TFT_RED);
         lcd.drawFastHLine(0, 28, 319, TFT_RED);
@@ -23937,28 +23977,22 @@ void initialize_st7789_lcd()
         //lcd.print("Float = "); lcd.println(fnumber);           // Print floating point number
         //lcd.print("Binary = "); lcd.println((int)fnumber, BIN); // Print as integer value in binary
         //lcd.print("Hexadecimal = "); lcd.println((int)fnumber, HEX); // Print as integer number in Hexadecimal
-        lcd.setCursor(2, 29, 4);
+        lcd.setCursor(SCROLL_LEFT_SIDE,SCROLL_TOP_LINE);
         lcd.setTextColor(TFT_WHITE,TFT_BLACK);  
         lcd.setTextFont(4);
+        lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
+        //lcd.setFreeFont(TFT_FONT_MEDIUM);      
   }
 #endif
 
 void setup()
 {
+    initialize_serial_ports();        // Goody - this is available for testing startup issues
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU fix for nothing on serial port for ESP32_dev
-        initialize_serial_ports();        // Goody - this is available for testing startup issues
-        #ifdef FEATURE_IDEASPARK_LCD
+        #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
           initialize_TFT_LCD_display();
         #endif
-
-        #if defined(FEATURE_BT_KEYBOARD)
-          #ifdef M5STACK_CORE2
-            initialize_m5stack_core2();
-          #endif
-          initialize_bt_keyboard();
-        #endif
     #endif
-
     initialize_pins();
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues
@@ -23981,26 +24015,30 @@ void setup()
     initialize_ps2_keyboard();
     initialize_usb();
     initialize_cw_keyboard();
+    initialize_bt_keyboard();
     #if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
         wifiConnect(configuration.wifissid,configuration.wifipassword);
     #endif
     initialize_ethernet();
 
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
-    lcd.drawCentreString("                                             ", lcd.width()/2, lcd.height()/2, 2);
-    lcd.drawCentreString("Search Complete", lcd.width()/2, lcd.height()/2, 2);
-    vTaskDelay(portTICK_PERIOD_MS*1000);
-
+    #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+      lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
+      lcd.drawCentreString("                                             ", lcd.width()/2, lcd.height()/2, 2);
+      lcd.drawCentreString("Search Complete", lcd.width()/2, lcd.height()/2, 2);
+      vTaskDelay(portTICK_PERIOD_MS*1000);
+    #endif
+    
     initialize_display();
     
-    #ifdef FEATURE_IDEASPARK_LCD
+    #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
         lcd.drawSmoothRoundRect(0, 0, 8, 6, 319, 169, TFT_RED, TFT_BLACK);  // Redraw border due to startup messages size overwriting border
         lcd.drawFastHLine(0, 27, 319, TFT_RED);
         lcd.drawFastHLine(0, 28, 319, TFT_RED);
+        lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
         lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
-        lcd.drawCentreString("                                    ", lcd.width()/2, lcd.height()/2, 2);
+        lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
         lcd.drawCentreString("Done", lcd.width()/2, lcd.height()/2, 2);
-        vTaskDelay(portTICK_PERIOD_MS*1000);
+        //vTaskDelay(portTICK_PERIOD_MS*1000);
     #endif
     
     initialize_udp();
@@ -24219,7 +24257,7 @@ void loop()
         xReturned = xTaskCreate(
                     check_bt_keyboard,       /* Function that implements the task. */
                     "Check_BT_Keyboard",          /* Text name for the task. */
-                    4000,      /* Stack size in words, not bytes. */
+                    8000,      /* Stack size in words, not bytes. */
                     ( void * ) 1,    /* Parameter passed into the task. */
                     tskIDLE_PRIORITY,/* Priority at which the task is created. */
                     &xHandle_BT );
@@ -24229,7 +24267,7 @@ void loop()
     xReturned = xTaskCreate(
                 main_loop,       /* Function that implements the task. */
                 "Main_Loop",          /* Text name for the task. */
-                10000,      /* Stack size in words, not bytes. */
+                12000,      /* Stack size in words, not bytes. */
                 ( void * ) 1,    /* Parameter passed into the task. */
                 tskIDLE_PRIORITY,/* Priority at which the task is created. */
                 &xHandle_MAIN );
@@ -24238,7 +24276,9 @@ void loop()
     {
       vTaskDelay(10);
       #ifndef USE_TASK
-        check_bt_keyboard();
+        #if defined (FEATURE_BT_KEYBOARD) 
+          check_bt_keyboard();
+        #endif
         main_loop();
       #endif
       //esp_task_wdt_reset();

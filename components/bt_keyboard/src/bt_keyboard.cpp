@@ -363,8 +363,10 @@ bool BTKeyboard::setup(PairingHandler        *pairing_handler,
   esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 
   bt_cfg.mode                       = mode;
-  bt_cfg.bt_max_acl_conn            = 3;
+  bt_cfg.bt_max_acl_conn            = 7;
   bt_cfg.bt_max_sync_conn           = 3;
+  bt_cfg.ble_max_conn               = 3;
+  bt_cfg.bt_legacy_auth_vs_evt      = false;
 
   if ((ret = esp_bt_controller_init(&bt_cfg))) {
     ESP_LOGE(TAG, "esp_bt_controller_init failed: %d", ret);
