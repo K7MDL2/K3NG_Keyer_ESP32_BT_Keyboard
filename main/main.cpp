@@ -1849,6 +1849,9 @@ void check_ptt_tail();
 int uppercase (int charbytein);
 void service_send_buffer(byte no_print);
 int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit);
+bool BT_Keyboard_Lost = false;
+bool Keyboard_Disconnected_signal = false;
+bool Keyboard_Connected_signal = false;
 #endif
 
 byte sending_mode = UNDEFINED_SENDING;
@@ -3641,6 +3644,9 @@ void testlcd(char status, int x, int y) {
           if (millis() > lcd_timed_message_clear_time) {
             lcd_status = LCD_REVERT;
           }
+          else {
+            vTaskDelay(10);
+          }
         case LCD_SCROLL_MSG:
           if (lcd_scroll_buffer_dirty) { 
             if (lcd_scroll_flag) {
@@ -3784,6 +3790,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
     lcd_previous_status = lcd_status;
     lcd_status = LCD_TIMED_MESSAGE;
     #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
       lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
     #else
@@ -3799,6 +3806,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
     lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
     lcd.print(lcd_print_string);
   #endif
+  vTaskDelay(1 / portTICK_PERIOD_MS);
   lcd_timed_message_clear_time = millis() + duration;
 }
 #endif
@@ -18559,26 +18567,30 @@ void ps2int_write() {
 
 //--------------------------------------------------------------------- 
 #ifdef FEATURE_BT_KEYBOARD
-static bool BT_Keyboard_Lost = false;
-//static const char *TAG = "BT_KEYER";
 
 void pairing_handler(uint32_t pid) {
     debug_serial_port->print("Please enter the following pairing code followed with ENTER on your keyboard: ");
-    debug_serial_port->println(pid);
+    debug_serial_port->println(pid);    
+    vTaskDelay(1 / portTICK_PERIOD_MS);
+    char pass[21];
+    sprintf(pass, "Pairing code %lu", pid);
+    lcd_center_print_timed(pass, 1, 10000);
 }
 
 void keyboard_lost_connection_handler() {
     debug_serial_port->println("====> Lost connection with keyboard <====");
     BT_Keyboard_Lost = true;
     if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
+    Keyboard_Disconnected_signal = true;
 }
+
 void keyboard_connected_handler() {
-   debug_serial_port->println("----> Connected to keyboard <----");
-   if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_active_state);
-   BT_Keyboard_Lost = false;
+    debug_serial_port->println("----> Connected to keyboard <----");
+    BT_Keyboard_Lost = false;
+    if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_active_state);   
+    Keyboard_Connected_signal = true;
 }
 #endif
-
 
 void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for BLE and BT Classic
   esp_err_t ret;
@@ -23249,17 +23261,11 @@ void update_time(){
         /* The parameter value is expected to be 1 as 1 is passed in the
         pvParameters value in the call to xTaskCreate() below. */
 
-
         configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
 
         while (1)
         {
          #endif
-            //ToDo: Set up as a periodic scan for reconnect or new keyboard
-            if (BT_Keyboard_Lost == true) {
-                bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
-                                    // Default duration is 5 seconds
-            }
         
             #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
@@ -23982,6 +23988,26 @@ void initialize_st7789_lcd()
         lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
         //lcd.setFreeFont(TFT_FONT_MEDIUM);      
   }
+
+  void BT_Keyboard_Status(void)
+  {
+        //ToDo: Set up as a periodic scan for reconnect or new keyboard
+        if (BT_Keyboard_Lost == true) {
+            if (Keyboard_Disconnected_signal) {                
+                debug_serial_port->println("Lost BT Keyboard Connection");
+                lcd_center_print_timed("Lost Connection", 1, 3000);
+                Keyboard_Disconnected_signal = false;
+                //bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing, Default duration is 5 seconds
+            }
+        }
+        else{
+            if (Keyboard_Connected_signal) {
+                lcd_center_print_timed("Keyboard Connected", 1, 3000);
+                debug_serial_port->println("BT Keyboard Connected");
+                Keyboard_Connected_signal = false;
+            }
+        }
+  }
 #endif
 
 void setup()
@@ -24134,9 +24160,10 @@ void main_loop(void * pvParameters )
           #endif
           
           #ifdef FEATURE_BT_KEYBOARD
-            #ifdef M5STACK_CORE2
-              M5.update();
-            #endif
+              #ifdef M5STACK_CORE2
+                M5.update();
+              #endif
+              BT_Keyboard_Status();
               //check_bt_keyboard();// moved to separate RTOS task
           #endif
           
