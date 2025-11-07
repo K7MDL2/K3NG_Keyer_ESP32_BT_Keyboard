@@ -34,9 +34,9 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 ***********************  Nov 6, 2025  K7MDL *****************************
 
-Now the same code will compile under esp-idf (v5.5.1) and Arduino IDE (2.3.6).  Just change main.cpp to main.ino.  
+Now the same code will compile under esp-idf (v5.5.1) and Arduino IDE (2.3.6).  Just change main.cpp to main.ino.   As of today, the precompiled file set is for the 1.9" TFT display and compiled under esp-idf so all 3 keyboards will work.  
 
-See https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/issues/2 for what works and what does not.  Bascially on the Rii i8+ mini keyboard works under Arduino as of today, but does reconnect.  Under esp-idf, all work, the K380s wont reconnect, the K380 and i8+ do.  
+See https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/issues/2 for what works and what does not.  Bascially on the Rii i8+ mini keyboard works under Arduino as of today, but does reconnect.  Under esp-idf, all work, the K380s wont reconnect, the K380 and Rii i8+ do.  
 
 Below are the 3 displays that I have setup and tested on ESP32.  For the TFT displays, you mst also edit the TFTR_eSPI library file User_Setup_Select.h to point to one of the 2 TFt setup fil;es located in main/TFT_e_SPI_Custom_Config folder.  These are preconfigured files for each display.
 
