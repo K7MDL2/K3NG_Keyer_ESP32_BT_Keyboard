@@ -20,8 +20,9 @@
 [Rii_mini]: https://img.shields.io/badge/Rii_mini-violet "Rii i8+"
 
 
-# k3ng_cw_keyer
-K3NG Arduino CW Keyer - Modifed to run on ESP32-WROOM32 with BT keyboards and TFT and LCD displays
+# K3NG CW Keyer (Modified for esp32)
+
+Based on a 2022 version, modifed to run on ESP32-WROOM32 with BT keyboards and TFT and LCD displays
 
 The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot of features and flexibility, rivaling commercial keyers which often cost significantly more. The code can be used with a full blown Arduino board or an AVR microcontroller chip can be programmed and used directly in a circuit. This keyer is suitable as a standalone keyer or for use permanently installed inside a rig, especially homebrew QRP rigs. It’s open source code so you can fully customize it to fit your needs and also perhaps learn from it or find coding ideas for other projects.
 
@@ -32,6 +33,7 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
 ***********************  Nov 6, 2025  K7MDL *****************************
+
 Now the same code will compile under esp-idf (v5.5.1) and Arduino IDE (2.3.6).  Just change main.cpp to main.ino.  
 
 See https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/issues/2 for what works and what does not.  Bascially on the Rii i8+ mini keyboard works under Arduino as of today, but does reconnect.  Under esp-idf, all work, the K380s wont reconnect, the K380 and i8+ do.  
