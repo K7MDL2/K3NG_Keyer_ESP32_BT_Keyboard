@@ -20,8 +20,9 @@
 [Rii_mini]: https://img.shields.io/badge/Rii_mini-violet "Rii i8+"
 
 
-# k3ng_cw_keyer
-K3NG Arduino CW Keyer
+# K3NG CW Keyer (Modified for esp32)
+
+Based on a 2022 version, modifed to run on ESP32-WROOM32 with BT keyboards and TFT and LCD displays
 
 The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot of features and flexibility, rivaling commercial keyers which often cost significantly more. The code can be used with a full blown Arduino board or an AVR microcontroller chip can be programmed and used directly in a circuit. This keyer is suitable as a standalone keyer or for use permanently installed inside a rig, especially homebrew QRP rigs. It’s open source code so you can fully customize it to fit your needs and also perhaps learn from it or find coding ideas for other projects.
 
@@ -31,12 +32,22 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
 
-***********************  Nov 3, 2025  K7MDL *****************************
+***********************  Nov 6, 2025  K7MDL *****************************
 
-With minor code change and reconfigured pin assignments I have a 3.2" st7789 320x240 TFT capcitive touchscreen display running.  I plan to try to get touch going next.  I want to add touch buttons to the lower part of the display.  Upsizing from 1.9" to 3.2" made the same fonts 50% larger, now the same size as the text LCD.   It also magnified the use if proportional font with fixed spacing.  The stock code counts columns for scrolling the CCW text area.  I plan to switch to a fixed font.
+Now the same code will compile under esp-idf (v5.5.1) and Arduino IDE (2.3.6).  Just change main.cpp to main.ino.  
+
+See https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/issues/2 for what works and what does not.  Bascially on the Rii i8+ mini keyboard works under Arduino as of today, but does reconnect.  Under esp-idf, all work, the K380s wont reconnect, the K380 and i8+ do.  
+
+Below are the 3 displays that I have setup and tested on ESP32.  For the TFT displays, you mst also edit the TFTR_eSPI library file User_Setup_Select.h to point to one of the 2 TFt setup fil;es located in main/TFT_e_SPI_Custom_Config folder.  These are preconfigured files for each display.
+
+    //#define FEATURE_LCD_LIQUIDCRYSTAL_I2C   // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+    // *** In Arduino IDE, for these 2 TFT displays, you must edit libraries TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h ***
+    //#define FEATURE_IDEASPARK_LCD             // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus
+    #define FEATURE_TFT7789_3_2inch_240x320_LCD   // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
+
+Nov 3, 2025 - With minor code change and reconfigured pin assignments I have a 3.2" st7789 320x240 TFT capcitive touchscreen display running.  I plan to try to get touch going next.  I want to add touch buttons to the lower part of the display.  Upsizing from 1.9" to 3.2" made the same fonts 50% larger, now the same size as the text LCD.   It also magnified the gaps between letters when using a proportional font with fixed spacing.  The stock code counts columns for scrolling the CCW text area.  I switched to a fixed font for the CW text box.  You get 5 lines of 20 characters each.
 
 <img width="1772" height="2475" alt="image" src="https://github.com/user-attachments/assets/70634f97-0844-4e28-b2f2-c513508bc318" />
-
 
 Nov 2, 2025 - Now have a 1.9" Color TFT display working.  Uses st7789 and is bright and sharp.  I have it configures for 5 lines at 17 characters per line.  I added Wiki page for details on how I configured this in the project.  I took a lot of trial and error. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Color-TFT-Display-Info
 
@@ -48,7 +59,8 @@ There is a status bar with BT connection, Pause, TX/TX, Keyer mode, grid square 
 
 Update Oct 30, 2025.  Now have a 4 lne by 20 column LCD working.  Display is connected on pins I2C pins 21 and 22 driving a Hitachi 44780 compatible display.  Uses the LCD class structure so can swap in different libraries for different devices.
 
-Update: Oct 29, 2025:  This is fully functional for the features I have defined.  Tested 3 BT keyboards.  The K380s is a BLE keyboard and curerntly does not reconnect so it required you to poair it each connection for now.  All keys for the equivalent PS2 keyboard are assigned.    See Wiki pages.
+Update: Oct 29, 2025:  This is fully functional for the features I have defined.  Tested 3 BT keyboards.  The K380s is a BLE keyboard and currently does not reconnect so it requires you to pair it each connection for now.  All keys for the equivalent PS2 keyboard are assigned.  See Wiki pages.
+
 This requires certain settings.
 
 There are 2 relevant bugs.  
@@ -61,14 +73,13 @@ These config values must be changed:
     #define CONFIG_BT_SMP_MAX_BONDS 40
     #define BTA_GATTC_CONN_MAX  64
 
-    Working on enabled a LCD display.  This currently does not work if compiled under Arduino IDE.
 *************************************************************************
 
-3 years ago (2022) SP5IOU modied the K3NG Keyer Arduino code to support an ESP32.  This repository is forked from his repositiry at https://github.com/aimeiz/k3ng_cw_keyer-master_2022.  After changing the pin assignments it worked on my ESP32-WROOM-32 dev board.  I used the board described in this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/CPU-Module
+3 years ago (2022) SP5IOU modied the K3NG Keyer Arduino code to support an ESP32.  This repository is forked from his repository at https://github.com/aimeiz/k3ng_cw_keyer-master_2022.  After changing the pin assignments it worked on my ESP32-WROOM-32 dev board.  I used the board described in this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/CPU-Module
 
 I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.   
 
-I am using ESP-IDF to compile.  Arduino32 is added as a component.  I first tried Arduino IDE but I was not able to get a BT classic keyboard (Logitech K380) to fully connect after it was discovered.  My BLE Rii i8+ keyboard worked fine though.  My BT_Keyboard test programs behaved the same.   I ported it to esp-idf and BT classic works proper as does the Rii.  Working on a solution to the K380s not reconnecting.
+I am using ESP-IDF to compile.  Arduino32 is added as a component.  I first tried Arduino IDE but I was not able to get a BT classic keyboard (Logitech K380) to fully connect after it was discovered.  My BLE Rii i8+ keyboard worked fine though.  My BT_Keyboard test programs behaved the same.   I ported it to esp-idf and BT classic works proper as does the Rii. The K380s BLE keyboard does not reconnect.
 
 I was getting RTOS WDT warnings while dits and dahs were being sent, competing with the BT service task.   I put the main program loop and check_bt_keyboard() into their own RTOS tasks and the problem seems to be solved for now. Seem OK at 30WPM and 13WPM.  More testing required.
 
@@ -76,11 +87,11 @@ The BT keyboard translates BT key codes to match the PS2 keycodes and calls into
 
 Tested with BLE K380s and Rii i8+ mini keyboards, and the Logitech K380 which happens to use BT classic.
 
-I plan to fork the orignal K2NG repo then merge my changes into it so that this benefit from the updates to the original.  Since this version is currently compiled under esp-idf framework, it is not likely to be accepted into the main repo.
+I plan to fork the original K2NG repo then merge my changes into it so that this benefit from the updates to the original.  Since this version is currently compiled under esp-idf framework, it is not likely to be accepted into the main repo.  - As of 11/6/2025, can compile under Arduino but 2 of 3 keyboards do nto work yet.
 
-I plan to add more WIKI pages here to show how I set up the IDE Tool options.  The BT_keyboard files are included as a component so there shoudl be no need to find and download libraries and component unlike in Arduino.  When someone does a clean install and compile this can be verified.
+I plan to add more WIKI pages here to show how I set up the IDE Tool options.  The BT_keyboard files are included as a component so there should be no need to find and download libraries and components unlike in Arduino.  When someone does a clean install and compile this can be verified.
 
-I provide precompiled firmware using the 4x20 line classic LCD display for your compatible CPU board using either of 2 tools so you do not have to compile the code, jsut upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmware: 
+I provide precompiled firmware using the 4x20 line classic LCD display for your compatible CPU board using either of 2 tools so you do not have to compile the code, just upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmware: 
 
 https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
