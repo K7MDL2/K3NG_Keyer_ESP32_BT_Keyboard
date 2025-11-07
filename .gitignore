@@ -176,3 +176,10 @@ components/TFT_lcd/src/I2CIO.cpp
 components/TFT_lcd/src/I2CIO.h
 components/TFT_lcd/src/TFT_lcd.cpp
 components/TFT_lcd/src/TFT_lcd.h
+components-backup/LiquidCrystal_I2C/.hg_archival.txt
+components-backup/LiquidCrystal_I2C/.hgignore
+components-backup/LiquidCrystal_I2C/.hgsub_
+components-backup/LiquidCrystal_I2C/.hgsubstate
+components-backup/LiquidCrystal_I2C/.hgtags
+components-backup/LiquidCrystal_I2C/.piopm
+components-backup/LiquidCrystal_I2C/bitbucket-pipelines.yml

@@ -2,20 +2,9 @@ cmake_minimum_required(VERSION 3.16.0)
 
 #include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 file(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/main/.
-                  ${CMAKE_SOURCE_DIR}/components/.
-                  ${CMAKE_SOURCE_DIR}/components/TFT_lcd/src/TFT_lcd.cpp
-                  ${CMAKE_SOURCE_DIR}/components/TFT_lcd/src/I2CIO.cpp)
-                  #${CMAKE_SOURCE_DIR}/components/st7789/src/st7789.cpp
-                  #${CMAKE_SOURCE_DIR}/components/st7789/src/fontx.cpp)
-                  #${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/LiquidCrystal_I2C.cpp
-                  #${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/LCD.cpp
-                  #${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/I2CIO.cpp)
-                  
+                  ${CMAKE_SOURCE_DIR}/components/.)
 set(include_dirs ${CMAKE_SOURCE_DIR}/main
-                  ${CMAKE_SOURCE_DIR}/components
-                  ${CMAKE_SOURCE_DIR}/components/TFT_lcd/src)
-                  #${CMAKE_SOURCE_DIR}/components/st7789/src)
-                  #${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C/include/.)
+                  ${CMAKE_SOURCE_DIR}/components)
 
 set(CMAKE_CXX_STANDARD "20")
 
