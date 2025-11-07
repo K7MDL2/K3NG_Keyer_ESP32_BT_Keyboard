@@ -6,7 +6,7 @@
     "interface/ftdi/esp_ftdi.cfg",
     "target/esp32.cfg"
   ],
-  "idf.portWin": "COM4",
+  "idf.portWin": "COM9",
   "idf.toolsPathWin": "D:\\esp-idf\\Espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32"

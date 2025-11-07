@@ -23964,10 +23964,9 @@ void initialize_st7789_lcd()
         //lcd.drawCentreString(CODE_VERSION, lcd.width()/2, lcd.height()/2, 2);  // Display version string
         lcd.setTextColor(TFT_WHITE,TFT_BLACK);
         update_icons();
-        vTaskDelay(5000*portTICK_PERIOD_MS);
         lcd.drawCentreString("                                    ", lcd.width()/2, (lcd.height()/2), 2);
         lcd.drawCentreString("Searching for Bluetooth Keyboard ...", lcd.width()/2, (lcd.height()/2), 2);
-
+        //vTaskDelay(2000*portTICK_PERIOD_MS);
         //lcd.setAddrWindow(10, 31, 316, 166);
 
         // Test some print formatting functions
@@ -24021,26 +24020,28 @@ void setup()
     #endif
     initialize_ethernet();
 
-    #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-      lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
-      lcd.drawCentreString("                                             ", lcd.width()/2, lcd.height()/2, 2);
-      lcd.drawCentreString("Search Complete", lcd.width()/2, lcd.height()/2, 2);
-      vTaskDelay(portTICK_PERIOD_MS*1000);
-    #endif
-    
-    initialize_display();
-    
-    #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-        lcd.drawSmoothRoundRect(0, 0, 8, 6, 319, 169, TFT_RED, TFT_BLACK);  // Redraw border due to startup messages size overwriting border
-        lcd.drawFastHLine(0, 27, 319, TFT_RED);
-        lcd.drawFastHLine(0, 28, 319, TFT_RED);
-        lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
-        lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
-        lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
-        lcd.drawCentreString("Done", lcd.width()/2, lcd.height()/2, 2);
+    //#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+    //  lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
+    //  lcd.drawCentreString("                                             ", lcd.width()/2, lcd.height()/2, 2);
+    //  lcd.drawCentreString("Search Complete", lcd.width()/2, lcd.height()/2, 2);
+    //  vTaskDelay(portTICK_PERIOD_MS*1000);
+    //#endif
+      
+    //#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+    //  lcd.drawSmoothRoundRect(0, 0, 8, 6, 319, 169, TFT_RED, TFT_BLACK);  // Redraw border due to startup messages size overwriting border
+    //  lcd.drawFastHLine(0, 27, 319, TFT_RED);
+    //  lcd.drawFastHLine(0, 28, 319, TFT_RED);
+    //  lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+    //  lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
+    //  lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
+    //  lcd.drawCentreString("                                             ", lcd.width()/2, lcd.height()/2, 2);
+    //  lcd.drawCentreString("Search Complete", lcd.width()/2, lcd.height()/2, 2);
+    //  vTaskDelay(portTICK_PERIOD_MS*1000);
         //vTaskDelay(portTICK_PERIOD_MS*1000);
-    #endif
-    
+    //#endif
+  
+    initialize_display();
+
     initialize_udp();
     initialize_web_server();
     initialize_sd_card();  
