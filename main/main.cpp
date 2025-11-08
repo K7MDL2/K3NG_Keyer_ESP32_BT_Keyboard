@@ -3793,7 +3793,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
     lcd_previous_status = lcd_status;
     lcd_status = LCD_TIMED_MESSAGE;
     #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
       lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
     #else
@@ -18576,7 +18576,7 @@ void pairing_handler(uint32_t pid) {
     debug_serial_port->println(pid);    
     vTaskDelay(1 / portTICK_PERIOD_MS);
     char pass[21];
-    sprintf(pass, " Pairing Code %lu ", pid);
+    sprintf(pass, "Pairing Code %lu", pid);
     lcd_center_print_timed(pass, 1, 12000);
 }
 
