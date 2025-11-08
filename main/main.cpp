@@ -23988,7 +23988,9 @@ void initialize_st7789_lcd()
         lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
         //lcd.setFreeFont(TFT_FONT_MEDIUM);      
   }
+  #endif
 
+  #ifdef FEATURE_BT_KEYBOARD
   void BT_Keyboard_Status(void)
   {
         //ToDo: Set up as a periodic scan for reconnect or new keyboard
