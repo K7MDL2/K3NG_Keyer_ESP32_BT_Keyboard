@@ -1375,7 +1375,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.10.30"
+#define CODE_VERSION "K7MDL-2025.11.07"
 #define eeprom_magic_number 43              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -18573,8 +18573,8 @@ void pairing_handler(uint32_t pid) {
     debug_serial_port->println(pid);    
     vTaskDelay(1 / portTICK_PERIOD_MS);
     char pass[21];
-    sprintf(pass, "Pairing code %lu", pid);
-    lcd_center_print_timed(pass, 1, 10000);
+    sprintf(pass, "Pairing Code %lu", pid);
+    lcd_center_print_timed(pass, 1, 12000);
 }
 
 void keyboard_lost_connection_handler() {
@@ -18702,11 +18702,18 @@ void initialize_display(){
       #endif
     #endif
 
+    #if defined(HARDWARE_ESP32_DEV) //SP5IOU fix for nothing on serial port for ESP32_dev
+      #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+        initialize_TFT_LCD_display();
+      #endif
+    #endif
+
     #if defined (FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_LCD_I2C_FDEBRABANDER)
       lcd.begin();
       lcd.home();
     #elif !defined (FEATURE_IDEASPARK_LCD) && !defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
       lcd.begin(LCD_COLUMNS, LCD_ROWS);
+      lcd.clear();
     #endif
 
     #ifdef FEATURE_LCD_ADAFRUIT_I2C
@@ -18757,9 +18764,15 @@ void initialize_display(){
           lcd_center_print_timed(custom_startup_field, 2, 4000);    // display the custom field on the third line of the display, maximum field length is the number of columns
 	      }
       #else
+        
+      #ifdef FEATURE_BT_KEYBOARD
+        lcd_center_print_timed("BT Keyboard Search..", 1, 3000);
+      #else
         lcd_center_print_timed("hi", 1, 4000);
+      #endif
+
       #endif                                                        // OPTION_PERSONALIZED_STARTUP_SCREEN
-      if (LCD_ROWS > 3) lcd_center_print_timed("V: " + String(CODE_VERSION), 3, 4000);      // display the code version on the fourth line of the display
+      if (LCD_ROWS > 3) lcd_center_print_timed("V:" + String(CODE_VERSION), 3, 4000);      // display the code version on the fourth line of the display
     }
 
 #if defined(FEATURE_WIFI) //SP5IOU 20220129
@@ -24015,11 +24028,7 @@ void initialize_st7789_lcd()
 void setup()
 {
     initialize_serial_ports();        // Goody - this is available for testing startup issues
-    #if defined(HARDWARE_ESP32_DEV) //SP5IOU fix for nothing on serial port for ESP32_dev
-        #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-          initialize_TFT_LCD_display();
-        #endif
-    #endif
+    initialize_display();
     initialize_pins();
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues
@@ -24067,8 +24076,6 @@ void setup()
     //  vTaskDelay(portTICK_PERIOD_MS*1000);
         //vTaskDelay(portTICK_PERIOD_MS*1000);
     //#endif
-  
-    initialize_display();
 
     initialize_udp();
     initialize_web_server();
