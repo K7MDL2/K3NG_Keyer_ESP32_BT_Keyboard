@@ -1,12 +1,12 @@
 {
   "C_Cpp.intelliSenseEngine": "default",
-  "idf.espIdfPathWin": "D:\\esp-idf\\v5.5\\esp-idf",
+  "idf.espIdfPathWin": "d:\\esp-idf\\v5.5.1\\esp-idf",
   "idf.pythonInstallPath": "D:\\esp-idf\\Espressif\\tools\\idf-python\\3.11.2\\python.exe",
   "idf.openOcdConfigs": [
     "interface/ftdi/esp_ftdi.cfg",
     "target/esp32.cfg"
   ],
-  "idf.portWin": "COM9",
+  "idf.portWin": "COM4",
   "idf.toolsPathWin": "D:\\esp-idf\\Espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32"
@@ -94,5 +94,5 @@
     "st7789.h": "c",
     "fontx.h": "c"
   },
-  "idf.currentSetup": "D:\\esp-idf\\v5.5\\esp-idf"
+  "idf.currentSetup": "D:\\esp-idf\\v5.5.1\\esp-idf"
 }
