@@ -1820,6 +1820,9 @@ void send_serial_number(byte cut_numbers,int increment_serial_number,byte buffer
 void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 
+#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
+void initialize_TFT_LCD_display(void);
+#endif
 
 #ifdef FEATURE_BT_KEYBOARD
 // QUEUESIZE must be a power of two 
@@ -18573,7 +18576,7 @@ void pairing_handler(uint32_t pid) {
     debug_serial_port->println(pid);    
     vTaskDelay(1 / portTICK_PERIOD_MS);
     char pass[21];
-    sprintf(pass, "Pairing Code %lu", pid);
+    sprintf(pass, " Pairing Code %lu ", pid);
     lcd_center_print_timed(pass, 1, 12000);
 }
 
@@ -24010,14 +24013,14 @@ void initialize_st7789_lcd()
         if (BT_Keyboard_Lost == true) {
             if (Keyboard_Disconnected_signal) {                
                 debug_serial_port->println("Lost BT Keyboard Connection");
-                lcd_center_print_timed("Lost Connection", 1, 3000);
+                lcd_center_print_timed("  Lost Connection   ", 1, 3000);
                 Keyboard_Disconnected_signal = false;
                 //bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing, Default duration is 5 seconds
             }
         }
         else{
             if (Keyboard_Connected_signal) {
-                lcd_center_print_timed("Keyboard Connected", 1, 3000);
+                lcd_center_print_timed(" Keyboard Connected ", 1, 3000);
                 debug_serial_port->println("BT Keyboard Connected");
                 Keyboard_Connected_signal = false;
             }
