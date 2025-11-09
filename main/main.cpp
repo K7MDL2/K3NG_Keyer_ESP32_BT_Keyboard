@@ -3648,7 +3648,7 @@ void testlcd(char status, int x, int y) {
             lcd_status = LCD_REVERT;
           }
           else {
-            vTaskDelay(10);
+            vTaskDelay(1 / portTICK_PERIOD_MS);
           }
         case LCD_SCROLL_MSG:
           if (lcd_scroll_buffer_dirty) { 
@@ -3793,7 +3793,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
     lcd_previous_status = lcd_status;
     lcd_status = LCD_TIMED_MESSAGE;
     #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-      vTaskDelay(100 / portTICK_PERIOD_MS);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
       lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
     #else
@@ -15710,7 +15710,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
         }
       }
   
-      vTaskDelay(100/portTICK_PERIOD_MS);
+      //vTaskDelay(1 / portTICK_PERIOD_MS);
       #ifdef FEATURE_BUTTONS
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
           loop1 = 0;
@@ -15722,7 +15722,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
           loop2 = 0;
         }    
       #endif //FEATURE_BUTTONS
-      vTaskDelay(10/portTICK_PERIOD_MS);
+      //vTaskDelay(1 / portTICK_PERIOD_MS);
     } //loop2
   } //loop1
   
@@ -18574,7 +18574,7 @@ void ps2int_write() {
 void pairing_handler(uint32_t pid) {
     debug_serial_port->print("Please enter the following pairing code followed with ENTER on your keyboard: ");
     debug_serial_port->println(pid);    
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     char pass[21];
     sprintf(pass, "Pairing Code %lu", pid);
     lcd_center_print_timed(pass, 1, 12000);
@@ -23267,7 +23267,7 @@ void update_time(){
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
 
- #define USE_TASK
+ //#define USE_TASK
 
     #ifndef USE_TASK
      void check_bt_keyboard(void) {
@@ -23320,9 +23320,9 @@ void update_time(){
                 uint8_t modifier = 0;
                 TickType_t    repeat_period_;
                 BTKeyboard::KeyInfo inf;
-                vTaskDelay(10);
+                vTaskDelay(10 / portTICK_RATE_MS);
                 #ifdef USE_TASK
-                  bt_keyboard.wait_for_low_event(inf); //, 10);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  bt_keyboard.wait_for_low_event(inf,1); //, 10);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                 #else
                   bt_keyboard.wait_for_low_event(inf,10);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                   //bt_keyboard.get_ascii_char();
@@ -23635,7 +23635,7 @@ void update_time(){
                 keyDN = false;
                 ch = 0;
             #endif
-         vTaskDelay(100);   
+         vTaskDelay(1 / portTICK_PERIOD_MS);   
          #ifdef USE_TASK
         } // for ever
       #endif
@@ -24059,27 +24059,6 @@ void setup()
         wifiConnect(configuration.wifissid,configuration.wifipassword);
     #endif
     initialize_ethernet();
-
-    //#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-    //  lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
-    //  lcd.drawCentreString("                                             ", lcd.width()/2, lcd.height()/2, 2);
-    //  lcd.drawCentreString("Search Complete", lcd.width()/2, lcd.height()/2, 2);
-    //  vTaskDelay(portTICK_PERIOD_MS*1000);
-    //#endif
-      
-    //#if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-    //  lcd.drawSmoothRoundRect(0, 0, 8, 6, 319, 169, TFT_RED, TFT_BLACK);  // Redraw border due to startup messages size overwriting border
-    //  lcd.drawFastHLine(0, 27, 319, TFT_RED);
-    //  lcd.drawFastHLine(0, 28, 319, TFT_RED);
-    //  lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
-    //  lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
-    //  lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
-    //  lcd.drawCentreString("                                             ", lcd.width()/2, lcd.height()/2, 2);
-    //  lcd.drawCentreString("Search Complete", lcd.width()/2, lcd.height()/2, 2);
-    //  vTaskDelay(portTICK_PERIOD_MS*1000);
-        //vTaskDelay(portTICK_PERIOD_MS*1000);
-    //#endif
-
     initialize_udp();
     initialize_web_server();
     initialize_sd_card();  
@@ -24107,7 +24086,7 @@ void main_loop(void * pvParameters )
       
       #if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
           if (keyer_machine_mode == BEACON) {
-              delay(201);                                                                   // an odd duration delay before we enter BEACON mode
+              vTaskDelay(1 / portTICK_PERIOD_MS);                                                                   // an odd duration delay before we enter BEACON mode
               #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
                   unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
               #endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
@@ -24299,7 +24278,7 @@ void loop()
                     "Check_BT_Keyboard",          /* Text name for the task. */
                     8000,      /* Stack size in words, not bytes. */
                     ( void * ) 1,    /* Parameter passed into the task. */
-                    tskIDLE_PRIORITY,/* Priority at which the task is created. */
+                    0,/* Priority at which the task is created. */
                     &xHandle_BT );
     #endif
     
@@ -24309,13 +24288,14 @@ void loop()
                 "Main_Loop",          /* Text name for the task. */
                 12000,      /* Stack size in words, not bytes. */
                 ( void * ) 1,    /* Parameter passed into the task. */
-                tskIDLE_PRIORITY,/* Priority at which the task is created. */
+                0,/* Priority at which the task is created. */
                 &xHandle_MAIN );
     #endif
     while (1)
     {
-      vTaskDelay(10);
-      #ifndef USE_TASK
+      #ifdef USE_TASK
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
+      #else        
         #if defined (FEATURE_BT_KEYBOARD) 
           check_bt_keyboard();
         #endif
