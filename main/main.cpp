@@ -22793,7 +22793,6 @@ void update_time(){
         {
     #endif
       
-
           #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
                 //uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
@@ -22831,7 +22830,7 @@ void update_time(){
                 uint8_t modifier = 0;
                 TickType_t    repeat_period_;
                 BTKeyboard::KeyInfo inf;
-                vTaskDelay(10 / portTICK_RATE_MS);
+                vTaskDelay(10 / portTICK_PERIOD_MS);
                 #ifdef USE_BT_TASK
                   bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                 #else
