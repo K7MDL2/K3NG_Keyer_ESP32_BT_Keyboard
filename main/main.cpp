@@ -1375,8 +1375,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.11.07"
-#define eeprom_magic_number 43              // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "K7MDL-2025.11.10"
+#define eeprom_magic_number 44              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
 #include "keyer_hardware.h"
@@ -1494,6 +1494,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #elif defined(HARDWARE_ESP32_DEV)//sp5iou 20220123
   #include "keyer_pin_settings_esp32_dev.h"
   #include "keyer_settings_esp32_dev.h"
+  #ifdef ARDUINO_ARCH_ESP32
+    #include "esp32-hal-log.h"
+  #endif
 #elif defined(HARDWARE_GENERIC_STM32F103C)
   #include "keyer_pin_settings_generic_STM32F103C.h"
   #include "keyer_settings_generic_STM32F103C.h"
@@ -1836,6 +1839,7 @@ char queue[QUEUESIZE];
 char queuepop();
 void queueadd(const char ch);
 int queueempty();
+int queue_available();
 void queueflush();
 int queuefull();
 void boop_beep();
@@ -1855,7 +1859,17 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit);
 bool BT_Keyboard_Lost = false;
 bool Keyboard_Disconnected_signal = false;
 bool Keyboard_Connected_signal = false;
+void BT_Keyboard_Status(void);
+
+//#define USE_BT_TASK // for BT check in a task
+
+#ifdef USE_BT_TASK
+  void check_bt_keyboard(void * pvParameters);
+#else
+  void check_bt_keyboard(void);
 #endif
+
+#endif  //FEATURE_BT_KEYBOARD
 
 byte sending_mode = UNDEFINED_SENDING;
 byte command_mode_disable_tx = 0;
@@ -2571,12 +2585,12 @@ byte service_tx_inhibit_and_pause(){
             compression_detection_indicator_on = 1;
             digitalWrite(compression_detection_pin,HIGH);
             #if defined(DEBUG_FEATURE_COMPETITION_COMPRESSION_DETECTION)
-              debug_serial_port->print("service_competition_compression_detection: time_array: ");
+              debug_serial_port->print(F("service_competition_compression_detection: time_array: "));
               for (int i = 0;i < COMPETITION_COMPRESSION_DETECTION_ARRAY_SIZE;i++){
                 debug_serial_port->print(time_array[i]);
-                debug_serial_port->print(" ");
+                debug_serial_port->print(F(" "));
               }            
-              debug_serial_port->print("\n\rservice_competition_compression_detection: COMPRESSION DETECTION ON  average: ");
+              debug_serial_port->print(F("\n\rservice_competition_compression_detection: COMPRESSION DETECTION ON  average: "));
               debug_serial_port->println(time_average);              
             #endif
           }
@@ -2586,12 +2600,12 @@ byte service_tx_inhibit_and_pause(){
             compression_detection_indicator_on = 0;
             digitalWrite(compression_detection_pin,LOW);
             #if defined(DEBUG_FEATURE_COMPETITION_COMPRESSION_DETECTION)
-              debug_serial_port->print("service_competition_compression_detection: time_array: ");
+              debug_serial_port->print(F("service_competition_compression_detection: time_array: "));
               for (int i = 0;i < COMPETITION_COMPRESSION_DETECTION_ARRAY_SIZE;i++){
                 debug_serial_port->print(time_array[i]);
-                debug_serial_port->print(" ");
+                debug_serial_port->print(F(" "));
               }                 
-              debug_serial_port->print("\n\rservice_competition_compression_detection: COMPRESSION DETECTION OFF  average: ");
+              debug_serial_port->print(F("\n\rservice_competition_compression_detection: COMPRESSION DETECTION OFF  average: "));
               debug_serial_port->println(time_average);
             #endif
           }
@@ -2615,7 +2629,7 @@ void service_keypad(){
   if(key){ // Check for a valid key.
 
     #if defined(DEBUG_KEYPAD_SERIAL)
-      debug_serial_port->print("service_keypad: key:");
+      debug_serial_port->print(F("service_keypad: key:"));
       debug_serial_port->println(key);
     #endif
 
@@ -2785,7 +2799,7 @@ void service_keypad(){
               if (!cw_keyboard_no_space){
                 Keyboard.write(' ');
                 #ifdef DEBUG_CW_COMPUTER_KEYBOARD
-                  debug_serial_port->println("service_straight_key: Keyboard.write: <space>");
+                  debug_serial_port->println(F("service_straight_key: Keyboard.write: <space>"));
                 #endif //DEBUG_CW_COMPUTER_KEYBOARD 
               }
               cw_keyboard_no_space = 0;   
@@ -2866,9 +2880,9 @@ void service_keypad(){
       
       #ifdef DEBUG_FEATURE_STRAIGHT_KEY_ECHO
         if (abs(decoder_wpm - last_printed_decoder_wpm) > 0.9) {
-          debug_serial_port->print("<");
+          debug_serial_port->print(F("<"));
           debug_serial_port->print(int(decoder_wpm));
-          debug_serial_port->print(">");
+          debug_serial_port->print(F(">"));
           last_printed_decoder_wpm = decoder_wpm;
         }
       #endif //DEBUG_FEATURE_STRAIGHT_KEY_ECHO
@@ -3077,7 +3091,7 @@ void service_keypad(){
         } //switch (decode_character)
           
         #ifdef DEBUG_CW_COMPUTER_KEYBOARD
-          debug_serial_port->print("service_straight_key: Keyboard.write: ");
+          debug_serial_port->print(F("service_straight_key: Keyboard.write: "));
           debug_serial_port->write(character_to_send);
           debug_serial_port->println();
         #endif //DEBUG_CW_COMPUTER_KEYBOARD
@@ -3420,6 +3434,20 @@ void check_backlight() {
 }
 #endif
 
+char bt_keyboard_read() {
+        #ifndef USE_BT_TASK
+        check_bt_keyboard();
+        #endif
+        return queuepop();
+}
+
+int bt_keyboard_available() {
+        #ifndef USE_BT_TASK
+        check_bt_keyboard();
+        #endif
+        return queue_available();
+}
+
 #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
 void update_icons(void) {
     
@@ -3686,7 +3714,7 @@ void display_scroll_print_char(char charin){
   #ifdef DEBUG_DISPLAY_SCROLL_PRINT_CHAR
     debug_serial_port->print(F("display_scroll_print_char: "));
     debug_serial_port->write(charin);
-    debug_serial_port->print(" ");
+    debug_serial_port->print(F(" "));
     debug_serial_port->println(charin);
   #endif //DEBUG_DISPLAY_SCROLL_PRINT_CHAR
 
@@ -3775,7 +3803,7 @@ void clear_display_row(byte row_number)
       lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     #else
       lcd.setCursor(x,row_number);
-      lcd.print(" ");
+      lcd.print(F(" "));
     #endif
   }
 }
@@ -3921,11 +3949,11 @@ void check_ps2_keyboard()
         #if defined (FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD)
 
             #ifdef FEATURE_BT_KEYBOARD
-                while ((!queueempty()) && (play_memory_prempt == 0)) 
+
+                while ((bt_keyboard_available()) && (play_memory_prempt == 0)) 
                 {  
                     // use BT keyboard char stream  
-                    keystroke = (uint8_t) queuepop();
-                    //keystroke = a;
+                    keystroke = bt_keyboard_read();
             #else  // Do PS2 keyboard
                 while ((keyboard.available()) && (play_memory_prempt == 0)) 
                 {      
@@ -3933,7 +3961,7 @@ void check_ps2_keyboard()
                     keystroke = keyboard.read();
             #endif
                     #if defined(DEBUG_PS2_KEYBOARD) || defined(DEBUG_BT_KEYBOARD)
-                        debug_serial_port->print("check_ps2_keyboard: keystroke: ");
+                        debug_serial_port->print(F("check_ps2_keyboard: keystroke: "));
                         debug_serial_port->println(keystroke,DEC);
                     #endif //DEBUG_PS2_KEYBOARD
 
@@ -4143,7 +4171,7 @@ void check_ps2_keyboard()
 
                                 case PS2_LEFT_ALT :
                                 #ifdef DEBUG_PS2_KEYBOARD
-                                    debug_serial_port->println("PS2_LEFT_ALT\n");
+                                    debug_serial_port->println(F("PS2_LEFT_ALT\n"));
                                 #endif
                                 break;
 
@@ -4519,544 +4547,7 @@ void check_ps2_keyboard()
                         }                        
                 }  //while ((keyboard.available()) && (play_memory_prempt == 0))
         #endif
- 
-    #else //FEATURE_MEMORIES --------------------------------------------------------------------
-
-    while (keyboard.available()) {
-
-    // read the next key
-    keystroke = keyboard.read();
-
-    #ifdef FEATURE_SLEEP
-    last_activity_time = millis(); 
-    #endif //FEATURE_SLEEP
-    #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-    last_active_time = millis(); 
-    #endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
-
-    if (ps2_keyboard_mode == PS2_KEYBOARD_NORMAL) {
-        switch (keystroke) {
-        case PS2_PAGEUP : sidetone_adj(20); break;
-        case PS2_PAGEDOWN : sidetone_adj(-20); break;
-        case PS2_RIGHTARROW : adjust_dah_to_dit_ratio(int(configuration.dah_to_dit_ratio/10)); break;
-        case PS2_LEFTARROW : adjust_dah_to_dit_ratio(-1*int(configuration.dah_to_dit_ratio/10)); break;
-        case PS2_UPARROW : speed_set(configuration.wpm+1); break;
-        case PS2_DOWNARROW : speed_set(configuration.wpm-1); break;
-        case PS2_HOME :
-            configuration.dah_to_dit_ratio = initial_dah_to_dit_ratio;
-            key_tx = 1;
-            config_dirty = 1;
-            #ifdef FEATURE_DISPLAY
-            #ifdef OPTION_MORE_DISPLAY_MSGS
-                if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("DfltRtio", 0, default_display_msg_delay);
-                } else {
-                lcd_center_print_timed("Default ratio", 0, default_display_msg_delay);
-                }
-                service_display();
-            #endif
-            #endif           
-            break;
-        case PS2_TAB :
-            if (pause_sending_buffer) {
-            pause_sending_buffer = 0;
-            #ifdef FEATURE_DISPLAY
-            #ifdef OPTION_MORE_DISPLAY_MSGS
-            lcd_center_print_timed("Resume", 0, default_display_msg_delay);
-            #endif
-            #endif                 
-            } else {
-            pause_sending_buffer = 1;
-            #ifdef FEATURE_DISPLAY
-            lcd_center_print_timed("Pause", 0, default_display_msg_delay);
-            #endif            
-            }
-        break;  // pause
-
-        case PS2_SCROLL :   // Prosign next two characters
-            ps2_prosign_flag = 1;
-            #ifdef FEATURE_DISPLAY
-            #ifdef OPTION_MORE_DISPLAY_MSGS
-            lcd_center_print_timed("Prosign", 0, default_display_msg_delay);
-            #endif
-            #endif          
-            break;
-
-        #ifdef FEATURE_MEMORIES
-        case PS2_F1 : ps2_usb_keyboard_play_memory(0); break;
-        case PS2_F2 : ps2_usb_keyboard_play_memory(1); break;
-        case PS2_F3 : ps2_usb_keyboard_play_memory(2); break;
-        case PS2_F4 : ps2_usb_keyboard_play_memory(3); break;
-        case PS2_F5 : ps2_usb_keyboard_play_memory(4); break;
-        case PS2_F6 : ps2_usb_keyboard_play_memory(5); break;
-        case PS2_F7 : ps2_usb_keyboard_play_memory(6); break;
-        case PS2_F8 : ps2_usb_keyboard_play_memory(7); break;
-        case PS2_F9 : ps2_usb_keyboard_play_memory(8); break;
-        case PS2_F10 : ps2_usb_keyboard_play_memory(9); break;
-        case PS2_F11 : ps2_usb_keyboard_play_memory(10); break;
-        case PS2_F12 : ps2_usb_keyboard_play_memory(11); break;
-        case PS2_F1_ALT : if (number_of_memories > 0) {repeat_memory_msg(0);} break;
-        case PS2_F2_ALT : if (number_of_memories > 1) {repeat_memory_msg(1);} break;
-        case PS2_F3_ALT : if (number_of_memories > 2) {repeat_memory_msg(2);} break;
-        case PS2_F4_ALT : if (number_of_memories > 3) {repeat_memory_msg(3);} break;
-        case PS2_F5_ALT : if (number_of_memories > 4) {repeat_memory_msg(4);} break;
-        case PS2_F6_ALT : if (number_of_memories > 5) {repeat_memory_msg(5);} break;
-        case PS2_F7_ALT : if (number_of_memories > 6) {repeat_memory_msg(6);} break;
-        case PS2_F8_ALT : if (number_of_memories > 7) {repeat_memory_msg(7);} break;
-        case PS2_F9_ALT : if (number_of_memories > 8) {repeat_memory_msg(8);} break;
-        case PS2_F10_ALT : if (number_of_memories > 9) {repeat_memory_msg(9);} break;
-        case PS2_F11_ALT : if (number_of_memories > 10) {repeat_memory_msg(10);} break;
-        case PS2_F12_ALT : if (number_of_memories > 11) {repeat_memory_msg(11);} break;
-        #endif
-
-        case PS2_DELETE : if (send_buffer_bytes) { send_buffer_bytes--; } break;
-        case PS2_ESC :  // clear the serial send buffer and a bunch of other stuff
-            if (manual_ptt_invoke) {
-            manual_ptt_invoke = 0;
-            ptt_unkey();
-            }
-            if (keyboard_tune_on) {
-            sending_mode = MANUAL_SENDING;
-            tx_and_sidetone_key(0);
-            keyboard_tune_on = 0;
-            }
-            if (pause_sending_buffer) {
-            pause_sending_buffer = 0;
-            }
-            clear_send_buffer();
-            #ifdef FEATURE_MEMORIES
-            //clear_memory_button_buffer();
-            play_memory_prempt = 1;
-            repeat_memory = 255;
-            #endif
-            #ifdef FEATURE_DISPLAY
-            lcd_center_print_timed("Abort", 0, default_display_msg_delay);
-            #endif          
-            break;
-
-        #ifdef FEATURE_MEMORIES
-        case PS2_F1_SHIFT  :
-            ps2_keyboard_program_memory(0);
-            break;
-
-        case PS2_F2_SHIFT  :
-            ps2_keyboard_program_memory(1);
-            break;
-
-        case PS2_F3_SHIFT  :
-            ps2_keyboard_program_memory(2);
-            break;
-
-        case PS2_F4_SHIFT  :
-            ps2_keyboard_program_memory(3);
-            break;
-
-        case PS2_F5_SHIFT  :
-            ps2_keyboard_program_memory(4);
-            break;
-
-        case PS2_F6_SHIFT  :
-            ps2_keyboard_program_memory(5);
-            break;
-
-        case PS2_F7_SHIFT  :
-            ps2_keyboard_program_memory(6);
-            break;
-
-        case PS2_F8_SHIFT  :
-            ps2_keyboard_program_memory(7);
-            break;
-
-        case PS2_F9_SHIFT  :
-            ps2_keyboard_program_memory(8);
-            break;
-
-        case PS2_F10_SHIFT  :
-            ps2_keyboard_program_memory(9);
-            break;
-
-        case PS2_F11_SHIFT  :
-            ps2_keyboard_program_memory(10);
-            break;
-
-        case PS2_F12_SHIFT  :
-            ps2_keyboard_program_memory(11);
-            break;
-        #endif //FEATURE_MEMORIES
-
-        case PS2_INSERT :   // send serial number and increment
-            put_serial_number_in_send_buffer();
-            serial_number++;
-            break;
-
-        case PS2_END :      // send serial number no increment
-            put_serial_number_in_send_buffer();
-            break;
-
-        case PS2_BACKSPACE_SHIFT :    // decrement serial number
-            serial_number--;
-            #ifdef FEATURE_DISPLAY
-            if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("SN " + String(serial_number), 0, default_display_msg_delay);
-            } else {
-                lcd_center_print_timed("Serial: " + String(serial_number), 0, default_display_msg_delay);
-            }
-            #endif          
-            break;
-
-        case PS2_LEFT_ALT :
-            #ifdef DEBUG_PS2_KEYBOARD
-            debug_serial_port->println("PS2_LEFT_ALT\n");
-            #endif
-            break;
-
-        case PS2_A_CTRL :
-            configuration.keyer_mode = IAMBIC_A;
-            #ifdef FEATURE_DISPLAY
-            lcd_center_print_timed("Iambic A", 0, default_display_msg_delay);
-            #endif
-
-            config_dirty = 1;
-            break;
-
-        case PS2_B_CTRL :
-            configuration.keyer_mode = IAMBIC_B;
-            #ifdef FEATURE_DISPLAY
-            lcd_center_print_timed("Iambic B", 0, default_display_msg_delay);
-            #endif          
-            config_dirty = 1;
-            break;
-
-        case PS2_C_CTRL :
-            configuration.keyer_mode = SINGLE_PADDLE;
-            #ifdef FEATURE_DISPLAY
-            if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("Sngl Pdl", 0, default_display_msg_delay);
-            } else {
-                lcd_center_print_timed("Single Paddle", 0, default_display_msg_delay);
-            }
-            #endif          
-            config_dirty = 1;
-            break;
-
-        #ifndef OPTION_NO_ULTIMATIC
-        case PS2_D_CTRL :
-            configuration.keyer_mode = ULTIMATIC;
-            #ifdef FEATURE_DISPLAY
-            if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("Ultimatc", 0, default_display_msg_delay);
-            } else {
-                lcd_center_print_timed("Ultimatic", 0, default_display_msg_delay);
-            }          
-            #endif        
-            config_dirty = 1;
-            break;
-        #endif // OPTION_NO_ULTIMATIC
-
-        case PS2_E_CTRL :
-            #ifdef FEATURE_DISPLAY
-            if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("Enter SN", 0, default_display_msg_delay);
-            } else {
-                lcd_center_print_timed("Enter Serial #", 0, default_display_msg_delay);
-            }            
-            #else        
-            boop_beep();
-            #endif
-            work_int = ps2_keyboard_get_number_input(4,0,10000);
-            if (work_int > 0) {
-            serial_number = work_int;
-            #ifdef FEATURE_DISPLAY
-                lcd_status = LCD_REVERT;
-            #else             
-                beep();
-            #endif
-            }
-            break;
-
-        case PS2_G_CTRL :
-            configuration.keyer_mode = BUG;
-            #ifdef FEATURE_DISPLAY
-            lcd_center_print_timed("Bug", 0, default_display_msg_delay);
-            #endif
-            config_dirty = 1;
-            break;
-
-        case PS2_H_CTRL :
-            #ifdef FEATURE_HELL
-            if (char_send_mode == CW) {
-                char_send_mode = HELL;
-                beep();
-            } else {
-                char_send_mode = CW;
-                beep();
-            }
-            #endif //FEATURE_HELL
-            break;
-
-        case PS2_I_CTRL :
-            if (key_tx && keyer_machine_mode != KEYER_COMMAND_MODE) { //Added check that keyer is NOT in command mode or keyer might be enabled for paddle commands (WD9DMP-1)
-            key_tx = 0;
-            #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("TX Off", 0, default_display_msg_delay);
-            #endif
-            
-            } else if (!key_tx && keyer_machine_mode != KEYER_COMMAND_MODE) { //Added check that keyer is NOT in command mode or keyer might be enabled for paddle commands (WD9DMP-1)
-            key_tx = 1;
-            #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("TX On", 0, default_display_msg_delay);
-            #endif      
-            }
-            break;
-
-        case PS2_M_CTRL:
-            #ifdef FEATURE_FARNSWORTH
-            #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("Frnswrth", 0, default_display_msg_delay);
-                } else {
-                lcd_center_print_timed("Farnsworth WPM", 0, default_display_msg_delay);
-                }        
-            #else          
-                boop_beep();
-            #endif
-            work_int = ps2_keyboard_get_number_input(3,-1,1000);
-            if (work_int > -1) {
-            configuration.wpm_farnsworth = work_int;
-            #ifdef FEATURE_DISPLAY
-                lcd_status = LCD_REVERT;
-            #else
-                beep();
-            #endif
-            config_dirty = 1;
-            }
-            #endif
-            break;
-
-        case PS2_N_CTRL :
-            if (configuration.paddle_mode == PADDLE_NORMAL) {
-            configuration.paddle_mode = PADDLE_REVERSE;
-            #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("Pdl Rev", 0, default_display_msg_delay);
-                } else {
-                lcd_center_print_timed("Paddle Reverse", 0, default_display_msg_delay);
-                }                    
-            #endif
-            } else {
-            configuration.paddle_mode = PADDLE_NORMAL;
-            #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("Pdl Norm", 0, default_display_msg_delay);
-                } else {
-                lcd_center_print_timed("Paddle Normal", 0, default_display_msg_delay);
-                }                    
-            #endif      
-            }
-            config_dirty = 1;
-            break;
-
-        case PS2_O_CTRL : // CTRL-O - cycle through sidetone modes on, paddle only and off - New code Marc-Andre, VE2EVN
-            if (configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) {
-            configuration.sidetone_mode = SIDETONE_OFF;
-            boop();      
-            #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("ST Off", 0, default_display_msg_delay);
-                } else {            
-                lcd_center_print_timed("Sidetone Off", 0, default_display_msg_delay);
-                }
-            #endif
-            } else if (configuration.sidetone_mode == SIDETONE_ON) {
-            configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
-            beep();
-            delay(200);
-            beep();
-            #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("ST Pdl O", 0, default_display_msg_delay);
-                }
-                if (LCD_COLUMNS > 19){
-                lcd_center_print_timed("Sidetone Paddle Only", 0, default_display_msg_delay);
-                } else {
-                lcd_center_print_timed("Sidetone", 0, default_display_msg_delay);
-                lcd_center_print_timed("Paddle Only", 1, default_display_msg_delay);
-                }
-            #endif
-            } else {
-            #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("ST On", 0, default_display_msg_delay);
-                } else {
-                lcd_center_print_timed("Sidetone On", 0, default_display_msg_delay);
-                }
-            #endif      
-            configuration.sidetone_mode = SIDETONE_ON;
-            beep();
-            }
-            config_dirty = 1;
-            break;         
-
-        case PS2_T_CTRL :
-            #ifdef FEATURE_MEMORIES
-            repeat_memory = 255;
-            #endif
-            if (keyboard_tune_on) {
-            sending_mode = MANUAL_SENDING;
-            tx_and_sidetone_key(0);
-            keyboard_tune_on = 0;
-            #ifdef FEATURE_DISPLAY
-                lcd_status = LCD_REVERT;
-            #endif // FEATURE_DISPLAY
-            } else {
-            #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("Tune", 0, default_display_msg_delay);
-            #endif      
-            sending_mode = MANUAL_SENDING;
-            tx_and_sidetone_key(1);
-            keyboard_tune_on = 1;
-            }
-            break;
-
-        case PS2_U_CTRL :
-            if (ptt_line_activated) {
-            manual_ptt_invoke = 0;
-            ptt_unkey();
-            #ifdef FEATURE_DISPLAY
-                lcd_status = LCD_REVERT;
-            #endif // FEATURE_DISPLAY            
-            } else {
-            #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("PTT Invk", 0, default_display_msg_delay);
-                } else {            
-                lcd_center_print_timed("PTT Invoke", 0, default_display_msg_delay);
-                }            
-            #endif      
-            manual_ptt_invoke = 1;
-            ptt_key();
-            }
-            break;
-
-        case PS2_W_CTRL :
-            #ifdef FEATURE_DISPLAY
-            if (LCD_COLUMNS < 9){
-                lcd_center_print_timed("WPM Adj", 0, default_display_msg_delay);
-            } else {            
-                lcd_center_print_timed("WPM Adjust", 0, default_display_msg_delay);
-            }        
-            #else
-            boop_beep();
-            #endif
-            work_int = ps2_keyboard_get_number_input(3,0,1000);
-            if (work_int > 0) {
-            speed_set(work_int);
-            #ifdef FEATURE_DISPLAY
-                lcd_status = LCD_REVERT;
-            #else
-                beep();
-            #endif
-            config_dirty = 1;
-            }
-            break;
-
-        case PS2_F1_CTRL :
-            switch_to_tx_silent(1);
-            #ifdef FEATURE_DISPLAY
-            lcd_center_print_timed("TX 1", 0, default_display_msg_delay);
-            #endif          
-            break;
-
-        case PS2_F2_CTRL :
-            if ((ptt_tx_2) || (tx_key_line_2)) {
-            switch_to_tx_silent(2);         
-            #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("TX 2", 0, default_display_msg_delay);
-            #endif                      
-            }
-            break;
-
-        case PS2_F3_CTRL :
-            if ((ptt_tx_3)  || (tx_key_line_3)) {
-            switch_to_tx_silent(3);                     
-            #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("TX 3", 0, default_display_msg_delay);
-            #endif                                  
-            }
-            break;
-
-        case PS2_F4_CTRL :
-            if ((ptt_tx_4)  || (tx_key_line_4)) {
-            switch_to_tx_silent(4); 
-            #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("TX 4", 0, default_display_msg_delay);
-            #endif                                  
-            }
-            break;
-
-        case PS2_F5_CTRL :
-            if ((ptt_tx_5)  || (tx_key_line_5)) {
-            switch_to_tx_silent(5); 
-            #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("TX 5", 0, default_display_msg_delay);
-            #endif                      
-            }
-            break;
-
-        case PS2_F6_CTRL :
-            if ((ptt_tx_6)  || (tx_key_line_6)) {
-            switch_to_tx_silent(6);
-            #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("TX 6", 0, default_display_msg_delay);
-            #endif                                  
-            }
-            break;
-
-        #ifdef FEATURE_AUTOSPACE
-            case PS2_Z_CTRL:
-            if (configuration.autospace_active) {
-                configuration.autospace_active = 0;
-                config_dirty = 1;
-                #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                    lcd_center_print_timed("AutoSOff", 0, default_display_msg_delay);
-                } else {            
-                    lcd_center_print_timed("Autospace Off", 0, default_display_msg_delay);
-                }             
-                #endif                                  
-            } else {
-                configuration.autospace_active = 1;
-                config_dirty = 1;
-                #ifdef FEATURE_DISPLAY
-                if (LCD_COLUMNS < 9){
-                    lcd_center_print_timed("AutoS On", 0, default_display_msg_delay);
-                } else {            
-                    lcd_center_print_timed("Autospace On", 0, default_display_msg_delay);
-                }              
-                #endif                                  
-            }
-            break;
-        #endif
-
-        default :
-            if ((keystroke > 31) && (keystroke < 255 /*123*/)) {
-            if (ps2_prosign_flag) {
-                add_to_send_buffer(SERIAL_SEND_BUFFER_PROSIGN);
-                ps2_prosign_flag = 0;
-            }
-            keystroke = uppercase(keystroke);
-            add_to_send_buffer(keystroke);
-            #ifdef FEATURE_MEMORIES
-                repeat_memory = 255;
-            #endif
-            }
-            break;
-        }
-    } else {
-
-    }
-    } //while (keyboard.available())
-    #endif //FEATURE_MEMORIES
+    #endif
 }
 
 #endif //FEATURE_PS2_KEYBOARD || defined (FEATURE_BT_KEYBOARD)
@@ -5112,11 +4603,15 @@ void ps2_keyboard_program_memory(byte memory_number)
   #endif
   repeat_memory = 255;
   while (looping) {
+    #ifdef HARDWARE_ESP32_DEV
+      vTaskDelay(10);   // let other tasks run a bit
+    #endif
     #ifdef FEATURE_PS2_KEYBOARD
     while (keyboard.available() == 0) {
     #endif
     #ifdef FEATURE_BT_KEYBOARD
-    while (queueempty()) {
+    while (bt_keyboard_available() == 0) {
+      vTaskDelay(10);   // let other tasks run a bit
     #endif
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -5132,7 +4627,7 @@ void ps2_keyboard_program_memory(byte memory_number)
     #endif
 
     #ifdef FEATURE_BT_KEYBOARD
-        keystroke = queuepop();
+        keystroke = bt_keyboard_read();
         #ifdef DEBUG_BT_KEYBOARD
             debug_serial_port->println(keystroke,DEC);
         #endif
@@ -5147,7 +4642,7 @@ void ps2_keyboard_program_memory(byte memory_number)
           #ifdef FEATURE_DISPLAY
             keyboard_string = keyboard_string.substring(0,keyboard_string.length()-1);
             lcd_center_print_timed(keyboard_string, 1, default_display_msg_delay);
-          #endif            
+          #endif    
         }
       } else {
         if (keystroke == PS2_ESC) {
@@ -5189,7 +4684,7 @@ void ps2_keyboard_program_memory(byte memory_number)
     }
     // write terminating 255
     EEPROM.write((memory_start(memory_number)+x),255);
-    debug_serial_port->print("\nWrote Keyboard Memory ");
+    debug_serial_port->print(F("\nWrote Keyboard Memory "));
     debug_serial_port->println(memory_number);
     #if defined(HARDWARE_ESP32_DEV)
       EEPROM.commit();
@@ -5222,11 +4717,14 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
   #endif
 
   while (looping) {
+    #ifdef HARDWARE_ESP32_DEV
+      vTaskDelay(10);   // let other tasks run a bit
+    #endif
     #ifdef FEATURE_PS2_KEYBOARD
     if (keyboard.available() == 0) {        // wait for the next keystroke
     #endif
     #ifdef FEATURE_BT_KEYBOARD
-    if (queueempty()) {
+    if (bt_keyboard_available() == 0) {
     #endif
         if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -5253,11 +4751,11 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
         keystroke = keyboard.read();
       #endif
       #ifdef FEATURE_BT_KEYBOARD
-        keystroke = queuepop();
-        debug_serial_port->println("[0x");
-        debug_serial_port->println(keystroke, HEX);
-        debug_serial_port->println(']');
+        keystroke = bt_keyboard_read();
       #endif
+      //debug_serial_port->println(F("[0x"));
+      //debug_serial_port->println(keystroke, HEX);
+      //debug_serial_port->println(']');
       if ((keystroke > 47) && (keystroke < 58)) {    // ascii 48-57 = "0" - "9")
         numbers[numberindex] = keystroke;
         numberindex++;
@@ -5400,7 +4898,7 @@ void debug_capture_dump()
       x = 0;
     }
   }
-  primary_serial_port->println("\n");
+  primary_serial_port->println(F("\n"));
   for ( int x = 1022; x > (1022-100); x-- ) {
     eeprom_byte_in = EEPROM.read(x);
     if (eeprom_byte_in < 255) {
@@ -6419,12 +5917,12 @@ int read_settings_from_eeprom() {
       debug_serial_port->println(F("read_settings_from_eeprom: start"));
     #endif
     #if defined(DEBUG_SETUP)
-    Serial.println("went here 8");
+    Serial.println(F("went here 8"));
     #endif
 
     if (EEPROM.read(0) == eeprom_magic_number){
     #if defined(DEBUG_SETUP)
-    Serial.println("went here 9");
+    Serial.println(F("went here 9"));
     #endif
       byte* p = (byte*)(void*)&configuration;
       unsigned int i;
@@ -6452,7 +5950,7 @@ int read_settings_from_eeprom() {
       return 0;
     } else {
     #if defined DEBUG_SETUP
-    Serial.println("Went here 10");
+    Serial.println(F("Went here 10"));
     #endif
       #if defined(DEBUG_EEPROM_READ_SETTINGS)
         debug_serial_port->println(F("read_settings_from_eeprom: eeprom needs initialized"));
@@ -6466,7 +5964,7 @@ int read_settings_from_eeprom() {
     debug_serial_port->println(F("read_settings_from_eeprom: bypassed read - no eeprom"));
   #endif
      #if defined DEBUG_SETUP
-    Serial.println("went here 11");
+    Serial.println(F("went here 11"));
     #endif
  
   return 1;
@@ -6854,11 +6352,11 @@ void tx_and_sidetone_key (int state)
 
     if ((state == 0) && (key_state) && (compression_detection_key_up_time == 0) && (compression_detection_key_down_time == 0)){
       compression_detection_key_up_time = millis();
-      //debug_serial_port->println("UP");
+      //debug_serial_port->println(F("UP"));
     }  
     if ((state) && (key_state == 0) && (compression_detection_key_up_time > 0) && (compression_detection_key_down_time == 0)) {
       compression_detection_key_down_time = millis();
-      //debug_serial_port->println("DOWN");
+      //debug_serial_port->println(F("DOWN"));
     }
 
     unsigned long key_up_to_key_down_time = 0;
@@ -6866,7 +6364,7 @@ void tx_and_sidetone_key (int state)
     if ((compression_detection_key_down_time != 0) && (compression_detection_key_up_time != 0)){  // do we have a measurement waiting for us?
       key_up_to_key_down_time = compression_detection_key_down_time - compression_detection_key_up_time;
       #if defined(DEBUG_FEATURE_COMPETITION_COMPRESSION_DETECTION)
-       // debug_serial_port->print("service_competition_compression_detection: key_up_to_key_down_time:");
+       // debug_serial_port->print(F("service_competition_compression_detection: key_up_to_key_down_time:"));
         //debug_serial_port->println(key_up_to_key_down_time);
       #endif 
       // is the time within the limits of what would be inter-character time?
@@ -6875,9 +6373,9 @@ void tx_and_sidetone_key (int state)
         if (time_array_index < COMPETITION_COMPRESSION_DETECTION_ARRAY_SIZE){ 
 
           #if defined(DEBUG_FEATURE_COMPETITION_COMPRESSION_DETECTION)
-            debug_serial_port->print("tx_and_sidetone_key: service_competition_compression_detection: array entry ");
+            debug_serial_port->print(F("tx_and_sidetone_key: service_competition_compression_detection: array entry "));
             debug_serial_port->print(time_array_index);
-            debug_serial_port->print(":");
+            debug_serial_port->print(F(":"));
             debug_serial_port->println(key_up_to_key_down_time);
           #endif 
 
@@ -6892,9 +6390,9 @@ void tx_and_sidetone_key (int state)
 
 
           #if defined(DEBUG_FEATURE_COMPETITION_COMPRESSION_DETECTION)
-            debug_serial_port->print("tx_and_sidetone_key: service_competition_compression_detection: FIFO array entry ");
+            debug_serial_port->print(F("tx_and_sidetone_key: service_competition_compression_detection: FIFO array entry "));
             debug_serial_port->print(time_array_index);
-            debug_serial_port->print(":");
+            debug_serial_port->print(F(":"));
             debug_serial_port->println(key_up_to_key_down_time);
           #endif 
 
@@ -6902,7 +6400,7 @@ void tx_and_sidetone_key (int state)
 
       } else {
         #if defined(DEBUG_FEATURE_COMPETITION_COMPRESSION_DETECTION)
-          //debug_serial_port->print("tx_and_sidetone_key: service_competition_compression_detection: discarded entry: ");
+          //debug_serial_port->print(F("tx_and_sidetone_key: service_competition_compression_detection: discarded entry: "));
           //debug_serial_port->println(key_up_to_key_down_time);
         #endif         
       }
@@ -7058,7 +6556,7 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
     #endif //FEATURE_SERIAL  
 
     #if defined(DEBUG_LOOP_ELEMENT_LENGTHS)
-      debug_serial_port->println("loop_element_lengths: enter");
+      debug_serial_port->println(F("loop_element_lengths: enter"));
     #endif
 
     
@@ -7269,7 +6767,7 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
     }  
 
     #if defined(DEBUG_LOOP_ELEMENT_LENGTHS)
-      debug_serial_port->println("loop_element_lengths: exit");
+      debug_serial_port->println(F("loop_element_lengths: exit"));
     #endif
 
 
@@ -7324,7 +6822,7 @@ void speed_change_command_mode(int change)
 void speed_set(int wpm_set){
 
 
-  if ((wpm_set > 0) && (wpm_set < 1000)){
+  if ((wpm_set >= wpm_limit_low) && (wpm_set <= wpm_limit_high)){
     configuration.wpm = wpm_set;
     config_dirty = 1;
 
@@ -8180,7 +7678,7 @@ void command_mode() {
           break;
 
         case 9: // button was hit
-                // Serial.print("Button - ");
+                // Serial.print(F("Button - "));
                 // Serial.println(button_that_was_pressed);
 
           #if defined(FEATURE_MEMORIES)
@@ -9086,7 +8584,7 @@ void initialize_analog_button_array() {
 #ifdef FEATURE_BUTTONS  
   
   #ifdef DEBUG_BUTTONS
-      debug_serial_port->print("initialize_analog_button_array: ");
+      debug_serial_port->print(F("initialize_analog_button_array: "));
   #endif
 
   #if defined(FEATURE_DL2SBA_BANKSWITCH)
@@ -10013,7 +9511,6 @@ void service_send_buffer(byte no_print)
 {
   // send one character out of the send buffer
 
-
   #ifdef DEBUG_LOOP
     debug_serial_port->println(F("loop: entering service_send_buffer"));
   #endif       
@@ -10026,12 +9523,12 @@ void service_send_buffer(byte no_print)
     byte no_bytes_flag = 0;
 
     if (send_buffer_bytes > 0){
-      debug_serial_port->print("service_send_buffer: enter:");
+      debug_serial_port->print(F("service_send_buffer: enter:"));
       for (int x = 0;x < send_buffer_bytes;x++){
         debug_serial_port->write(send_buffer_array[x]);
-        debug_serial_port->print("[");
+        debug_serial_port->print(F("["));
         debug_serial_port->print(send_buffer_array[x]);
-        debug_serial_port->print("]");
+        debug_serial_port->print(F("]"));
       }
       debug_serial_port->println();        
     } else {
@@ -10043,7 +9540,7 @@ void service_send_buffer(byte no_print)
 
   if (service_tx_inhibit_and_pause() == 1){
     #if defined(DEBUG_SERVICE_SEND_BUFFER)
-      debug_serial_port->println("service_send_buffer: tx_inhib");
+      debug_serial_port->println(F("service_send_buffer: tx_inhib"));
     #endif
     return;
     
@@ -10067,14 +9564,14 @@ void service_send_buffer(byte no_print)
       if ((send_buffer_array[0] > SERIAL_SEND_BUFFER_SPECIAL_START) && (send_buffer_array[0] < SERIAL_SEND_BUFFER_SPECIAL_END)) {
 
         #if defined(DEBUG_SERVICE_SEND_BUFFER)
-          debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_SPECIAL");
+          debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_SPECIAL"));
         #endif
 
 
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_HOLD_SEND) {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_HOLD_SEND");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_HOLD_SEND"));
           #endif
 
           send_buffer_status = SERIAL_SEND_BUFFER_HOLD;
@@ -10084,7 +9581,7 @@ void service_send_buffer(byte no_print)
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_HOLD_SEND_RELEASE) {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_HOLD_SEND_RELEASE");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_HOLD_SEND_RELEASE"));
           #endif
 
           remove_from_send_buffer();
@@ -10093,7 +9590,7 @@ void service_send_buffer(byte no_print)
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_MEMORY_NUMBER) {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_MEMORY_NUMBER");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_MEMORY_NUMBER"));
           #endif
 
           #ifdef DEBUG_SEND_BUFFER
@@ -10121,18 +9618,18 @@ void service_send_buffer(byte no_print)
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_WPM_CHANGE) {  // two bytes for wpm
           //remove_from_send_buffer();
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_WPM_CHANGE");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_WPM_CHANGE"));
           #endif
           if (send_buffer_bytes > 2) {
             #if defined(DEBUG_SERVICE_SEND_BUFFER)
-              debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_WPM_CHANGE: send_buffer_bytes>2");
+              debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_WPM_CHANGE: send_buffer_bytes>2"));
             #endif
             remove_from_send_buffer();
             #ifdef FEATURE_WINKEY_EMULATION
               if ((winkey_host_open) && (winkey_speed_state == WINKEY_UNBUFFERED_SPEED)){
                 winkey_speed_state = WINKEY_BUFFERED_SPEED;
                 #if defined(DEBUG_SERVICE_SEND_BUFFER)
-                  debug_serial_port->println("service_send_buffer: winkey_speed_state = WINKEY_BUFFERED_SPEED");
+                  debug_serial_port->println(F("service_send_buffer: winkey_speed_state = WINKEY_BUFFERED_SPEED"));
                 #endif
                 winkey_last_unbuffered_speed_wpm = configuration.wpm;
               }
@@ -10148,12 +9645,12 @@ void service_send_buffer(byte no_print)
             
           } else {
             #if defined(DEBUG_SERVICE_SEND_BUFFER)
-              debug_serial_port->println("service_send_buffer:SERIAL_SEND_BUFFER_WPM_CHANGE < 2");
+              debug_serial_port->println(F("service_send_buffer:SERIAL_SEND_BUFFER_WPM_CHANGE < 2"));
             #endif
           }
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->print("service_send_buffer: SERIAL_SEND_BUFFER_WPM_CHANGE: exit send_buffer_bytes:");
+            debug_serial_port->print(F("service_send_buffer: SERIAL_SEND_BUFFER_WPM_CHANGE: exit send_buffer_bytes:"));
             debug_serial_port->println(send_buffer_bytes);
           #endif
 
@@ -10163,7 +9660,7 @@ void service_send_buffer(byte no_print)
 
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_TX_CHANGE");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_TX_CHANGE"));
           #endif
 
           remove_from_send_buffer();
@@ -10194,7 +9691,7 @@ void service_send_buffer(byte no_print)
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_NULL) {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_NULL");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_NULL"));
           #endif
 
           remove_from_send_buffer();
@@ -10203,7 +9700,7 @@ void service_send_buffer(byte no_print)
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_PROSIGN) {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_PROSIGN");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_PROSIGN"));
           #endif
 
           remove_from_send_buffer();
@@ -10234,7 +9731,7 @@ void service_send_buffer(byte no_print)
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_TIMED_KEY_DOWN) {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_TIMED_KEY_DOWN");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_TIMED_KEY_DOWN"));
           #endif
 
           remove_from_send_buffer();
@@ -10252,7 +9749,7 @@ void service_send_buffer(byte no_print)
 
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_TIMED_WAIT");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_TIMED_WAIT"));
           #endif
 
           remove_from_send_buffer();
@@ -10267,7 +9764,7 @@ void service_send_buffer(byte no_print)
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_PTT_ON) {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_PTT_ON");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_PTT_ON"));
           #endif
 
           remove_from_send_buffer();
@@ -10278,7 +9775,7 @@ void service_send_buffer(byte no_print)
         if (send_buffer_array[0] == SERIAL_SEND_BUFFER_PTT_OFF) {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_PTT_OFF");
+            debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_PTT_OFF"));
           #endif
 
           remove_from_send_buffer();
@@ -10322,7 +9819,7 @@ void service_send_buffer(byte no_print)
         #endif //FEATURE_DISPLAY
 
         #if defined(DEBUG_SERVICE_SEND_BUFFER)
-          debug_serial_port->print("service_send_buffer: send_char:");
+          debug_serial_port->print(F("service_send_buffer: send_char:"));
           debug_serial_port->write(send_buffer_array[0]);
           debug_serial_port->println();
           Serial.flush();
@@ -10343,9 +9840,9 @@ void service_send_buffer(byte no_print)
         if (!pause_sending_buffer){
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: after send_char: remove_from_send_buffer");
+            debug_serial_port->println(F("service_send_buffer: after send_char: remove_from_send_buffer"));
             if (no_bytes_flag){
-              debug_serial_port->println("service_send_buffer: no_bytes_flag");
+              debug_serial_port->println(F("service_send_buffer: no_bytes_flag"));
             }
             Serial.flush();
           #endif
@@ -10354,9 +9851,9 @@ void service_send_buffer(byte no_print)
             remove_from_send_buffer();
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: after send_char: remove_from_send_buffer");
+            debug_serial_port->println(F("service_send_buffer: after send_char: remove_from_send_buffer"));
             if (no_bytes_flag){
-              debug_serial_port->println("service_send_buffer: no_bytes_flag");
+              debug_serial_port->println(F("service_send_buffer: no_bytes_flag"));
             }
             Serial.flush();
           #endif
@@ -10365,7 +9862,7 @@ void service_send_buffer(byte no_print)
           } else {
 
           #if defined(DEBUG_SERVICE_SEND_BUFFER)
-            debug_serial_port->println("service_send_buffer: snagged errant remove_from_send_buffer");
+            debug_serial_port->println(F("service_send_buffer: snagged errant remove_from_send_buffer"));
             Serial.flush();
           #endif
           }
@@ -10385,7 +9882,7 @@ void service_send_buffer(byte no_print)
         send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
 
         #if defined(DEBUG_SERVICE_SEND_BUFFER)
-          debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_TIMED_KEY_DOWN->SERIAL_SEND_BUFFER_NORMAL");
+          debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_TIMED_KEY_DOWN->SERIAL_SEND_BUFFER_NORMAL"));
         #endif
 
       }
@@ -10395,7 +9892,7 @@ void service_send_buffer(byte no_print)
         send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
 
         #if defined(DEBUG_SERVICE_SEND_BUFFER)
-          debug_serial_port->println("service_send_buffer: SERIAL_SEND_BUFFER_TIMED_WAIT->SERIAL_SEND_BUFFER_NORMAL");
+          debug_serial_port->println(F("service_send_buffer: SERIAL_SEND_BUFFER_TIMED_WAIT->SERIAL_SEND_BUFFER_NORMAL"));
         #endif
 
       }
@@ -10422,7 +9919,7 @@ void service_send_buffer(byte no_print)
   if (((dit_buffer || dah_buffer) && (send_buffer_bytes)) && (keyer_machine_mode != BEACON)) {
 
     #if defined(DEBUG_SERVICE_SEND_BUFFER)
-      debug_serial_port->println("service_send_buffer: buffer dump");
+      debug_serial_port->println(F("service_send_buffer: buffer dump"));
     #endif
 
     clear_send_buffer();
@@ -10475,14 +9972,14 @@ void remove_from_send_buffer()
   }
 
   #if defined(DEBUG_SERVICE_SEND_BUFFER)
-    debug_serial_port->print("remove_from_send_buffer: send_buffer_bytes:");
+    debug_serial_port->print(F("remove_from_send_buffer: send_buffer_bytes:"));
     debug_serial_port->println(send_buffer_bytes);
-    debug_serial_port->print("send_buffer:");
+    debug_serial_port->print(F("send_buffer:"));
     for (int x = 0;x < send_buffer_bytes;x++){
       debug_serial_port->write(send_buffer_array[x]);
-      debug_serial_port->print("[");
+      debug_serial_port->print(F("["));
       debug_serial_port->print(send_buffer_array[x]);
-      debug_serial_port->print("]");
+      debug_serial_port->print(F("]"));
     }
     debug_serial_port->println();    
   #endif
@@ -10513,17 +10010,17 @@ void add_to_send_buffer(byte incoming_serial_byte)
     }
 
     #if defined(DEBUG_SERVICE_SEND_BUFFER)
-      debug_serial_port->print("add_to_send_buffer: ");
+      debug_serial_port->print(F("add_to_send_buffer: "));
       debug_serial_port->write(incoming_serial_byte);
-      debug_serial_port->print(" [");
+      debug_serial_port->print(F(" ["));
       debug_serial_port->print(incoming_serial_byte);
-      debug_serial_port->println("]");
-      debug_serial_port->print("send_buffer:");
+      debug_serial_port->println(F("]"));
+      debug_serial_port->print(F("send_buffer:"));
       for (int x = 0;x < send_buffer_bytes;x++){
         debug_serial_port->write(send_buffer_array[x]);
-        debug_serial_port->print("[");
+        debug_serial_port->print(F("["));
         debug_serial_port->print(send_buffer_array[x]);
-        debug_serial_port->print("]");
+        debug_serial_port->print(F("]"));
       }
       debug_serial_port->println();
     #endif
@@ -10532,7 +10029,7 @@ void add_to_send_buffer(byte incoming_serial_byte)
   } else {
 
     #if defined(DEBUG_SERVICE_SEND_BUFFER)
-      debug_serial_port->println("add_to_send_buffer: !send_buffer_bytes < send_buffer_size");
+      debug_serial_port->println(F("add_to_send_buffer: !send_buffer_bytes < send_buffer_size"));
     #endif
 
   }
@@ -10911,90 +10408,90 @@ void winkey_load_settings_command(byte winkey_status,byte incoming_serial_byte) 
   switch(winkey_status) {
      case WINKEY_LOAD_SETTINGS_PARM_1_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_1_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_1_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_setmode_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_2_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_2_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_2_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_unbuffered_speed_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_3_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_3_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_3_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_sidetone_freq_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_4_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_4_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_4_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_weighting_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_5_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_5_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_5_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_ptt_times_parm1_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_6_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_6_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_6_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_ptt_times_parm2_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_7_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_7_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_7_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_set_pot_parm1_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_8_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_8_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_8_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_set_pot_parm2_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_9_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_9_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_9_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_first_extension_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_10_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_10_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_10_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_keying_compensation_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_11_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_11_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_11_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_farnsworth_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_12_COMMAND:  // paddle switchpoint - don't need to support
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_12_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_12_COMMAND"));
        #endif //DEBUG_WINKEY  
        break;
      case WINKEY_LOAD_SETTINGS_PARM_13_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_13_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_13_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_dah_to_dit_ratio_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_14_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_14_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_14_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_set_pinconfig_command(incoming_serial_byte);
        break;
      case WINKEY_LOAD_SETTINGS_PARM_15_COMMAND:
        #ifdef DEBUG_WINKEY
-         debug_serial_port->println("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_15_COMMAND");
+         debug_serial_port->println(F("winkey_load_settings_command: WINKEY_LOAD_SETTINGS_PARM_15_COMMAND"));
        #endif //DEBUG_WINKEY       
        winkey_set_pot_parm3_command(incoming_serial_byte);
        break;
@@ -11309,34 +10806,34 @@ void winkey_port_write(byte byte_to_send,byte override_filter){
 
   if (((byte_to_send > 4) && (byte_to_send < 31)) && (!override_filter)){
     #ifdef DEBUG_WINKEY
-      debug_serial_port->print("Winkey Port TX: FILTERED: ");    
+      debug_serial_port->print(F("Winkey Port TX: FILTERED: "));    
       if ((byte_to_send > 31) && (byte_to_send < 127)){
         debug_serial_port->write(byte_to_send);
       } else {
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
       }
-      debug_serial_port->print(" [");
+      debug_serial_port->print(F(" ["));
       debug_serial_port->print(byte_to_send);
-      debug_serial_port->print("] [0x");
+      debug_serial_port->print(F("] [0x"));
       debug_serial_port->print(byte_to_send,HEX);
-      debug_serial_port->println("]");
+      debug_serial_port->println(F("]"));
     #endif
     return;
   }
 
   primary_serial_port->write(byte_to_send);
   #ifdef DEBUG_WINKEY
-    debug_serial_port->print("Winkey Port TX: ");    
+    debug_serial_port->print(F("Winkey Port TX: "));    
     if ((byte_to_send > 31) && (byte_to_send < 127)){
       debug_serial_port->write(byte_to_send);
     } else {
-      debug_serial_port->print(".");
+      debug_serial_port->print(F("."));
     }
-    debug_serial_port->print(" [");
+    debug_serial_port->print(F(" ["));
     debug_serial_port->print(byte_to_send);
-    debug_serial_port->print("] [0x");
+    debug_serial_port->print(F("] [0x"));
     debug_serial_port->print(byte_to_send,HEX);
-    debug_serial_port->println("]");
+    debug_serial_port->println(F("]"));
   #endif
 }
 
@@ -11391,7 +10888,7 @@ void service_winkey(byte action) {
     if (winkey_interrupted) {   // if Winkey sending was interrupted by the paddle, look at PTT line rather than timing out to send 0xc0
       if (ptt_line_activated == 0) {
         #ifdef DEBUG_WINKEY
-          debug_serial_port->println("\r\nservice_winkey:sending unsolicited status byte due to paddle interrupt");
+          debug_serial_port->println(F("\r\nservice_winkey:sending unsolicited status byte due to paddle interrupt"));
         #endif //DEBUG_WINKEY       
         winkey_sending = 0;
         clear_send_buffer();
@@ -11417,7 +10914,7 @@ void service_winkey(byte action) {
         #endif
         //add_to_send_buffer(' ');    // this causes a 0x20 to get echoed back to host - doesn't seem to effect N1MM program
         #ifdef DEBUG_WINKEY
-          debug_serial_port->println("\r\nservice_winkey:sending unsolicited status byte");
+          debug_serial_port->println(F("\r\nservice_winkey:sending unsolicited status byte"));
         #endif //DEBUG_WINKEY           
         winkey_sending = 0;
         winkey_port_write(0xc0|winkey_sending|winkey_xoff,0);    // tell the host we've sent everything
@@ -11429,7 +10926,7 @@ void service_winkey(byte action) {
     // failsafe check - if we've been in some command status for awhile waiting for something, clear things out
     if ((winkey_status != WINKEY_NO_COMMAND_IN_PROGRESS) && ((millis() - winkey_last_activity) > winkey_command_timeout_ms)) {
       #ifdef DEBUG_WINKEY
-        debug_serial_port->print("\r\nservice_winkey:cmd tout!->WINKEY_NO_COMMAND_IN_PROGRESS cmd was:");
+        debug_serial_port->print(F("\r\nservice_winkey:cmd tout!->WINKEY_NO_COMMAND_IN_PROGRESS cmd was:"));
         debug_serial_port->println(winkey_status);
       #endif //DEBUG_WINKEY      
       winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
@@ -11440,7 +10937,7 @@ void service_winkey(byte action) {
 
     if ((winkey_host_open) && (winkey_paddle_echo_buffer) && (winkey_paddle_echo_activated) && (millis() > winkey_paddle_echo_buffer_decode_time)) {
       #ifdef DEBUG_WINKEY
-        debug_serial_port->println("\r\nservice_winkey:sending paddle echo char");
+        debug_serial_port->println(F("\r\nservice_winkey:sending paddle echo char"));
       #endif //DEBUG_WINKEY       
       winkey_port_write(byte(convert_cw_number_to_ascii(winkey_paddle_echo_buffer)),0);
       winkey_paddle_echo_buffer = 0;
@@ -11450,7 +10947,7 @@ void service_winkey(byte action) {
 
     if ((winkey_host_open) && (winkey_paddle_echo_buffer == 0) && (winkey_paddle_echo_activated) && (millis() > (winkey_paddle_echo_buffer_decode_time + (float(1200/configuration.wpm)*(configuration.length_wordspace-length_letterspace)))) && (!winkey_paddle_echo_space_sent)) {
       #ifdef DEBUG_WINKEY
-        debug_serial_port->println("\r\nservice_winkey:sending paddle echo space");
+        debug_serial_port->println(F("\r\nservice_winkey:sending paddle echo space"));
       #endif //DEBUG_WINKEY        
       winkey_port_write(' ',0);
       winkey_paddle_echo_space_sent = 1;
@@ -11459,19 +10956,19 @@ void service_winkey(byte action) {
 
   if (action == SERVICE_SERIAL_BYTE){
     #ifdef DEBUG_WINKEY
-      debug_serial_port->print("Winkey Port RX: ");
+      debug_serial_port->print(F("Winkey Port RX: "));
       if ((incoming_serial_byte > 31) && (incoming_serial_byte < 127)){
         debug_serial_port->write(incoming_serial_byte);
       } else {
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
       }
-      debug_serial_port->print(" [");
+      debug_serial_port->print(F(" ["));
       debug_serial_port->print(incoming_serial_byte);
-      debug_serial_port->print("]");
-      debug_serial_port->print(" [0x");
-      if (incoming_serial_byte < 16){debug_serial_port->print("0");}
+      debug_serial_port->print(F("]"));
+      debug_serial_port->print(F(" [0x"));
+      if (incoming_serial_byte < 16){debug_serial_port->print(F("0"));}
       debug_serial_port->print(incoming_serial_byte,HEX);
-      debug_serial_port->println("]");      
+      debug_serial_port->println(F("]"));      
     #endif //DEBUG_WINKEY
 
     winkey_last_activity = millis();
@@ -11512,9 +11009,9 @@ void service_winkey(byte action) {
           if ((send_buffer_bytes) && (serial_buffer_position_to_overwrite < send_buffer_bytes )) {
 
             #ifdef DEBUG_WINKEY
-              debug_serial_port->print("service_winkey:serial_buffer_position_to_overwrite:");
+              debug_serial_port->print(F("service_winkey:serial_buffer_position_to_overwrite:"));
               debug_serial_port->print(serial_buffer_position_to_overwrite);
-              debug_serial_port->print(":");
+              debug_serial_port->print(F(":"));
               debug_serial_port->write(incoming_serial_byte);
               debug_serial_port->println();
             #endif //DEBUG_WINKEY 
@@ -11526,9 +11023,9 @@ void service_winkey(byte action) {
           add_to_send_buffer(incoming_serial_byte);
 
           #ifdef DEBUG_WINKEY
-            debug_serial_port->print("service_winkey:add_to_send_buffer:");
+            debug_serial_port->print(F("service_winkey:add_to_send_buffer:"));
             debug_serial_port->write(incoming_serial_byte);
-            debug_serial_port->print(" send_buffer_bytes:");
+            debug_serial_port->print(F(" send_buffer_bytes:"));
             debug_serial_port->println(send_buffer_bytes);
           #endif //DEBUG_WINKEY 
 
@@ -11542,7 +11039,7 @@ void service_winkey(byte action) {
 
         if (!winkey_sending) {
           #ifdef DEBUG_WINKEY
-            debug_serial_port->println("service_winkey:status byte:starting to send");
+            debug_serial_port->println(F("service_winkey:status byte:starting to send"));
           #endif //DEBUG_WINKEY          
           winkey_sending=0x04;
           #if !defined(OPTION_WINKEY_UCXLOG_SUPRESS_C4_STATUS_BYTE)
@@ -11562,43 +11059,43 @@ void service_winkey(byte action) {
           case 0x00:
             winkey_status = WINKEY_ADMIN_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD"));
             #endif //DEBUG_WINKEY
             break;
           case 0x01:
             winkey_status = WINKEY_SIDETONE_FREQ_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_SIDETONE_FREQ_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_SIDETONE_FREQ_COMMAND"));
             #endif //DEBUG_WINKEY               
             break;
           case 0x02:  // speed command - unbuffered
             winkey_status = WINKEY_UNBUFFERED_SPEED_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_UNBUFFERED_SPEED_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_UNBUFFERED_SPEED_COMMAND"));
             #endif //DEBUG_WINKEY               
             break;
           case 0x03:  // weighting
             winkey_status = WINKEY_WEIGHTING_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_WEIGHTING_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_WEIGHTING_COMMAND"));
             #endif //DEBUG_WINKEY               
             break;
           case 0x04: // PTT lead and tail time
             winkey_status = WINKEY_PTT_TIMES_PARM1_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_PTT_TIMES_PARM1_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_PTT_TIMES_PARM1_COMMAND"));
             #endif //DEBUG_WINKEY               
             break;
           case 0x05:     // speed pot set
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_SET_POT_PARM1_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_SET_POT_PARM1_COMMAND"));
             #endif //DEBUG_WINKEY
             winkey_status = WINKEY_SET_POT_PARM1_COMMAND;
             break;
           case 0x06:
             winkey_status = WINKEY_PAUSE_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_PAUSE_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_PAUSE_COMMAND"));
             #endif //DEBUG_WINKEY               
             break;
           case 0x07:
@@ -11608,7 +11105,7 @@ void service_winkey(byte action) {
               winkey_port_write((byte(configuration.wpm-pot_wpm_low_value)|128),0);
             #endif
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:report pot");
+              debug_serial_port->println(F("service_winkey:report pot"));
             #endif //DEBUG_WINKEY               
             break;
           case 0x08:    // backspace command
@@ -11616,18 +11113,18 @@ void service_winkey(byte action) {
               send_buffer_bytes--;
             }
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:backspace");
+              debug_serial_port->println(F("service_winkey:backspace"));
             #endif //DEBUG_WINKEY               
             break;
           case 0x09:
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_SET_PINCONFIG_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_SET_PINCONFIG_COMMAND"));
             #endif //DEBUG_WINKEY             
             winkey_status = WINKEY_SET_PINCONFIG_COMMAND;
             break;
           case 0x0a:                 // 0A - clear buffer - no parms
             // #ifdef DEBUG_WINKEY
-            //   debug_serial_port->println("service_winkey:0A clear buff");
+            //   debug_serial_port->println(F("service_winkey:0A clear buff"));
             // #endif //DEBUG_WINKEY             
             clear_send_buffer();
             if (winkey_sending) {
@@ -11650,68 +11147,68 @@ void service_winkey(byte action) {
             winkey_speed_state = WINKEY_UNBUFFERED_SPEED;
             configuration.wpm = winkey_last_unbuffered_speed_wpm;   
             #ifdef DEBUG_WINKEY
-              debug_serial_port->print("service_winkey:0A clearbuff send_buffer_bytes:");
+              debug_serial_port->print(F("service_winkey:0A clearbuff send_buffer_bytes:"));
               debug_serial_port->println(send_buffer_bytes);
             #endif //DEBUG_WINKEY 
             break;
           case 0x0b:
             winkey_status = WINKEY_KEY_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_KEY_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_KEY_COMMAND"));
             #endif //DEBUG_WINKEY              
             break;
           case 0x0c:
             winkey_status = WINKEY_HSCW_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_HSCW_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_HSCW_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           case 0x0d:
             winkey_status = WINKEY_FARNSWORTH_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_FARNSWORTH_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_FARNSWORTH_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           case 0x0e:
             winkey_status = WINKEY_SETMODE_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_SETMODE_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_SETMODE_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           case 0x0f:  // bulk load of defaults
             winkey_status = WINKEY_LOAD_SETTINGS_PARM_1_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_LOAD_SETTINGS_PARM_1_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_LOAD_SETTINGS_PARM_1_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           case 0x10:
             winkey_status = WINKEY_FIRST_EXTENSION_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_FIRST_EXTENSION_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_FIRST_EXTENSION_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           case 0x11:
             winkey_status = WINKEY_KEYING_COMPENSATION_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_KEYING_COMPENSATION_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_KEYING_COMPENSATION_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           case 0x12:
             winkey_status = WINKEY_UNSUPPORTED_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:0x12unsupport");
+              debug_serial_port->println(F("service_winkey:0x12unsupport"));
             #endif //DEBUG_WINKEY     
             winkey_parmcount = 1;
             break;
           case 0x13:  // NULL command
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:0x13null");
+              debug_serial_port->println(F("service_winkey:0x13null"));
             #endif //DEBUG_WINKEY               
             break;
           case 0x14:
             winkey_status = WINKEY_SOFTWARE_PADDLE_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_SOFTWARE_PADDLE_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_SOFTWARE_PADDLE_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           case 0x15:  // report status
@@ -11722,7 +11219,7 @@ void service_winkey(byte action) {
               }
               winkey_port_write(status_byte_to_send,0);
               #ifdef DEBUG_WINKEY
-                debug_serial_port->print("service_winkey:0x15 rpt status:");
+                debug_serial_port->print(F("service_winkey:0x15 rpt status:"));
                 debug_serial_port->println(status_byte_to_send);
               #endif //DEBUG_WINKEY  
             #else //OPTION_WINKEY_IGNORE_FIRST_STATUS_REQUEST ------------------------
@@ -11733,13 +11230,13 @@ void service_winkey(byte action) {
                 }
                 winkey_port_write(status_byte_to_send,0);
                 #ifdef DEBUG_WINKEY
-                debug_serial_port->print("service_winkey:0x15 rpt status:");
+                debug_serial_port->print(F("service_winkey:0x15 rpt status:"));
                 debug_serial_port->println(status_byte_to_send);
                 #endif //DEBUG_WINKEY 
                 } else {
                   ignored_first_status_request = 1;
                   #ifdef DEBUG_WINKEY
-                  debug_serial_port->println("service_winkey:ignored first 0x15 status request");
+                  debug_serial_port->println(F("service_winkey:ignored first 0x15 status request"));
                   #endif //DEBUG_WINKEY                
                 }
             #endif //OPTION_WINKEY_IGNORE_FIRST_STATUS_REQUEST -------------------- 
@@ -11748,56 +11245,56 @@ void service_winkey(byte action) {
           case 0x16:  // Pointer operation
             winkey_status = WINKEY_POINTER_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_POINTER_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_POINTER_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           case 0x17:  // dit to dah ratio
             winkey_status = WINKEY_DAH_TO_DIT_RATIO_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_DAH_TO_DIT_RATIO_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_DAH_TO_DIT_RATIO_COMMAND"));
             #endif //DEBUG_WINKEY                 
             break;
           // start of buffered commands ------------------------------
           case 0x18:   //buffer PTT on/off
             winkey_status = WINKEY_BUFFFERED_PTT_COMMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_BUFFFERED_PTT_COMMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_BUFFFERED_PTT_COMMMAND"));
             #endif //DEBUG_WINKEY            
             break;
           case 0x19:
             winkey_status = WINKEY_KEY_BUFFERED_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_KEY_BUFFERED_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_KEY_BUFFERED_COMMAND"));
             #endif //DEBUG_WINKEY            
             break;
           case 0x1a:
             winkey_status = WINKEY_WAIT_BUFFERED_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_WAIT_BUFFERED_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_WAIT_BUFFERED_COMMAND"));
             #endif //DEBUG_WINKEY            
             break;
           case 0x1b:
             winkey_status = WINKEY_MERGE_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_MERGE_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_MERGE_COMMAND"));
             #endif //DEBUG_WINKEY            
             break;
           case 0x1c:      // speed command - buffered
              winkey_status = WINKEY_BUFFERED_SPEED_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_BUFFERED_SPEED_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_BUFFERED_SPEED_COMMAND"));
             #endif //DEBUG_WINKEY             
             break;
           case 0x1d:
             winkey_status = WINKEY_BUFFERED_HSCW_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_BUFFERED_HSCW_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_BUFFERED_HSCW_COMMAND"));
             #endif //DEBUG_WINKEY            
             break;
           case 0x1e:  // cancel buffered speed command - buffered
 
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_CANCEL_BUFFERED_SPEED_COMMAND");
+              debug_serial_port->println(F("service_winkey:WINKEY_CANCEL_BUFFERED_SPEED_COMMAND"));
             #endif //DEBUG_WINKEY     
 
             if (winkey_speed_state == WINKEY_BUFFERED_SPEED){
@@ -11806,18 +11303,18 @@ void service_winkey(byte action) {
               add_to_send_buffer((byte)winkey_last_unbuffered_speed_wpm);
               winkey_speed_state = WINKEY_UNBUFFERED_SPEED;
               #ifdef DEBUG_WINKEY
-                debug_serial_port->println("service_winkey:winkey_speed_state = WINKEY_UNBUFFERED_SPEED");
+                debug_serial_port->println(F("service_winkey:winkey_speed_state = WINKEY_UNBUFFERED_SPEED"));
               #endif //DEBUG_WINKEY 
             } else {
               #ifdef DEBUG_WINKEY
-                debug_serial_port->println("service_winkey:WINKEY_CANCEL_BUFFERED_SPEED_COMMAND: no action");
+                debug_serial_port->println(F("service_winkey:WINKEY_CANCEL_BUFFERED_SPEED_COMMAND: no action"));
               #endif //DEBUG_WINKEY         
             }       
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             break;
           case 0x1f:  // buffered NOP - no need to do anything
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:1F NOP");
+              debug_serial_port->println(F("service_winkey:1F NOP"));
             #endif //DEBUG_WINKEY          
             break;
 
@@ -11826,7 +11323,7 @@ void service_winkey(byte action) {
               winkey_status = WINKEY_EXTENDED_COMMAND;
               beep();
               #ifdef DEBUG_WINKEY
-                debug_serial_port->println("service_winkey:WINKEY_EXTENDED_COMMAND");
+                debug_serial_port->println(F("service_winkey:WINKEY_EXTENDED_COMMAND"));
               #endif //DEBUG_WINKEY  
               break;
           #endif //OPTION_WINKEY_EXTENDED_COMMANDS_WITH_DOLLAR_SIGNS
@@ -11842,14 +11339,14 @@ void service_winkey(byte action) {
       if (winkey_status == WINKEY_UNSUPPORTED_COMMAND) {
         winkey_parmcount--;
         #ifdef DEBUG_WINKEY
-          debug_serial_port->print("service_winkey:WINKEY_UNSUPPORTED_COMMAND winkey_parmcount:");
+          debug_serial_port->print(F("service_winkey:WINKEY_UNSUPPORTED_COMMAND winkey_parmcount:"));
           debug_serial_port->println(winkey_parmcount);
         #endif //DEBUG_WINKEY          
         if (winkey_parmcount == 0) {
           winkey_port_write(0xc0|winkey_sending|winkey_xoff,0);           
           winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
           #ifdef DEBUG_WINKEY
-            debug_serial_port->print("service_winkey:WINKEY_UNSUPPORTED_COMMAND:WINKEY_NO_COMMAND_IN_PROGRESS");
+            debug_serial_port->print(F("service_winkey:WINKEY_UNSUPPORTED_COMMAND:WINKEY_NO_COMMAND_IN_PROGRESS"));
             debug_serial_port->println(winkey_parmcount);
           #endif //DEBUG_WINKEY          
         }
@@ -11863,7 +11360,7 @@ void service_winkey(byte action) {
         if (winkey_status > 115) {
           winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
          #ifdef DEBUG_WINKEY
-           debug_serial_port->println("service_winkey:WINKEY_LOAD_SETTINGS_PARM_15->NOCMD");
+           debug_serial_port->println(F("service_winkey:WINKEY_LOAD_SETTINGS_PARM_15->NOCMD"));
          #endif //DEBUG_WINKEY            
         }
       }
@@ -11926,18 +11423,18 @@ void service_winkey(byte action) {
 
       if (winkey_status == WINKEY_BUFFERED_SPEED_COMMAND) {
         #ifdef DEBUG_WINKEY
-          debug_serial_port->print("service_winkey:BUFFERED_SPEED_CMD:send_buffer_bytes:");
+          debug_serial_port->print(F("service_winkey:BUFFERED_SPEED_CMD:send_buffer_bytes:"));
           debug_serial_port->println(send_buffer_bytes);
         #endif //DEBUG_WINKEY         
         add_to_send_buffer(SERIAL_SEND_BUFFER_WPM_CHANGE);
         add_to_send_buffer(0);
         add_to_send_buffer(incoming_serial_byte);
         #ifdef DEBUG_WINKEY
-          debug_serial_port->print("service_winkey:BUFFERED_SPEED_CMD:send_buffer_bytes:");
+          debug_serial_port->print(F("service_winkey:BUFFERED_SPEED_CMD:send_buffer_bytes:"));
           debug_serial_port->println(send_buffer_bytes);
         #endif //DEBUG_WINKEY         
         #ifdef DEBUG_WINKEY
-          debug_serial_port->println("service_winkey:WINKEY_BUFFERED_SPEED_COMMAND->NOCMD");
+          debug_serial_port->println(F("service_winkey:WINKEY_BUFFERED_SPEED_COMMAND->NOCMD"));
         #endif //DEBUG_WINKEY           
         winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
       }
@@ -11980,9 +11477,9 @@ void service_winkey(byte action) {
         winkey_buffer_pointer = incoming_serial_byte;
         winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
         #ifdef DEBUG_WINKEY
-          debug_serial_port->print("service_winkey:PTR1_CMD->NOCMD winkey_buffer_pointer:");
+          debug_serial_port->print(F("service_winkey:PTR1_CMD->NOCMD winkey_buffer_pointer:"));
           debug_serial_port->print(winkey_buffer_pointer);
-          debug_serial_port->print("send_buffer_bytes:");
+          debug_serial_port->print(F("send_buffer_bytes:"));
           debug_serial_port->println(send_buffer_bytes);
         #endif //DEBUG_WINKEY          
       }
@@ -11991,22 +11488,22 @@ void service_winkey(byte action) {
         winkey_buffer_pointer = 0;
         winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
         #ifdef DEBUG_WINKEY
-          debug_serial_port->print("service_winkey:PTR2_CMD->NOCMD send_buffer_bytes:");
+          debug_serial_port->print(F("service_winkey:PTR2_CMD->NOCMD send_buffer_bytes:"));
           debug_serial_port->print(send_buffer_bytes);          
-          debug_serial_port->print(" winkey_buffer_counter:");
+          debug_serial_port->print(F(" winkey_buffer_counter:"));
           debug_serial_port->print(winkey_buffer_counter);
-          debug_serial_port->print(" winkey_buffer_pointer:");
+          debug_serial_port->print(F(" winkey_buffer_pointer:"));
           debug_serial_port->println(winkey_buffer_pointer);          
         #endif //DEBUG_WINKEY          
       }
 
       if (winkey_status == WINKEY_POINTER_03_COMMAND) { // add multiple nulls to buffer
         #ifdef DEBUG_WINKEY
-          debug_serial_port->print("service_winkey:PTR3_CMD send_buffer_bytes:");
+          debug_serial_port->print(F("service_winkey:PTR3_CMD send_buffer_bytes:"));
           debug_serial_port->print(send_buffer_bytes);          
-          debug_serial_port->print(" winkey_buffer_counter:");
+          debug_serial_port->print(F(" winkey_buffer_counter:"));
           debug_serial_port->print(winkey_buffer_counter);
-          debug_serial_port->print(" winkey_buffer_pointer:");
+          debug_serial_port->print(F(" winkey_buffer_pointer:"));
           debug_serial_port->println(winkey_buffer_pointer);          
         #endif //DEBUG_WINKEY       
         byte serial_buffer_position_to_overwrite;
@@ -12024,11 +11521,11 @@ void service_winkey(byte action) {
         }
         winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
         #ifdef DEBUG_WINKEY
-          debug_serial_port->print("service_winkey:PTR3_CMD->NO_CMD send_buffer_bytes:");
+          debug_serial_port->print(F("service_winkey:PTR3_CMD->NO_CMD send_buffer_bytes:"));
           debug_serial_port->print(send_buffer_bytes);          
-          debug_serial_port->print(" winkey_buffer_counter:");
+          debug_serial_port->print(F(" winkey_buffer_counter:"));
           debug_serial_port->print(winkey_buffer_counter);
-          debug_serial_port->print(" winkey_buffer_pointer:");
+          debug_serial_port->print(F(" winkey_buffer_pointer:"));
           debug_serial_port->println(winkey_buffer_pointer);          
         #endif //DEBUG_WINKEY 
       }
@@ -12040,36 +11537,36 @@ void service_winkey(byte action) {
             winkey_buffer_pointer = 0;
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->print("service_winkey:PTR_CMD->NOCMD send_buffer_bytes:");
+              debug_serial_port->print(F("service_winkey:PTR_CMD->NOCMD send_buffer_bytes:"));
               debug_serial_port->print(send_buffer_bytes);
-              debug_serial_port->print(" winkey_buffer_counter:");
+              debug_serial_port->print(F(" winkey_buffer_counter:"));
               debug_serial_port->print(winkey_buffer_counter);
-              debug_serial_port->print(" winkey_buffer_pointer:");
+              debug_serial_port->print(F(" winkey_buffer_pointer:"));
               debug_serial_port->println(winkey_buffer_pointer);
             #endif //DEBUG_WINKEY               
             break;
           case 0x01:
             winkey_status = WINKEY_POINTER_01_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:PTR1_CMD");
+              debug_serial_port->println(F("service_winkey:PTR1_CMD"));
             #endif //DEBUG_WINKEY              
             break;
           case 0x02:
             winkey_status = WINKEY_POINTER_02_COMMAND;  // move to new position in append mode
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:PTR2_CMD");
+              debug_serial_port->println(F("service_winkey:PTR2_CMD"));
             #endif //DEBUG_WINKEY            
             break;
           case 0x03:
             winkey_status = WINKEY_POINTER_03_COMMAND;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:PTR3_CMD");
+              debug_serial_port->println(F("service_winkey:PTR3_CMD"));
             #endif //DEBUG_WINKEY            
             break;
           default:
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:PTR_CMD->NOCMD");
+              debug_serial_port->println(F("service_winkey:PTR_CMD->NOCMD"));
             #endif //DEBUG_WINKEY            
             break;
         }
@@ -12094,12 +11591,12 @@ void service_winkey(byte action) {
             winkey_status = WINKEY_UNSUPPORTED_COMMAND;
             winkey_parmcount = 1;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:calib cmd UNSUPPORTED_COMMAND await 1 parm");
+              debug_serial_port->println(F("service_winkey:calib cmd UNSUPPORTED_COMMAND await 1 parm"));
             #endif //DEBUG_WINKEY            
             break;  // calibrate command
           case 0x01:
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:WINKEY_ADMIN_COMMAND 0x01");
+              debug_serial_port->println(F("service_winkey:WINKEY_ADMIN_COMMAND 0x01"));
             #endif //DEBUG_WINKEY          
             #if defined(__AVR__) //#ifndef ARDUINO_SAM_DUE
               asm volatile ("jmp 0"); /*wdt_enable(WDTO_30MS); while(1) {};*/ 
@@ -12117,7 +11614,7 @@ void service_winkey(byte action) {
             manual_ptt_invoke = 0;
             winkey_host_open = 1;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD hostopen");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD hostopen"));
             #endif //DEBUG_WINKEY  
             #if defined(OPTION_WINKEY_BLINK_PTT_ON_HOST_OPEN)    
               blink_ptt_dits_and_dahs("..");
@@ -12137,7 +11634,7 @@ void service_winkey(byte action) {
               #endif //OPTION_WINKEY_2_SUPPORT 
             #endif  //OPTION_WINKEY_SEND_VERSION_ON_HOST_CLOSE           
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD hostclose");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD hostclose"));
             #endif //DEBUG_WINKEY                  
             beep_boop();
             config_dirty = 1;
@@ -12149,39 +11646,39 @@ void service_winkey(byte action) {
           case 0x04:  // echo command
             winkey_status = WINKEY_ADMIN_COMMAND_ECHO;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD_ECHO");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD_ECHO"));
             #endif //DEBUG_WINKEY              
             break;
           case 0x05: // paddle A2D
             winkey_port_write(WINKEY_RETURN_THIS_FOR_ADMIN_PADDLE_A2D,0);
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD paddleA2D");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD paddleA2D"));
             #endif //DEBUG_WINKEY              
             break;
           case 0x06: // speed A2D
             winkey_port_write(WINKEY_RETURN_THIS_FOR_ADMIN_SPEED_A2D,0);
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD speedA2D");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD speedA2D"));
             #endif //DEBUG_WINKEY              
             break;
           case 0x07: // Get values
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD winkey_admin_get_values");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD winkey_admin_get_values"));
             #endif //DEBUG_WINKEY             
             winkey_admin_get_values_command();
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             break;
           case 0x08: // reserved
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD0x08reserved-WTF");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD0x08reserved-WTF"));
             #endif //DEBUG_WINKEY              
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             break;  
           case 0x09: // get cal
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMDgetcal");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMDgetcal"));
             #endif //DEBUG_WINKEY           
             winkey_port_write(WINKEY_RETURN_THIS_FOR_ADMIN_GET_CAL,0);
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
@@ -12191,12 +11688,12 @@ void service_winkey(byte action) {
             wk2_mode = 1;
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD wk2_mode1");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD wk2_mode1"));
             #endif //DEBUG_WINKEY              
             break;
           case 0x0b: // set wk2 mode (11)
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD wk2_mode2");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD wk2_mode2"));
             #endif //DEBUG_WINKEY              
             beep();
             beep();
@@ -12205,21 +11702,21 @@ void service_winkey(byte action) {
             break;            
           case 0x0c: // download EEPPROM 256 bytes (12)
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD winkey_eeprom_download");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD winkey_eeprom_download"));
             #endif //DEBUG_WINKEY           
             winkey_eeprom_download();
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             break;   
           case 0x0d: // upload EEPROM 256 bytes (13)
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD uploadEEPROM");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD uploadEEPROM"));
             #endif //DEBUG_WINKEY           
             winkey_status = WINKEY_UNSUPPORTED_COMMAND;  // upload EEPROM 256 bytes
             winkey_parmcount = 256;
             break;       
           case 0x0e: //(14)
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD WINKEY_SEND_MSG");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD WINKEY_SEND_MSG"));
             #endif //DEBUG_WINKEY          
             winkey_status = WINKEY_SEND_MSG;
             break;
@@ -12227,7 +11724,7 @@ void service_winkey(byte action) {
             winkey_status = WINKEY_UNSUPPORTED_COMMAND;
             winkey_parmcount = 1;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD loadxmode");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD loadxmode"));
             #endif //DEBUG_WINKEY            
             break;            
           case 0x10: // reserved (16)
@@ -12236,7 +11733,7 @@ void service_winkey(byte action) {
             break;
           case 0x11: // set high baud rate (17)
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD sethighbaudrate");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD sethighbaudrate"));
             #endif //DEBUG_WINKEY            
             primary_serial_port->end();
             primary_serial_port->begin(9600);
@@ -12244,7 +11741,7 @@ void service_winkey(byte action) {
             break;
           case 0x12: // set low baud rate (18)
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD setlowbaudrate");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD setlowbaudrate"));
             #endif //DEBUG_WINKEY           
             primary_serial_port->end();
             primary_serial_port->begin(1200);
@@ -12255,7 +11752,7 @@ void service_winkey(byte action) {
           #ifdef FEATURE_SO2R_BASE
             case 0xF0: // Send SO2R device information
               #ifdef DEBUG_WINKEY
-                debug_serial_port->println("service_winkey:ADMIN_CMD getSO2Rdeviceinfo");
+                debug_serial_port->println(F("service_winkey:ADMIN_CMD getSO2Rdeviceinfo"));
               #endif
             
               static const uint8_t device_info[] = { 0xAA, 0x55, 0xCC, 0x33, // Header
@@ -12281,7 +11778,7 @@ void service_winkey(byte action) {
               break;
 
             case 0xFF: // No-op
-              debug_serial_port->println("service_winkey:NO-OP");
+              debug_serial_port->println(F("service_winkey:NO-OP"));
               winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
               break;
 
@@ -12290,14 +11787,14 @@ void service_winkey(byte action) {
           default:
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             #ifdef DEBUG_WINKEY
-              debug_serial_port->println("service_winkey:ADMIN_CMD->NOCMD");
+              debug_serial_port->println(F("service_winkey:ADMIN_CMD->NOCMD"));
             #endif //DEBUG_WINKEY             
             break;
           }
       } else {
         if (winkey_status == WINKEY_ADMIN_COMMAND_ECHO) {
           #ifdef DEBUG_WINKEY
-            debug_serial_port->println("service_winkey:ADMIN_CMD echoabyte.");
+            debug_serial_port->println(F("service_winkey:ADMIN_CMD echoabyte."));
           #endif //DEBUG_WINKEY  
           winkey_port_write(incoming_serial_byte,1);
           winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
@@ -12306,7 +11803,7 @@ void service_winkey(byte action) {
 
       if (winkey_status == WINKEY_KEYING_COMPENSATION_COMMAND) {
         #ifdef DEBUG_WINKEY
-          debug_serial_port->println("service_winkey:ADMIN_CMD WINKEY_KEYING_COMPENSATION_COMMAND byte");
+          debug_serial_port->println(F("service_winkey:ADMIN_CMD WINKEY_KEYING_COMPENSATION_COMMAND byte"));
         #endif //DEBUG_WINKEY         
         configuration.keying_compensation = incoming_serial_byte;
         winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
@@ -12314,7 +11811,7 @@ void service_winkey(byte action) {
 
       if (winkey_status == WINKEY_FIRST_EXTENSION_COMMAND) {
         #ifdef DEBUG_WINKEY
-          debug_serial_port->println("service_winkey:ADMIN_COMMAND WINKEY_FIRST_EXTENSION_COMMAND byte");
+          debug_serial_port->println(F("service_winkey:ADMIN_COMMAND WINKEY_FIRST_EXTENSION_COMMAND byte"));
         #endif //DEBUG_WINKEY              
         first_extension_time = incoming_serial_byte;
         #ifdef DEBUG_WINKEY_PROTOCOL_USING_CW
@@ -12326,12 +11823,12 @@ void service_winkey(byte action) {
       if (winkey_status == WINKEY_PAUSE_COMMAND) {
         if (incoming_serial_byte) {
           #ifdef DEBUG_WINKEY
-            debug_serial_port->println("service_winkey:ADMIN_CMD WINKEY_PAUSE_COMMANDpause");
+            debug_serial_port->println(F("service_winkey:ADMIN_CMD WINKEY_PAUSE_COMMANDpause"));
           #endif //DEBUG_WINKEY           
           pause_sending_buffer = 1;
         } else {
           #ifdef DEBUG_WINKEY
-            debug_serial_port->println("service_winkey:ADMIN_CMD WINKEY_PAUSE_COMMANDunpause");
+            debug_serial_port->println(F("service_winkey:ADMIN_CMD WINKEY_PAUSE_COMMANDunpause"));
           #endif //DEBUG_WINKEY             
           pause_sending_buffer = 0;
         }
@@ -12649,7 +12146,7 @@ void serial_page_pause(PRIMARY_SERIAL_CLS * port_to_use,byte seconds_timeout){
   
   unsigned long pause_start_time = millis();
 
-  port_to_use->println("\r\nPress enter...");
+  port_to_use->println(F("\r\nPress enter..."));
   while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){}
   while (port_to_use->available()){port_to_use->read();}
 
@@ -13400,9 +12897,9 @@ void cli_timing_print(PRIMARY_SERIAL_CLS * port_to_use){
   port_to_use->println(F("--\t----\t----"));
   for (int x = 0; x < 6; x++){
     port_to_use->print(x+1);
-    port_to_use->print("\t");
+    port_to_use->print(F("\t"));
     port_to_use->print(configuration.ptt_lead_time[x]);
-    port_to_use->print("\t");
+    port_to_use->print(F("\t"));
     port_to_use->println(configuration.ptt_tail_time[x]);
   }
   #if defined(FEATURE_SEQUENCER)
@@ -13411,9 +12908,9 @@ void cli_timing_print(PRIMARY_SERIAL_CLS * port_to_use){
   port_to_use->println(F("-\t------------------------------\t----------------------------------"));
   for (int x = 0; x < 5; x++){
     port_to_use->print(x+1);
-    port_to_use->print("\t\t\t");
+    port_to_use->print(F("\t\t\t"));
     port_to_use->print(configuration.ptt_active_to_sequencer_active_time[x]);
-    port_to_use->print("\t\t\t\t");
+    port_to_use->print(F("\t\t\t\t"));
     port_to_use->println(configuration.ptt_inactive_to_sequencer_inactive_time[x]);
   }  
   #endif //FEATURE_SEQUENCER
@@ -13443,12 +12940,12 @@ void cli_sd_ls_command(PRIMARY_SERIAL_CLS * port_to_use,String directory){
       break;
     }
     if (entry.isDirectory()) {
-      port_to_use->print("/");
+      port_to_use->print(F("/"));
       port_to_use->println(entry.name());
     } else {
       // files have sizes, directories do not
       port_to_use->print(entry.name());
-      port_to_use->print("\t\t");
+      port_to_use->print(F("\t\t"));
       port_to_use->println(entry.size(), DEC);
     }
     entry.close();
@@ -13517,7 +13014,7 @@ void sd_card_load_eeprom_from_file(PRIMARY_SERIAL_CLS * port_to_use,String filen
   for (x = 0; x < memory_area_end; x++) {
     if (sdfile.available()){
       EEPROM.write(x,sdfile.read());
-      if ((x % 16) == 0){port_to_use->print("#");}
+      if ((x % 16) == 0){port_to_use->print(F("#"));}
     } else {
       x = memory_area_end;
       port_to_use->println(F("\r\nHit end of file before end of eeprom"));
@@ -13558,7 +13055,7 @@ void sd_card_save_eeprom_to_file(PRIMARY_SERIAL_CLS * port_to_use,String filenam
   for (x = 0; x < memory_area_end; x++) {
     eeprom_byte_in = EEPROM.read(x);
     sdfile.write(eeprom_byte_in);
-    if ((x % 16) == 0){port_to_use->print(".");}
+    if ((x % 16) == 0){port_to_use->print(F("."));}
   }
 
   sdfile.close();
@@ -13582,26 +13079,26 @@ void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use){
 
   for (x = 0; x < memory_area_end; x++) {
     if (y == 0){
-      port_to_use->print("\r\n");
-      if (x < 0x1000){port_to_use->print("0");}
-      if (x < 0x100){port_to_use->print("0");}
-      if (x < 0x10){port_to_use->print("0");}
+      port_to_use->print(F("\r\n"));
+      if (x < 0x1000){port_to_use->print(F("0"));}
+      if (x < 0x100){port_to_use->print(F("0"));}
+      if (x < 0x10){port_to_use->print(F("0"));}
       port_to_use->print(x,HEX);
-      port_to_use->print("\t");
+      port_to_use->print(F("\t"));
     }
     eeprom_byte_in = EEPROM.read(x);
-    if (eeprom_byte_in < 0x10){port_to_use->print("0");}
+    if (eeprom_byte_in < 0x10){port_to_use->print(F("0"));}
     port_to_use->print(eeprom_byte_in,HEX);
     port_to_use->write(" ");
     y++;
     if (y > (EEPROM_DUMP_COLUMNS - 1)){
-      port_to_use->print("\t");
+      port_to_use->print(F("\t"));
       for (int z = x - y; z < x; z++) {
         eeprom_byte_in = EEPROM.read(z);
         if ((eeprom_byte_in > 31) && (eeprom_byte_in < 127)){
           port_to_use->write(eeprom_byte_in);
         } else {
-          port_to_use->print(".");
+          port_to_use->print(F("."));
         }  
       }
       y = 0;
@@ -13618,13 +13115,13 @@ void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use){
     for (int z = (EEPROM_DUMP_COLUMNS - y); z > 0; z--){
       port_to_use->write("   ");
     }
-    port_to_use->print("\t");
+    port_to_use->print(F("\t"));
     for (int z = x - y; z < x; z++) {
       eeprom_byte_in = EEPROM.read(z);
       if ((eeprom_byte_in > 31) && (eeprom_byte_in < 127)){
         port_to_use->write(eeprom_byte_in);
       } else {
-        port_to_use->print(".");
+        port_to_use->print(F("."));
       }  
     }    
   }
@@ -13846,7 +13343,7 @@ void service_paddle_echo()
         break;
     }
       #ifdef DEBUG_CW_COMPUTER_KEYBOARD
-        debug_serial_port->print("service_paddle_echo: Keyboard.write: ");
+        debug_serial_port->print(F("service_paddle_echo: Keyboard.write: "));
         debug_serial_port->write(character_to_send);
         debug_serial_port->println();
       #endif //DEBUG_CW_COMPUTER_KEYBOARD
@@ -13977,7 +13474,7 @@ void service_paddle_echo()
       if (!no_space){
         Keyboard.write(' ');
         #ifdef DEBUG_CW_COMPUTER_KEYBOARD
-          debug_serial_port->println("service_paddle_echo: Keyboard.write: <space>");
+          debug_serial_port->println(F("service_paddle_echo: Keyboard.write: <space>"));
         #endif //DEBUG_CW_COMPUTER_KEYBOARD 
       }
       no_space = 0;   
@@ -14650,7 +14147,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
     port_to_use->println(F("R - Random Groups Receive Practice"));
     port_to_use->println(F("W - Wordsworth Receive Practice"));
     port_to_use->println(F("E - Receive / Transmit Echo Practice"));
-    //port_to_use->println("2 - PA QSO Party");   // Don't think this is working right / wasn't finished - Goody 2017-05-01
+    //port_to_use->println(F("2 - PA QSO Party");   // Don't think this is working right / wasn't finished - Goody 2017-05-01
     port_to_use->println(F("\nX - Exit\n"));
     
     menu_loop2 = 1;
@@ -15276,7 +14773,7 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
 
     if (x == group_size){
       send_char(' ',KEYER_NORMAL);
-      port_to_use->print(" ");
+      port_to_use->print(F(" "));
       #ifdef FEATURE_DISPLAY
         display_scroll_print_char(' ');
         service_display();
@@ -15286,7 +14783,7 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
     }
 
     if (y > 4){
-      port_to_use->println("");
+      port_to_use->println(F(""));
       y = 0;
     }
 
@@ -15346,7 +14843,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
     port_to_use->print(configuration.wpm * (effective_wpm_factor[configuration.wordsworth_wordspace-1]/100.0),0);
     port_to_use->print(F(" Repetition:"));
     port_to_use->println(configuration.wordsworth_repetition);
-    port_to_use->println("\r\n\nEnter choice >");
+    port_to_use->println(F("\r\n\nEnter choice >"));
 
     menu_loop2 = 1;
     
@@ -15456,9 +14953,9 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
     }
 
     #if defined(DEBUG_WORDSWORTH)
-      debug_serial_port->print("wordsworth_practice: word_index:");
+      debug_serial_port->print(F("wordsworth_practice: word_index:"));
       debug_serial_port->println(word_index);
-      debug_serial_port->print("wordsworth_practice: word_buffer:");
+      debug_serial_port->print(F("wordsworth_practice: word_buffer:"));
       debug_serial_port->println(word_buffer);
     #endif
     
@@ -15473,9 +14970,9 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
       while (loop2){ //character sending loop
 
         #if defined(DEBUG_WORDSWORTH)
-          debug_serial_port->print("wordsworth_practice: send_char:");
+          debug_serial_port->print(F("wordsworth_practice: send_char:"));
           debug_serial_port->print(word_buffer[x]);
-          debug_serial_port->print(" ");
+          debug_serial_port->print(F(" "));
           debug_serial_port->println((byte)word_buffer[x]);
         #endif
 
@@ -15615,35 +15112,35 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(s2_table[random(0,s2_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_interactive: PRACTICE_2_CHAR_WORDS:");
+          debug_serial_port->print(F("serial_practice_interactive: PRACTICE_2_CHAR_WORDS:"));
         #endif
         break;
       case PRACTICE_3_CHAR_WORDS:
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[random(0,s3_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_interactive: PRACTICE_3_CHAR_WORDS:");
+          debug_serial_port->print(F("serial_practice_interactive: PRACTICE_3_CHAR_WORDS:"));
         #endif        
         break;
       case PRACTICE_4_CHAR_WORDS: 
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(s4_table[random(0,s4_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_interactive: PRACTICE_4_CHAR_WORDS:");
+          debug_serial_port->print(F("serial_practice_interactive: PRACTICE_4_CHAR_WORDS:"));
         #endif        
         break;    
       case PRACTICE_NAMES: 
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(name_table[random(0,name_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_interactive: PRACTICE_NAMES:");
+          debug_serial_port->print(F("serial_practice_interactive: PRACTICE_NAMES:"));
         #endif        
         break; 
       case PRACTICE_QSO_WORDS: 
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(qso_table[random(0,qso_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_interactive: PRACTICE_QSO_WORDS:");
+          debug_serial_port->print(F("serial_practice_interactive: PRACTICE_QSO_WORDS:"));
         #endif        
         break; 
     } //switch(practice_type)
@@ -15789,35 +15286,35 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(s2_table[random(0,s2_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_non_interactive: PRACTICE_2_CHAR_WORDS:");
+          debug_serial_port->print(F("serial_practice_non_interactive: PRACTICE_2_CHAR_WORDS:"));
         #endif
         break;
       case PRACTICE_3_CHAR_WORDS:
         //strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[random(0,s3_size)])));
         cw_to_send_to_user = word_buffer;
         #ifndef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_non_interactive: PRACTICE_3_CHAR_WORDS:");
+          debug_serial_port->print(F("serial_practice_non_interactive: PRACTICE_3_CHAR_WORDS:"));
         #endif        
         break;
       case PRACTICE_4_CHAR_WORDS: 
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(s4_table[random(0,s4_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_non_interactive: PRACTICE_4_CHAR_WORDS:");
+          debug_serial_port->print(F("serial_practice_non_interactive: PRACTICE_4_CHAR_WORDS:"));
         #endif        
         break;    
       case PRACTICE_NAMES: 
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(name_table[random(0,name_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_non_interactive: PRACTICE_NAMES:");
+          debug_serial_port->print(F("serial_practice_non_interactive: PRACTICE_NAMES:"));
         #endif        
         break; 
       case PRACTICE_QSO_WORDS: 
         strcpy_P(word_buffer, (char*)pgm_read_dword(&(qso_table[random(0,qso_size)])));
         cw_to_send_to_user = word_buffer;
         #ifdef DEBUG_PRACTICE_SERIAL
-          debug_serial_port->print("serial_practice_non_interactive: PRACTICE_QSO_WORDS:");
+          debug_serial_port->print(F("serial_practice_non_interactive: PRACTICE_QSO_WORDS:"));
         #endif        
         break; 
     } //switch(practice_type)
@@ -15887,9 +15384,9 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
       #ifdef FEATURE_CMOS_SUPER_KEYER_IAMBIC_B_TIMING
         port_to_use->print(F(" / CMOS Super Keyer Timing: O"));
         if (configuration.cmos_super_keyer_iambic_b_timing_on) {
-          port_to_use->print("n ");
+          port_to_use->print(F("n "));
           port_to_use->print(configuration.cmos_super_keyer_iambic_b_timing_percent);
-          port_to_use->print("%");
+          port_to_use->print(F("%"));
         } else {
          port_to_use->print(F("ff"));
         }
@@ -15955,9 +15452,9 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
     case SIDETONE_OFF: port_to_use->print(F("Off")); break; //(WD9DMP)
     case SIDETONE_PADDLE_ONLY: port_to_use->print(F("Paddle Only")); break;
   }
-  port_to_use->print(" ");
+  port_to_use->print(F(" "));
   port_to_use->print(configuration.hz_sidetone,DEC);
-  port_to_use->println(" hz");
+  port_to_use->println(F(" hz"));
 
   // #if defined(FEATURE_SINEWAVE_SIDETONE)
   //   port_to_use->print(F("Sidetone Volume: "));
@@ -15988,7 +15485,7 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
     }
     port_to_use->print(F("Activated) Range: "));
     port_to_use->print(pot_wpm_low_value);
-    port_to_use->print(" - ");
+    port_to_use->print(F(" - "));
     port_to_use->print(pot_wpm_high_value);
     port_to_use->println(F(" WPM"));
   #endif
@@ -16137,9 +15634,9 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
 //aaaaaaa
   #if defined(FEATURE_ETHERNET)
 #if defined(FEATURE_WIFI) //SP5IOU 20220129
-    port_to_use->print("\nWifi connected to ");
+    port_to_use->print(F("\nWifi connected to "));
     port_to_use->print(WiFi.SSID());
-    port_to_use->print(" RSSI: ");
+    port_to_use->print(F(" RSSI: "));
     port_to_use->println(WiFi.RSSI());
 
 #endif
@@ -16326,13 +15823,13 @@ void memorycheck()
 
   unsigned long free = (unsigned long)SP - (unsigned long)HP;
 
-//  port_to_use->print("Heap=");
+//  port_to_use->print(F("Heap="));
 //  port_to_use->println((unsigned long)HP,HEX);
-//  port_to_use->print("Stack=");
+//  port_to_use->print(F("Stack="));
 //  port_to_use->println((unsigned long)SP,HEX);
-//  port_to_use->print("Free Memory = ");
+//  port_to_use->print(F("Free Memory = "));
 //  port_to_use->print((unsigned long)free,HEX);
-//  port_to_use->print("  ");
+//  port_to_use->print(F("  "));
 
   // if (free > 2048) {
   //   free = 0;
@@ -16816,8 +16313,13 @@ byte play_memory(byte memory_number) {
         check_rotary_encoder();
       #endif //FEATURE_ROTARY_ENCODER      
       
-      #ifdef FEATURE_PS2_KEYBOARD
-        check_ps2_keyboard();
+      #ifdef FEATURE_BT_KEYBOARD
+        #ifndef USE_BT_TASK
+          check_bt_keyboard();
+        #endif
+      #endif
+      #if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD)
+        check_ps2_keyboard();  // Processes either PS2 or BT events
       #endif
 
       check_button0();
@@ -16831,9 +16333,7 @@ byte play_memory(byte memory_number) {
       check_serial();
     #endif
 
-    #ifdef FEATURE_BT_KEYBOARD
-      check_ps2_keyboard();
-    #endif
+
 
     if ((play_memory_prempt == 0) && (pause_sending_buffer == 0)) {
 
@@ -17334,15 +16834,15 @@ byte play_memory(byte memory_number) {
     last_memory_repeat_time = millis();
     #ifdef DEBUG_PLAY_MEMORY
       debug_serial_port->println(F("\nplay_memory: reset last_memory_repeat_time"));  
-      debug_serial_port->print("y: ");
+      debug_serial_port->print(F("y: "));
       debug_serial_port->print(y);
-      debug_serial_port->print("\tmemory_number: ");
+      debug_serial_port->print(F("\tmemory_number: "));
       debug_serial_port->print(memory_number);
-      debug_serial_port->print("\tmemory_end: ");
+      debug_serial_port->print(F("\tmemory_end: "));
       debug_serial_port->print(memory_end(memory_number));
-      debug_serial_port->print("\tjump_back_to_y: ");
+      debug_serial_port->print(F("\tjump_back_to_y: "));
       debug_serial_port->print(jump_back_to_y);
-      debug_serial_port->print("\tjump_back_to_memory_number: ");
+      debug_serial_port->print(F("\tjump_back_to_memory_number: "));
       debug_serial_port->println(jump_back_to_memory_number); 
     #endif
     
@@ -18004,11 +17504,11 @@ void service_cw_decoder() {
   #ifdef DEBUG_OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
     static unsigned long last_magnitude_debug_print = 0;
     if ((millis() - last_magnitude_debug_print) > 250){
-      //debug_serial_port->print("service_cw_decoder: cwtonedetector magnitude: ");
+      //debug_serial_port->print(F("service_cw_decoder: cwtonedetector magnitude: "));
       //debug_serial_port->print(cwtonedetector.magnitudelimit_low);
-      //debug_serial_port->print("\t");
+      //debug_serial_port->print(F("\t"));
       debug_serial_port->print(cwtonedetector.magnitudelimit);
-      debug_serial_port->print("\t");
+      debug_serial_port->print(F("\t"));
       debug_serial_port->println(cwtonedetector.magnitude);
       last_magnitude_debug_print = millis();
     }
@@ -18115,9 +17615,9 @@ void service_cw_decoder() {
     
     #ifdef DEBUG_CW_DECODER_WPM
       if (abs(decoder_wpm - last_printed_decoder_wpm) > 0.9) {
-        debug_serial_port->print("<");
+        debug_serial_port->print(F("<"));
         debug_serial_port->print(int(decoder_wpm));
-        debug_serial_port->print(">");
+        debug_serial_port->print(F(">"));
         last_printed_decoder_wpm = decoder_wpm;
       }
     #endif //DEBUG_CW_DECODER_WPM
@@ -18307,7 +17807,7 @@ void initialize_default_modes(){
     configuration.sidetone_mode = initial_sidetone_mode;
   #endif
   #if defined DEBUG_SETUP
-    Serial.println("Went here 2");
+    Serial.println(F("Went here 2"));
   #endif
   char_send_mode = CW;
   
@@ -18315,12 +17815,12 @@ void initialize_default_modes(){
     configuration.cmos_super_keyer_iambic_b_timing_on = 1;
   #endif //FEATURE_CMOS_SUPER_KEYER_IAMBIC_B_TIMING // #end DL1HTB initialize CMOS Super Keyer if feature is enabled
   #if defined DEBUG_SETUP
-    Serial.println("Went here 3");
+    Serial.println(F("Went here 3"));
   #endif
 
   vTaskDelay(2500/portTICK_PERIOD_MS);  // wait a little bit for the caps to charge up on the paddle lines
   #if defined DEBUG_SETUP
-    Serial.println("Went here 4");
+    Serial.println(F("Went here 4"));
   #endif
 }  
 
@@ -18483,7 +17983,7 @@ void initialize_serial_ports(){
     #ifdef DEBUG_AUX_SERIAL_PORT
       debug_port = DEBUG_AUX_SERIAL_PORT;
       debug_serial_port->begin(DEBUG_AUX_SERIAL_PORT_BAUD);
-      debug_serial_port->print("debug port open ");
+      debug_serial_port->print(F("debug port open "));
       debug_serial_port->println(CODE_VERSION);
     #endif //DEBUG_AUX_SERIAL_PORT
 
@@ -18572,23 +18072,23 @@ void ps2int_write() {
 #ifdef FEATURE_BT_KEYBOARD
 
 void pairing_handler(uint32_t pid) {
-    debug_serial_port->print("Please enter the following pairing code followed with ENTER on your keyboard: ");
+    debug_serial_port->print(F("Please enter the following pairing code followed with ENTER on your keyboard: "));
     debug_serial_port->println(pid);    
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    char pass[21];
+    char pass[28];
     sprintf(pass, "Pairing Code %lu", pid);
     lcd_center_print_timed(pass, 1, 12000);
 }
 
 void keyboard_lost_connection_handler() {
-    debug_serial_port->println("====> Lost connection with keyboard <====");
+    debug_serial_port->println(F("====> Lost connection with keyboard <===="));
     BT_Keyboard_Lost = true;
     if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
     Keyboard_Disconnected_signal = true;
 }
 
 void keyboard_connected_handler() {
-    debug_serial_port->println("----> Connected to keyboard <----");
+    debug_serial_port->println(F("----> Connected to keyboard <----"));
     BT_Keyboard_Lost = false;
     if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_active_state);   
     Keyboard_Connected_signal = true;
@@ -18619,7 +18119,7 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
     }
     ESP_ERROR_CHECK(ret);
 
-    debug_serial_port->println("BT and BLE device Scan Setup");
+    debug_serial_port->println(F("BT and BLE device Scan Setup"));
 
     btStarted();  // workarond to avoid bt_controller init failure #259
 
@@ -18631,7 +18131,14 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
         bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
                                   // Default duration is 5 seconds
     }
+
+    if (!bt_keyboard.is_connected()) {
+        debug_serial_port->println("No BT keyboards found");
+        lcd_center_print_timed("  No BT Keyboards   ", 1, 3000);
+    }
+
     queueflush();
+    
   #endif
 }
 
@@ -18674,6 +18181,11 @@ int queueempty()
     return (qhead == qtail);
 }
  
+int queue_available()
+{
+    return (qhead - qtail);
+}
+
 void queueflush()
 {
     qhead = qtail;
@@ -18876,9 +18388,9 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key)
   #ifdef DEBUG_USB_KEYBOARD
   debug_serial_port->print(F("KbdRptParser::OnKeyDown: mod:"));
   debug_serial_port->print(mod);
-  debug_serial_port->print(" key:");
+  debug_serial_port->print(F(" key:"));
   debug_serial_port->print(key);
-  debug_serial_port->print("\t");
+  debug_serial_port->print(F("\t"));
   debug_serial_port->print((modifier.bmLeftCtrl   == 1) ? "LeftCtrl" : " ");
   debug_serial_port->print((modifier.bmLeftShift  == 1) ? "LeftShift" : " ");
   debug_serial_port->print((modifier.bmLeftAlt    == 1) ? "LeftAlt" : " ");
@@ -18887,7 +18399,7 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key)
   debug_serial_port->print((modifier.bmRightShift  == 1) ? "RightShift" : " ");
   debug_serial_port->print((modifier.bmRightAlt    == 1) ? "RightAlt" : " ");
   debug_serial_port->print((modifier.bmRightGUI    == 1) ? "RightGUI" : " ");  
-  debug_serial_port->print("\t");
+  debug_serial_port->print(F("\t"));
   PrintHex<uint8_t>(key, 0x80);
   debug_serial_port->println();    
   #endif //DEBUG_USB_KEYBOARD
@@ -19674,9 +19186,9 @@ void service_usb(){
 void MouseRptParser::OnMouseMove(MOUSEINFO *mi){
     
     /*
-    debug_serial_port->print("dx=");
+    debug_serial_port->print(F("dx="));
     debug_serial_port->print(mi->dX, DEC);
-    debug_serial_port->print(" dy=");
+    debug_serial_port->print(F(" dy="));
     debug_serial_port->println(mi->dY, DEC);
     */ 
   
@@ -19886,9 +19398,9 @@ uint8_t read_capacitive_pin(int pinToMeasure) {
   static unsigned long last_cap_paddle_debug = 0;
   if ((millis() - last_cap_paddle_debug) > 250){
     debug_serial_port->flush();
-    debug_serial_port->print("read_capacitive_pin: pin:");
+    debug_serial_port->print(F("read_capacitive_pin: pin:"));
     debug_serial_port->print(pinToMeasure);
-    debug_serial_port->print(" cyc:");
+    debug_serial_port->print(F(" cyc:"));
     debug_serial_port->println(cycles);
     last_cap_paddle_debug = millis();
   }
@@ -19985,7 +19497,7 @@ int paddle_pin_read(int pin_to_read){
 #else                                                     // !OPTION_INVERT_PADDLE_PIN_LOGIC
     return !digitalRead(pin_to_read);                       // we do the regular digitalRead() if none of the direct register read options are valid
 #endif                                                    // !OPTION_INVERT_PADDLE_PIN_LOGIC
-#elif defined FEATURE_CAPACITIVE_PADDLE_PINS              // FEATURE_CAPACITIVE_PADDLE_PINS
+#elif defined(FEATURE_CAPACITIVE_PADDLE_PINS)              // FEATURE_CAPACITIVE_PADDLE_PINS
     if (capactive_paddle_pin_inhibit_pin) {
         if (digitalRead(capactive_paddle_pin_inhibit_pin) == HIGH) {
             return digitalRead(pin_to_read);
@@ -19993,7 +19505,7 @@ int paddle_pin_read(int pin_to_read){
     }                                                         // end if (capactive_paddle_pin_inhibit_pin)
     if (read_capacitive_pin(pin_to_read) > capacitance_threshold) return LOW;
     else return HIGH;
-#elif defined FEATURE_TOUCH_PADDLE_PINS //SP5IOU 20220131
+#elif defined(FEATURE_TOUCH_PADDLE_PINS) //SP5IOU 20220131
     if (touchRead(pin_to_read) < touch_threshold) return LOW;
     else return HIGH;
 #endif                                                      // FEATURE_TOUCH_PADDLE_PINS
@@ -20125,7 +19637,7 @@ void service_winkey_breakin(){
     winkey_interrupted = 1;
     send_winkey_breakin_byte_flag = 0;
     #ifdef DEBUG_WINKEY
-      debug_serial_port->println("service_winkey_breakin: winkey_interrupted = 1");
+      debug_serial_port->println(F("service_winkey_breakin: winkey_interrupted = 1"));
     #endif
   }   
    
@@ -20136,30 +19648,30 @@ void service_winkey_breakin(){
 #if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
 boolean wifiConnect(char* ssid = WIFI_SSID, char* password = WIFI_PASSWORD, int attempts = 20) {
 #if defined DEBUG_WIFI
-    debug_serial_port->print("Wifi connecting WiFi");
+    debug_serial_port->print(F("Wifi connecting WiFi"));
 #endif    
         WiFi.begin(ssid, password); //begin with credentials from function parameters
     for (int i = 0; (i < attempts) && (WiFi.status() != WL_CONNECTED); i++) {
         delay(500);
 #if defined DEBUG_WIFI
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
 #endif    
     }
     if (WiFi.status() == WL_CONNECTED) {
 #if defined DEBUG_WIFI
-        debug_serial_port->print("\nWifi connected to ");
+        debug_serial_port->print(F("\nWifi connected to "));
         debug_serial_port->println(WiFi.SSID());
-        debug_serial_port->print("RSSI: ");
+        debug_serial_port->print(F("RSSI: "));
         debug_serial_port->println(WiFi.RSSI());
-        debug_serial_port->print("IP Adress: ");
+        debug_serial_port->print(F("IP Adress: "));
         debug_serial_port->println(WiFi.localIP());
-        debug_serial_port->print("Subnet mask: ");
+        debug_serial_port->print(F("Subnet mask: "));
         debug_serial_port->println(WiFi.subnetMask());
-        debug_serial_port->print("Dafault gateway address: ");
+        debug_serial_port->print(F("Dafault gateway address: "));
         debug_serial_port->println(WiFi.gatewayIP());
-        debug_serial_port->print("DNS address: ");
+        debug_serial_port->print(F("DNS address: "));
         debug_serial_port->println(WiFi.dnsIP());
-        debug_serial_port->print("Interface mac address: ");
+        debug_serial_port->print(F("Interface mac address: "));
         debug_serial_port->println(WiFi.macAddress());
 #endif  
         for (int i = 0; i < 4; i++) {
@@ -20169,37 +19681,37 @@ boolean wifiConnect(char* ssid = WIFI_SSID, char* password = WIFI_PASSWORD, int 
             configuration.dns_server[i] = WiFi.dnsIP()[i];
         }
  #if defined DEBUG_WIFI
-        debug_serial_port->print("configuration.ip ");
+        debug_serial_port->print(F("configuration.ip "));
         debug_serial_port->print(configuration.ip[0]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->print(configuration.ip[1]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->print(configuration.ip[2]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->println(configuration.ip[3]);
-        debug_serial_port->print("configuration.gateway ");
+        debug_serial_port->print(F("configuration.gateway "));
         debug_serial_port->print(configuration.gateway[0]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->print(configuration.gateway[1]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->print(configuration.gateway[2]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->println(configuration.gateway[3]);
-        debug_serial_port->print("configuration.subnet ");
+        debug_serial_port->print(F("configuration.subnet "));
         debug_serial_port->print(configuration.subnet[0]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->print(configuration.subnet[1]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->print(configuration.subnet[2]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->println(configuration.subnet[3]);
-        debug_serial_port->print("configuration.dns_server ");
+        debug_serial_port->print(F("configuration.dns_server "));
         debug_serial_port->print(configuration.dns_server[0]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->print(configuration.dns_server[1]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->print(configuration.dns_server[2]);
-        debug_serial_port->print(".");
+        debug_serial_port->print(F("."));
         debug_serial_port->println(configuration.dns_server[3]);
 #endif
         config_dirty = 1;
@@ -20215,7 +19727,7 @@ boolean wifiConnect(char* ssid = WIFI_SSID, char* password = WIFI_PASSWORD, int 
         }
         WiFi.disconnect();
 #if defined DEBUG_WIFI
-        debug_serial_port->print("\nWiFi connection failed ");
+        debug_serial_port->print(F("\nWiFi connection failed "));
 #endif
         config_dirty = 1;
         return(false);
@@ -20267,7 +19779,7 @@ void initialize_udp(){
 
     #if defined(DEBUG_UDP)
       if (!udpbegin_result){
-        debug_serial_port->println("initialize_udp: Udp.begin error");
+        debug_serial_port->println(F("initialize_udp: Udp.begin error"));
       }
     #endif
   #endif //FEATURE_UDP
@@ -20331,7 +19843,7 @@ void service_web_server() {
           //store characters to string
           web_server_incoming_string += c;
           #if defined(DEBUG_WEB_SERVER_READS)
-            debug_serial_port->print("service_web_server: read: ");
+            debug_serial_port->print(F("service_web_server: read: "));
             debug_serial_port->print(c);
           #endif //DEBUG_WEB_SERVER_READS  
         } else {
@@ -20751,14 +20263,14 @@ void parse_get(String str){
   parse_get_results_index = 0;
 
   #if defined(DEBUG_WEB_PARSE_GET)
-    debug_serial_port->print("parse_get: raw workstring: ");
+    debug_serial_port->print(F("parse_get: raw workstring: "));
     Serial.println(str);
   #endif  
 
   workstring = str.substring(str.indexOf("?")+1);
 
   #if defined(DEBUG_WEB_PARSE_GET)
-    debug_serial_port->print("parse_get: workstring: ");
+    debug_serial_port->print(F("parse_get: workstring: "));
     Serial.println(workstring);
   #endif  
 
@@ -20773,9 +20285,9 @@ void parse_get(String str){
       workstring = "";
     }
     #if defined(DEBUG_WEB_PARSE_GET)
-      debug_serial_port->print("parse_get: parameter: ");
+      debug_serial_port->print(F("parse_get: parameter: "));
       debug_serial_port->print(parameter);
-      debug_serial_port->print(" value: ");
+      debug_serial_port->print(F(" value: "));
       debug_serial_port->println(value);   
     #endif //DEBUG_WEB_PARSE_GET
 
@@ -20785,13 +20297,13 @@ void parse_get(String str){
       parse_get_results[parse_get_results_index].value_long = value.toInt();
       
       // Serial.print(parse_get_results_index);
-      // Serial.print(":");      
+      // Serial.print(F(":"));      
       // Serial.print(parse_get_results[parse_get_results_index].parameter);
-      // Serial.print(":");
+      // Serial.print(F(":"));
       // Serial.print(parse_get_results[parse_get_results_index].value_string);
-      // Serial.print(":");    
+      // Serial.print(F(":"));    
       // Serial.print(parse_get_results[parse_get_results_index].value_long);
-      // Serial.println("$");
+      // Serial.println(F("$"));
 
       parse_get_results_index++;
     }
@@ -21797,21 +21309,21 @@ void link_key(uint8_t link_key_state){
     if (((millis()-last_link_key_action_time) < FEATURE_INTERNET_LINK_BUFFER_TIME_MS) && (last_link_key_action_time != 0)){
       if (link_key_state){
         #if defined(DEBUG_INTERNET_LINKING_SEND)
-          debug_serial_port->print("link_key: D");
+          debug_serial_port->print(F("link_key: D"));
         #endif //DEBUG_INTERNET_LINKING_SEND
         bytes_to_send[0] = 'D';
         add_to_udp_send_buffer(bytes_to_send,1);
       } else {
         if (buffered_key_down){
           #if defined(DEBUG_INTERNET_LINKING_SEND)
-            debug_serial_port->print("link_key: V");
+            debug_serial_port->print(F("link_key: V"));
           #endif //DEBUG_INTERNET_LINKING_SEND  
           bytes_to_send[0] = 'V';
           add_to_udp_send_buffer(bytes_to_send,1);            
           buffered_key_down = 0;
         } else { 
           #if defined(DEBUG_INTERNET_LINKING_SEND)
-            debug_serial_port->print("link_key: U");
+            debug_serial_port->print(F("link_key: U"));
           #endif //DEBUG_INTERNET_LINKING_SEND  
           bytes_to_send[0] = 'U';
           add_to_udp_send_buffer(bytes_to_send,1);            
@@ -21848,7 +21360,7 @@ void link_key(uint8_t link_key_state){
       buffered_key_down = 1;
     }
     #if defined(DEBUG_INTERNET_LINKING_SEND)
-      debug_serial_port->println("");
+      debug_serial_port->println(F(""));
     #endif //DEBUG_INTERNET_LINKING_SEND  
     current_link_key_state = link_key_state;
     last_link_key_action_time = millis();
@@ -21896,7 +21408,7 @@ void service_udp_send_buffer(){
             link_send_buffer_bytes[y]++;
           } else {
             #if defined(DEBUG_UDP)
-              debug_serial_port->println("service_udp_send_buffer: link_send_buffer_overflow");
+              debug_serial_port->println(F("service_udp_send_buffer: link_send_buffer_overflow"));
             #endif
           }
         }
@@ -21929,20 +21441,20 @@ void service_udp_send_buffer(){
         udp_write(link_send_buffer[y][x]);
       }
       #if defined(DEBUG_UDP)
-        debug_serial_port->print("\n\rservice_udp_send_buffer: endPacket ");
+        debug_serial_port->print(F("\n\rservice_udp_send_buffer: endPacket "));
         unsigned long beginPacket_start = millis();
       #endif
       int endpacket_result = Udp.endPacket();
       #if defined(DEBUG_UDP)
         unsigned long beginPacket_end = millis();
         if (!endpacket_result){
-          debug_serial_port->print("error");
+          debug_serial_port->print(F("error"));
         } else {
-          debug_serial_port->print("OK");
+          debug_serial_port->print(F("OK"));
         }
-        debug_serial_port->print(" time:");
+        debug_serial_port->print(F(" time:"));
         debug_serial_port->print(beginPacket_end - beginPacket_start);
-        debug_serial_port->println(" mS");
+        debug_serial_port->println(F(" mS"));
       #endif
       link_send_buffer_bytes[y] = 0;
       y = FEATURE_INTERNET_LINK_MAX_LINKS;  // exit after we've process one buffer with bytes
@@ -21965,12 +21477,12 @@ void udp_write(uint8_t byte_to_write){
 
     static char ascii_sent[17] = "";
 
-    debug_serial_port->print(" ");
+    debug_serial_port->print(F(" "));
     if (byte_to_write < 16){
-      debug_serial_port->print("0");
+      debug_serial_port->print(F("0"));
     }
     debug_serial_port->print(byte_to_write,HEX);
-    debug_serial_port->print(" ");
+    debug_serial_port->print(F(" "));
     debug_serial_port->write(byte_to_write);
   #endif //DEBUG_UDP_WRITE
 
@@ -21994,21 +21506,21 @@ void service_udp_receive(){
       #if defined(DEBUG_UDP_PACKET_RECEIVE)
         debug_serial_port->print(F("service_udp_receive: received packet: size "));
         debug_serial_port->print(packet_size);
-        debug_serial_port->print(" from ");
+        debug_serial_port->print(F(" from "));
         IPAddress remote = Udp.remoteIP();
         for (int i = 0; i < 4; i++) {
           debug_serial_port->print(remote[i], DEC);
           if (i < 3) {
-            debug_serial_port->print(".");
+            debug_serial_port->print(F("."));
           }
         }
-        debug_serial_port->print(":");
+        debug_serial_port->print(F(":"));
         debug_serial_port->print(Udp.remotePort());
-        debug_serial_port->print(" contents: ");
+        debug_serial_port->print(F(" contents: "));
         for (int x = 0;x < packet_size;x++){
           debug_serial_port->print(udp_char_receive_packet_buffer[x]);
         }
-        debug_serial_port->println("$");
+        debug_serial_port->println(F("$"));
       #endif //DEBUG_UDP
 
      if (packet_size > FEATURE_UDP_RECEIVE_BUFFER_SIZE){ packet_size = FEATURE_UDP_RECEIVE_BUFFER_SIZE;}
@@ -22441,12 +21953,12 @@ void sd_card_log(String string_to_log,byte byte_to_log){
       sd_card_log_state = SD_CARD_LOG_ERROR;
     } else {
       sd_card_log_state = SD_CARD_LOG_OPEN; 
-      sdlogfile.println("\r\nstart of log ");
+      sdlogfile.println(F("\r\nstart of log "));
       if (configuration.cli_mode == CLI_MILL_MODE_PADDLE_SEND){
-        sdlogfile.print("TX:");
+        sdlogfile.print(F("TX:"));
         sdlogfile.flush();
       } else {
-        sdlogfile.print("RX:");
+        sdlogfile.print(F("RX:"));
         sdlogfile.flush();
       }
     }
@@ -23267,12 +22779,10 @@ void update_time(){
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
 
- //#define USE_TASK
-
-    #ifndef USE_TASK
+    #ifndef USE_BT_TASK
      void check_bt_keyboard(void) {
     #else
-     void check_bt_keyboard(void * pvParameters) {
+    void check_bt_keyboard(void * pvParameters) {
 
         /* The parameter value is expected to be 1 as 1 is passed in the
         pvParameters value in the call to xTaskCreate() below. */
@@ -23281,13 +22791,14 @@ void update_time(){
 
         while (1)
         {
-         #endif
-        
-            #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
+    #endif
+      
+
+          #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
                 //uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
 
-                debug_serial_port->print("0x");
+                debug_serial_port->print(F("0x"));
                 debug_serial_port->print(ch,HEX); // << std::flush;
                 debug_serial_port->print(',');
 
@@ -23312,7 +22823,7 @@ void update_time(){
                 #ifdef FEATURE_MEMORIES
                     repeat_memory = 255;
                 #endif
-            #else  // this one has 2 methods, both work the same.
+          #else  // this one has 2 methods, both work the same.
                 char ch;
                 static bool keyDN = false;
                 static bool CMD_KEY = false;
@@ -23321,10 +22832,10 @@ void update_time(){
                 TickType_t    repeat_period_;
                 BTKeyboard::KeyInfo inf;
                 vTaskDelay(10 / portTICK_RATE_MS);
-                #ifdef USE_TASK
-                  bt_keyboard.wait_for_low_event(inf,1); //, 10);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                #ifdef USE_BT_TASK
+                  bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                 #else
-                  bt_keyboard.wait_for_low_event(inf,10);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                   //bt_keyboard.get_ascii_char();
                 #endif
 
@@ -23357,19 +22868,19 @@ void update_time(){
                     }
 
                     #ifdef DEBUG_BT_KEYBOARD_B  // change #ifdef to #ifndef to use
-                        debug_serial_port->print("[size=");
+                        debug_serial_port->print(F("[size="));
                         debug_serial_port->print((uint8_t) inf.size);
-                        debug_serial_port->print("-");
+                        debug_serial_port->print(F("-"));
                         for (int n = 0; n < inf.size; n++) {          
-                            debug_serial_port->print("0x");              
+                            debug_serial_port->print(F("0x"));              
                             debug_serial_port->print(inf.keys[n],HEX);
                             debug_serial_port->print(':');
                         }  
-                        debug_serial_port->print("-M(0x");
+                        debug_serial_port->print(F("-M(0x"));
                         debug_serial_port->print((uint8_t) modifier, HEX);
-                        debug_serial_port->print(")-Char(0x");
+                        debug_serial_port->print(F(")-Char(0x"));
                         debug_serial_port->print((uint8_t) ch,HEX);
-                        debug_serial_port->println(")] ");
+                        debug_serial_port->println(F(")] "));
                     #endif
 
                     if (ch != 0 && keyDN != true) 
@@ -23386,7 +22897,7 @@ void update_time(){
                         {
                             keyDN = true;  // this is a valid alphanumeric key - send to processing
                             #ifdef DEBUG_BT_KEYBOARD_A
-                                debug_serial_port->print("-0x");
+                                debug_serial_port->print(F("-0x"));
                                 debug_serial_port->print(ch,HEX);  // print our valid char
                                 debug_serial_port->print(',');
                             #endif
@@ -23432,9 +22943,9 @@ void update_time(){
                                             }
                                         }
                                     }
-                                    debug_serial_port->print("<");
+                                    debug_serial_port->print(F("<"));
                                     debug_serial_port->print(ch);
-                                    debug_serial_port->print(">");
+                                    debug_serial_port->print(F(">"));
                                     queueadd(ch); 
                                     //check_ps2_keyboard();
                                     ch = last_ch_;
@@ -23458,7 +22969,7 @@ void update_time(){
                                         case 0x04 ... 0x1d: ch = PS2_A_CTRL + (ch-4); break; // convert to lower case letters
                                         case 0x3A ... 0x45: ch = PS2_F1_CTRL + (ch-0x3A); break; // F1-F12 keys
                                     }
-                                    //debug_serial_port->print("CTRL key = 0x");
+                                    //debug_serial_port->print(F("CTRL key = 0x"));
                                     //debug_serial_port->println(ch, HEX);
                                 }
                                 else if (modifier & bt_keyboard.ALT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
@@ -23470,12 +22981,12 @@ void update_time(){
                                                     queueflush();
                                                     break;  // ALT-C, clear the LCD scrollable area
                                     }
-                                    //debug_serial_port->print("ALT key = 0x");
+                                    //debug_serial_port->print(F("ALT key = 0x"));
                                     //debug_serial_port->println(ch, HEX);
                                 }
                                 else if (modifier & bt_keyboard.SHIFT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
                                 {
-                                    //debug_serial_port->print("SHIFT key  modifier = 0x");
+                                    //debug_serial_port->print(F("SHIFT key  modifier = 0x"));
                                     //debug_serial_port->println(modifier, HEX);
 
                                     switch (ch) {     
@@ -23570,7 +23081,7 @@ void update_time(){
                                 case PS2_LEFTARROW : adjust_dah_to_dit_ratio(-1*int(configuration.dah_to_dit_ratio/10)); break;
                                 case PS2_UPARROW : speed_set(configuration.wpm+1); break;
                                 case PS2_DOWNARROW : speed_set(configuration.wpm-1); break;
-                                case PS2_ESC: CMD_KEY = false; debug_serial_port->println("< Exiting CLI mode >"); break;
+                                case PS2_ESC: CMD_KEY = false; debug_serial_port->println(F("< Exiting CLI mode >")); break;
                                 case PS2_TAB:
                                     if (pause_sending_buffer) {
                                     pause_sending_buffer = 0;
@@ -23602,15 +23113,15 @@ void update_time(){
                                         #endif
                                     }
                                     else if (CMD_KEY || ch > 126 || ch == '\\') {  // function key and ALT, CTRL, and special keys
-                                        debug_serial_port->print("< Special key = ");
+                                        debug_serial_port->print(F("< Special key = "));
                                         
                                         if (ch == '\\'){
-                                            debug_serial_port->println("Command Line Key Pressed.  To exit press ESC key");
+                                            debug_serial_port->println(F("Command Line Key Pressed.  To exit press ESC key"));
                                             CMD_KEY = true;  // command line inerface will need to set this to false to allow CW to resume
                                         }
                                         else {
                                             debug_serial_port->print(ch, DEC);   
-                                            debug_serial_port->println(" >");
+                                            debug_serial_port->println(F(" >"));
                                         }
                                     }
                                 }  // end of default
@@ -23619,13 +23130,13 @@ void update_time(){
   
                             queueadd(ch);   // add char to the queue                          
                             #ifdef DEBUG_BT_KEYBOARD_A
-                                debug_serial_port->print("[");
+                                debug_serial_port->print(F("["));
                                 if (queueempty())
-                                    debug_serial_port->print("Q Empty\n"); 
+                                    debug_serial_port->print(F("Q Empty\n")); 
                                 else
-                                    debug_serial_port->print("Q NOT Empty\n");
+                                    debug_serial_port->print(F("Q NOT Empty\n"));
                                 //debug_serial_port->print(queuepop());
-                                debug_serial_port->print("],");
+                                debug_serial_port->print(F("],"));
                             #endif
                             ch = 0;
                         } // end of key mapping                        
@@ -23634,11 +23145,11 @@ void update_time(){
                 last_key = keyDN;
                 keyDN = false;
                 ch = 0;
-            #endif
-         vTaskDelay(1 / portTICK_PERIOD_MS);   
-         #ifdef USE_TASK
+          #endif
+          vTaskDelay(1 / portTICK_PERIOD_MS);   
+        #ifdef USE_BT_TASK
         } // for ever
-      #endif
+        #endif
     } // check_bt_keyboard
 #endif // FEATURE_BT_KEYBOARD
 
@@ -23741,13 +23252,13 @@ void initialize_m5stack_core2()
 
     // The primary display can be used with M5.Display.
    
-    M5.Display.print("primary display\n");
+    M5.Display.print(F("primary display\n"));
     
     // Examine the indexes of a given type of display
     int index_module_display = M5.getDisplayIndex(m5::board_t::board_M5ModuleDisplay);
 
     if (index_module_display >= 0) {
-        M5.Displays(index_module_display).print("This is a Module Display\n");
+        M5.Displays(index_module_display).print(F("This is a Module Display\n"));
     } 
     
     //M5.Display.clear(TFT_BLACK);
@@ -23767,7 +23278,7 @@ void initialize_m5stack_core2()
 
     if (!M5.Speaker.isEnabled())
     {
-        M5.Display.println("Speaker not found...");
+        M5.Display.println(F("Speaker not found..."));
     }
     beep_boop();
 }
@@ -23995,33 +23506,32 @@ void initialize_st7789_lcd()
         //float fnumber = 123.45;
         // Set the font colour to be blue with no background, set to font 4
         //lcd.setTextColor(TFT_BLUE);    lcd.setTextFont(4);
-        //lcd.print("Float = "); lcd.println(fnumber);           // Print floating point number
-        //lcd.print("Binary = "); lcd.println((int)fnumber, BIN); // Print as integer value in binary
-        //lcd.print("Hexadecimal = "); lcd.println((int)fnumber, HEX); // Print as integer number in Hexadecimal
+        //lcd.print(F("Float = ")); lcd.println(fnumber);           // Print floating point number
+        //lcd.print(F("Binary = ")); lcd.println((int)fnumber, BIN); // Print as integer value in binary
+        //lcd.print(F("Hexadecimal = ")); lcd.println((int)fnumber, HEX); // Print as integer number in Hexadecimal
         lcd.setCursor(SCROLL_LEFT_SIDE,SCROLL_TOP_LINE);
         lcd.setTextColor(TFT_WHITE,TFT_BLACK);  
         lcd.setTextFont(4);
         lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
         //lcd.setFreeFont(TFT_FONT_MEDIUM);      
   }
-  #endif
+#endif
 
-  #ifdef FEATURE_BT_KEYBOARD
+#ifdef FEATURE_BT_KEYBOARD
   void BT_Keyboard_Status(void)
   {
         //ToDo: Set up as a periodic scan for reconnect or new keyboard
         if (BT_Keyboard_Lost == true) {
             if (Keyboard_Disconnected_signal) {                
-                debug_serial_port->println("Lost BT Keyboard Connection");
+                debug_serial_port->println(F("Lost BT Keyboard Connection"));
                 lcd_center_print_timed("  Lost Connection   ", 1, 3000);
                 Keyboard_Disconnected_signal = false;
-                //bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing, Default duration is 5 seconds
             }
         }
         else{
             if (Keyboard_Connected_signal) {
                 lcd_center_print_timed(" Keyboard Connected ", 1, 3000);
-                debug_serial_port->println("BT Keyboard Connected");
+                debug_serial_port->println(F("BT Keyboard Connected"));
                 Keyboard_Connected_signal = false;
             }
         }
@@ -24065,21 +23575,22 @@ void setup()
     initialize_debug_startup();
 }
 
+//#define USE_TASK     // for main program in a task
+
 #ifdef USE_TASK
-void main_loop(void * pvParameters ) 
+void main_loop(void * pvParameters )
 {
   /* The parameter value is expected to be 1 as 1 is passed in the
     pvParameters value in the call to xTaskCreate() below. */
 
   configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
 
-  for( ;; )
+  for( ;; ) {
  #else
   void main_loop(void) 
   {
-    if (1)
+    if (1) {
     #endif
-    {
       #ifdef OPTION_WATCHDOG_TIMER
         wdt_reset();
       #endif  //OPTION_WATCHDOG_TIMER
@@ -24146,16 +23657,17 @@ void main_loop(void * pvParameters )
               check_rotary_encoder();
           #endif
 
-          #if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD)
-              check_ps2_keyboard();
-          #endif
-          
           #ifdef FEATURE_BT_KEYBOARD
               #ifdef M5STACK_CORE2
                 M5.update();
               #endif
               BT_Keyboard_Status();
-              //check_bt_keyboard();// moved to separate RTOS task
+              #ifndef USE_BT_TASK
+                check_bt_keyboard();// check for BT events before PS2 events
+              #endif
+          #endif
+          #if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD)
+              check_ps2_keyboard();
           #endif
           
           #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
@@ -24255,7 +23767,7 @@ void main_loop(void * pvParameters )
         service_millis_rollover(); 
     }
 }
-
+  
 // --------------------------------------------------------------------------------------------
 void loop()
 //extern "C"  
@@ -24272,7 +23784,7 @@ void loop()
     
     //setup(); // call setup for here when not in Arduino statup mode
 
-    #if defined (FEATURE_BT_KEYBOARD) && defined (USE_TASK)
+    #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
         xReturned = xTaskCreate(
                     check_bt_keyboard,       /* Function that implements the task. */
                     "Check_BT_Keyboard",          /* Text name for the task. */
@@ -24282,7 +23794,7 @@ void loop()
                     &xHandle_BT );
     #endif
     
-    #ifdef USE_TASK
+    #if defined(USE_TASK)
     xReturned = xTaskCreate(
                 main_loop,       /* Function that implements the task. */
                 "Main_Loop",          /* Text name for the task. */
@@ -24291,16 +23803,21 @@ void loop()
                 0,/* Priority at which the task is created. */
                 &xHandle_MAIN );
     #endif
+    
     while (1)
     {
       #ifdef USE_TASK
         vTaskDelay(10000 / portTICK_PERIOD_MS);
-      #else        
-        #if defined (FEATURE_BT_KEYBOARD) 
+      #else
+        main_loop();
+      #endif        
+      
+      #if defined (FEATURE_BT_KEYBOARD) 
+        #ifndef USE_BT_TASK
           check_bt_keyboard();
         #endif
-        main_loop();
       #endif
+
       //esp_task_wdt_reset();
     }
 

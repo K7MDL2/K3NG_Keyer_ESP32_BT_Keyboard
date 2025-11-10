@@ -13,7 +13,8 @@
                 "${workspaceFolder}/managed_components/espressif__arduino-esp32/cores/esp32/**",
                 "${workspaceFolder}/components/**",
                 "D:/Documents/Arduino/libraries",
-                "${workspaceFolder}/managed_components/espressif__arduino-esp32/libraries/EEPROM/src"
+                "${workspaceFolder}/managed_components/espressif__arduino-esp32/libraries/EEPROM/src",
+                "D:/esp-idf/v5.5.1/esp-idf/components/bt/include/esp32/include"
             ],
             "browse": {
                 "path": [
