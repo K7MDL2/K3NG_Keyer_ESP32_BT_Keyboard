@@ -183,3 +183,4 @@ components-backup/LiquidCrystal_I2C/.hgsubstate
 components-backup/LiquidCrystal_I2C/.hgtags
 components-backup/LiquidCrystal_I2C/.piopm
 components-backup/LiquidCrystal_I2C/bitbucket-pipelines.yml
+components/TFT_eSPI
