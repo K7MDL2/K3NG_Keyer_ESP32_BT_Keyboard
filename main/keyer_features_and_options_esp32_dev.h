@@ -36,7 +36,7 @@
 #define TFT_1_9_IDEASPARK_LCD  2
 #define TFT_3_2_DIYMALLS_LCD   3
 
-// Choose one of the display types bu uncommenting it
+// Choose one of the display types by uncommenting it
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD
 #define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
