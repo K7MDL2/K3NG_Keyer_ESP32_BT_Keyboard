@@ -33,7 +33,7 @@ Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
              ********************************  Nov 10, 2025  K7MDL *******************************
 
-Updated CMakeLists.txt files (project and main) to search for DISPLAY_TYPE type in keyer_features_and_options_esp32_dev.h and include the correct #define and also add the DISPLAY_TYPE as a suffic to the project name.  Now the latest .bin file for each display type is uniquely named and copied to the /precompiled_images folder every time I do a build.  See teh new Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Select-Display-type-for-Build
+Updated CMakeLists.txt files (project and main) to search for DISPLAY_TYPE type in keyer_features_and_options_esp32_dev.h and include the correct #define and also add the DISPLAY_TYPE as a subfolder under precompiled_image folder.  Now the latest .bin files for each display model is copied every time I do a build for that display model.  See the new Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Select-Display-Type-for-Build
 
 Minor changes to clear out the line before printing a status message on the screen at startup (No BT keyboard, Pairing Code XXXXXX, etc).
 
