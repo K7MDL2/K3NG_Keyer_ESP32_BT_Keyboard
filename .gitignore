@@ -40,6 +40,8 @@
 # debug information files
 *.dwo
 
+.json 
+
 /build
 /managed_components
 D:/esp-idf/v5.5/esp-idf/components/**
@@ -184,6 +186,6 @@ components-backup/LiquidCrystal_I2C/.hgtags
 components-backup/LiquidCrystal_I2C/.piopm
 components-backup/LiquidCrystal_I2C/bitbucket-pipelines.yml
 components/TFT_eSPI
-.vscode/settings.json
 .vscode/launch.json
 K3NG_Keyer_ESP32_BT_Keyboard.code-workspace
+.vscode/settings.json

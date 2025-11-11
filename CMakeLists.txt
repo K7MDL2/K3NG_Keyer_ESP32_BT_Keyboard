@@ -6,7 +6,7 @@ set(EXTRA_COMPONENT_DIRS "components")
 
 # Parse DISPLAY_TYPE from header to form part of the project name and resulting .bin image names
 file(READ "${CMAKE_SOURCE_DIR}/main/keyer_features_and_options_esp32_dev.h" CONFIG_CONTENTS)
-string(REGEX MATCH "[^//]*#define[ \t]+DISPLAY_TYPE[ \t]+([^ \t\r\n]+)" _match "${CONFIG_CONTENTS}")
+string(REGEX MATCH "[^//]#define[ \t]+DISPLAY_TYPE[ \t]+([^ \t\r\n]+)" _match "${CONFIG_CONTENTS}")
 set(DISPLAY_TYPE_NAME "${CMAKE_MATCH_1}")
 message(STATUS "Detected DISPLAY_TYPE: ${DISPLAY_TYPE_NAME}")
 set(PROJECT_DISPLAY_TYPE ${DISPLAY_TYPE_NAME})
