@@ -10,8 +10,12 @@ string(REGEX MATCH "[^//]#define[ \t]+DISPLAY_TYPE[ \t]+([^ \t\r\n]+)" _match "$
 set(DISPLAY_TYPE_NAME "${CMAKE_MATCH_1}")
 message(STATUS "Detected DISPLAY_TYPE: ${DISPLAY_TYPE_NAME}")
 set(PROJECT_DISPLAY_TYPE ${DISPLAY_TYPE_NAME})
-set(PROJECT_PREF "K3NG_Keyer")  # the main project name
-set(PROJECT_NAME "${PROJECT_PREF}_${PROJECT_DISPLAY_TYPE}")   # prefix the display type name with main project name
+
+set(PROJECT_NAME "K3NG_Keyer")  # the main project name
+# or can create unique files name
+#set(PROJECT_PREF "K3NG_Keyer")  # the main project name
+#set(PROJECT_NAME "${PROJECT_PREF}_${PROJECT_DISPLAY_TYPE}")   # prefix the display type name with main project name
+
 message(STATUS "Detected PROJECT_NAME: ${PROJECT_NAME}")  # verify name on build screen
 add_compile_definitions(DISPLAY_TYPE="${DISPLAY_TYPE_NAME}")  # use the name in the build
 

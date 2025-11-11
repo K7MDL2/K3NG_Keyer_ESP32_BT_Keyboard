@@ -25,7 +25,8 @@ idf_component_register(SRCS "main.cpp" ${app_sources}
     #REQUIRES nvs_flash bt_keyboard bt LiquidCrystal_I2C arduino-esp32)
 
 #  create precompiled files
-set(out_path "${CMAKE_SOURCE_DIR}/precompiled_images")
+set(out_path "${CMAKE_SOURCE_DIR}/precompiled_images/${DISPLAY_TYPE_NAME}")
+file(MAKE_DIRECTORY ${out_path})
 idf_build_get_property(build_dir BUILD_DIR)
 idf_build_get_property(elf_name EXECUTABLE_NAME GENERATOR_EXPRESSION)
 set(app_bin "${build_dir}/${elf_name}.bin")
