@@ -31,12 +31,28 @@
 // #define FEATURE_LCD1602_N07DH      // http://linksprite.com/wiki/index.php5?title=16_X_2_LCD_Keypad_Shield_for_Arduino
 //#define FEATURE_LCD_SAINSMART_I2C
 
-#define FEATURE_LCD_LIQUIDCRYSTAL_I2C   // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+// These are for build automation.  Precompiled files will be renamed for each display type at each build.
+#define TEXT_I2C_4x20_LCD      1
+#define TFT_1_9_IDEASPARK_LCD  2
+#define TFT_3_2_DIYMALLS_LCD   3
+
+// Choose one of the display types bu uncommenting it
+#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
+//#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
+
 // *** In Arduino IDE, for these 2 TFT displays, you must edit libraries TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // For now it is automatically selected, until the TFT_eSPI library is ever updated overwriting the changes in teh USer_Setup_Seleect.h file.
-//#define FEATURE_IDEASPARK_LCD             // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus
-//#define FEATURE_TFT7789_3_2inch_240x320_LCD   // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-
+#if (DISPLAY_TYPE == TEXT_I2C_4x20_LCD)
+    #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+#endif
+#if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)
+    #define FEATURE_IDEASPARK_LCD                   // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
+#endif
+#if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD)
+    #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+#endif
+  
 // #define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
 //#define FEATURE_LCD_MATHERTEL_PCF8574 // https://github.com/mathertel/LiquidCrystal_PCF8574
 //#define FEATURE_LCD_I2C_FDEBRABANDER //https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library

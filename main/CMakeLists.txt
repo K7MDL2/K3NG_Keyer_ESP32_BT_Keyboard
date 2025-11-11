@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16.0)
 
+# Now have a custom, versioned, binary name
+
 #include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 file(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/main/.
                   ${CMAKE_SOURCE_DIR}/components/.)
