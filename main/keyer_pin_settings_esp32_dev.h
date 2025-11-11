@@ -38,8 +38,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define bt_keyboard_LED 13  // indicates BT keyboard connection status  3 on IdeaSpark 1.9" onboard Blue LED
     #define paddle_left     25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-    #define tx_key_line_1   16  // (high = key down/tx on)
-    #define sidetone_line   17 //23         // connect a speaker for sidetone
+    #define tx_key_line_1   16 // aka RX2   (high = key down/tx on)
+    #define sidetone_line   17 // aka TX2   connect a passive buzzer for sidetone
     #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         5 // PTT ("push to talk") lines 
     #define tx_inhibit_pin   0  //13 

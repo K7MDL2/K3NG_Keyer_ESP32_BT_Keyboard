@@ -3796,11 +3796,15 @@ void clear_display_row(byte row_number)
   #if !defined (FEATURE_IDEASPARK_LCD) && !defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
     lcd.noCursor();//sp5iou 20180328
   #endif
+
   for (byte x = 0; x < LCD_COLUMNS; x++) {
     #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-      lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-      lcd.drawChar(' ', SCROLL_LEFT_SIDE+(x*COLUMN_WIDTH), SCROLL_TOP_LINE+(row_number*lcd.fontHeight()));
-      lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+      lcd.setTextColor(TFT_BLACK, TFT_BLACK, true);
+      lcd.setFreeFont(TFT_FONT_MEDIUM);
+      //lcd.drawCentreString("         ", lcd.width()/2, SCROLL_TOP_LINE+(row_number*lcd.fontHeight()), 4);
+      lcd.fillRect(SCROLL_LEFT_SIDE-1, SCROLL_TOP_LINE+1+(row_number*lcd.fontHeight()), SCROLL_LEFT_SIDE+2+(x*COLUMN_WIDTH), lcd.fontHeight()+2, TFT_BLACK);
+      //lcd.drawChar(' ', SCROLL_LEFT_SIDE+(x*COLUMN_WIDTH), SCROLL_TOP_LINE+(row_number*lcd.fontHeight()));
+      lcd.setTextColor(TFT_WHITE, TFT_BLACK, true);
     #else
       lcd.setCursor(x,row_number);
       lcd.print(F(" "));
@@ -18076,6 +18080,7 @@ void pairing_handler(uint32_t pid) {
     debug_serial_port->println(pid);    
     vTaskDelay(10 / portTICK_PERIOD_MS);
     char pass[28];
+    clear_display_row(1);
     sprintf(pass, "Pairing Code %lu", pid);
     lcd_center_print_timed(pass, 1, 12000);
 }
@@ -18134,7 +18139,8 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
 
     if (!bt_keyboard.is_connected()) {
         debug_serial_port->println("No BT keyboards found");
-        lcd_center_print_timed("  No BT Keyboards   ", 1, 3000);
+        clear_display_row(1);
+        lcd_center_print_timed("No BT Keyboards", 1, 3000);
     }
 
     queueflush();
@@ -23523,6 +23529,7 @@ void initialize_st7789_lcd()
         if (BT_Keyboard_Lost == true) {
             if (Keyboard_Disconnected_signal) {                
                 debug_serial_port->println(F("Lost BT Keyboard Connection"));
+                clear_display_row(1);
                 lcd_center_print_timed("  Lost Connection   ", 1, 3000);
                 Keyboard_Disconnected_signal = false;
             }
@@ -23530,6 +23537,7 @@ void initialize_st7789_lcd()
         else{
             if (Keyboard_Connected_signal) {
                 lcd_center_print_timed(" Keyboard Connected ", 1, 3000);
+                clear_display_row(1);
                 debug_serial_port->println(F("BT Keyboard Connected"));
                 Keyboard_Connected_signal = false;
             }
