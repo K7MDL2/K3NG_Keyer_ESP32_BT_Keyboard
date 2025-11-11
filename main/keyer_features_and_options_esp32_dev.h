@@ -37,9 +37,9 @@
 #define TFT_3_2_DIYMALLS_LCD   3
 
 // Choose one of the display types bu uncommenting it
-#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
+//#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
+#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
 
 // *** In Arduino IDE, for these 2 TFT displays, you must edit libraries TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // For now it is automatically selected, until the TFT_eSPI library is ever updated overwriting the changes in teh USer_Setup_Seleect.h file.
