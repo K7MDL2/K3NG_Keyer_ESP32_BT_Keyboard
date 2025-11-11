@@ -31,16 +31,20 @@ Original K3NG CW Keyer here: https://github.com/k3ng/k3ng_cw_keyer
 Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
-             ********************************  Nov 11, 2025  K7MDL *******************************
+             ********************************  Nov 10, 2025  K7MDL *******************************
 
-Removed bt_keyboard check and main_loop from tasks.  Created bt_keyboard_read() and bt_keyboard_available() to mirror the keyboard.read() and keyboard.available() functions.  Performance appears to be good with no dropped dits or dahs up to 31WPM on the text i2c LCD.  Limits are set at 30WPM.   I also changes teh sdkconfig to use 240MHz CPU and 80Mhz with QIO for memory (vs the stock 160 and 40 DIO).
+Updated CMakeLists.txt files (project and main) to search for DISPLAY_TYPE type in keyer_features_and_options_esp32_dev.h and include the correct #define and also add the DISPLAY_TYPE as a suffic to the project name.  Now the latest .bin file for each display type is uniquely named and copied to the /precompiled_images folder every time I do a build.
+
+Minor changes to clear out the line before printing a status message on the screen at startup (No BT keyboard, Pairing Code XXXXXX, etc).
+
+             ********************************  Previous Updates *********************************
+
+Nov 10, 2025 - Removed bt_keyboard check and main_loop from tasks.  Created bt_keyboard_read() and bt_keyboard_available() to mirror the keyboard.read() and keyboard.available() functions.  Performance appears to be good with no dropped dits or dahs up to 31WPM on the text i2c LCD.  Limits are set at 30WPM.   I also changes teh sdkconfig to use 240MHz CPU and 80Mhz with QIO for memory (vs the stock 160 and 40 DIO).
 
 I forked the TFT_eSPI library so it can be sync'd to the original when needed. This preserves my customized User_Setup_Select.h file which points to custom User_Setup.h files in a folder under /main.  One for the 1.9" TFT, the other for the 3.2" TFT.  https://github.com/K7MDL2/TFT_eSPI
 
 The K380 BT Classic keyboard works great.  The BLE keyboards not as well, still digging into why.  No keyboard works when compiled under Arduino yet.  Both are running arduino_esp32 3.3.3 library.   See the open issues for status.
 
-             ********************************  Previous Updates *********************************
-             
 Nov 7, 2022 - Now the same code will compile under esp-idf (v5.5.1) and Arduino IDE (2.3.6).  Just change main.cpp to main.ino.   As of today, the precompiled file set is for the text LCD i2c display and compiled under esp-idf so all 3 keyboards will work.
 
 See https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/issues/2 for what works and what does not.  Bascially on the Rii i8+ mini keyboard works under Arduino as of today, but does reconnect.  Under esp-idf, all work, the K380s wont reconnect, the K380 and Rii i8+ do.  
