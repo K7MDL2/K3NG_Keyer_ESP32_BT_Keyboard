@@ -285,13 +285,17 @@ GENERIC STM32F103C
 
 #endif
 
-#ifdef FEATURE_DIYMALLS_LCD
+#if defined(FEATURE_TFT7789_3_2inch_240x320_LCD)
   #define bt_keyboard_LED_pin_active_state LOW
   #define bt_keyboard_LED_pin_inactive_state HIGH
+#elif defined(FEATURE_IDEASPARK_LCD)
+  #define bt_keyboard_LED_pin_active_state HIGH
+  #define bt_keyboard_LED_pin_inactive_state LOW  
 #else
   #define bt_keyboard_LED_pin_active_state HIGH
   #define bt_keyboard_LED_pin_inactive_state LOW  
 #endif
+
 
 #define sequencer_pins_active_state HIGH
 #define sequencer_pins_inactive_state LOW
