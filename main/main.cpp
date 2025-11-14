@@ -3657,8 +3657,8 @@ void testlcd(char status, int x, int y) {
             #endif
             break;
         case LCD_SCROLL_MSG:   // this is called after a timed message clears the display and the buffer has to be redrawn onscreen.  Also at start of Pause
-            #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-              lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+            #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD) || defined (M5STACK_CORE2)
+              lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_RED, TFT_BLACK);
               lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
             #else
               lcd.clear();
@@ -3681,8 +3681,8 @@ void testlcd(char status, int x, int y) {
         case LCD_SCROLL_MSG:
           if (lcd_scroll_buffer_dirty) { 
             if (lcd_scroll_flag) {
-              #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD)
-                lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLACK, TFT_BLACK);
+              #if defined (FEATURE_IDEASPARK_LCD) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD) || defined (M5STACK_CORE2)
+                lcd.fillSmoothRoundRect(3, 29, 314, 139, 6, TFT_BLUE, TFT_BLACK);
                 lcd.setTextColor(TFT_WHITE, TFT_BLACK, true); 
               #else
                 lcd.clear();
