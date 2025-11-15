@@ -1,3 +1,8 @@
+#ifndef ESP_CONFIG_H
+#define ESP_CONFIG_H
+
+#include "sdkconfig.h"
+
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
@@ -32,27 +37,51 @@
 //#define FEATURE_LCD_SAINSMART_I2C
 
 // These are for build automation.  Precompiled files will be renamed for each display type at each build.
+#define NO_DISPLAY             0
 #define TEXT_I2C_4x20_LCD      1
 #define TFT_1_9_IDEASPARK_LCD  2
 #define TFT_3_2_DIYMALLS_LCD   3
+#define M5STACK_CORE2_LCD      4
 
-// Choose one of the display types by uncommenting it
+// Choose one of the display types by uncommenting it.  
+// If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
+//#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
-#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD
+//#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD
 //#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
+//#define DISPLAY_TYPE M5STACK_CORE2_LCD
 
 // *** In Arduino IDE, for these 2 TFT displays, you must edit libraries TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // For now it is automatically selected, until the TFT_eSPI library is ever updated overwriting the changes in teh USer_Setup_Seleect.h file.
-#if (DISPLAY_TYPE == TEXT_I2C_4x20_LCD)
+#ifdef TEST
+#if (DISPLAY_TYPE == TEXT_I2C_4x20_LCDa)
     #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
 #endif
-#if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)
+#if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)a
     #define FEATURE_IDEASPARK_LCD                   // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
 #endif
-#if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD)
+#if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCDa)
     #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
 #endif
-  
+#if (DISPLAY_TYPE == M5STACK_CORE2_LCDa)
+    #define M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+#endif
+#endif
+
+// From SDKConfig.h under ESP-IDF
+#if (CONFIG_DISPLAY_TYPE_NAME == TEXT_I2C_4x20_LCD)
+    #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+#endif
+#if (CONFIG_DISPLAY_TYPE_NAME == TFT_1_9_IDEASPARK_LCD)
+    #define FEATURE_IDEASPARK_LCD                   // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
+#endif
+#if (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
+    #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+#endif
+#if (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
+    #define M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+#endif
+
 // #define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
 //#define FEATURE_LCD_MATHERTEL_PCF8574 // https://github.com/mathertel/LiquidCrystal_PCF8574
 //#define FEATURE_LCD_I2C_FDEBRABANDER //https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library
@@ -565,3 +594,5 @@
 //#define PS2_thorn     254 // þ
 //#define PS2_y_DIAERESIS     255 // ÿ
 #endif //defined(OPTION_PS2_KEYBOARD_FRENCH)
+
+#endif // ESP_CONFIG_H

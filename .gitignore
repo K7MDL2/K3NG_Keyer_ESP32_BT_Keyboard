@@ -189,3 +189,10 @@ components/TFT_eSPI
 .vscode/launch.json
 K3NG_Keyer_ESP32_BT_Keyboard.code-workspace
 .vscode/settings.json
+sdkconfig
+sdkconfig.defaults.M5STACK_CORE2_LCD
+sdkconfig.defaults.TEXT_I2C_4x20_LCD
+sdkconfig.old
+sdkconfig.defaults.TFT_1_9_IDEASPARK_LCD
+.vscode/settings.json
+sdkconfig.defaults.TFT_3_2_DIYMALLS_LCD

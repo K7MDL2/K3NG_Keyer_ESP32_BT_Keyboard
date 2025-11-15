@@ -1,0 +1,48 @@
+# Kconfig.projbuild for main component
+# No custom Kconfig for main in this example, but file is needed
+# - if main has dependencies that need configuration processing.
+# Kconfig.projbuild for component 'custom_module'
+
+menu "LCD_Display_Device"
+        
+    choice Select_LCD_Display_Module
+        prompt "Select LCD Display"
+        default TEXT_I2C_4x20_LCD
+        help
+            Driver for the TFT LCD screen
+
+        config TEXT_I2C_4x20_LCD
+            bool "Classic 4 Line x 20 Character Display using I2C"
+            help
+                Loads correct components 
+
+        config TFT_1_9_IDEASPARK_LCD
+            bool "IdeaSpark ESP32 with 1.9 Color TFT LCD" 
+            help
+                Loads correct compnents
+
+        config TFT_3_2_DIYMALLS_LCD
+            bool "DIYMALLS ESP32 with 3.2 inch Color TFT LCD"
+            help
+                Loads correct components
+
+        config M5STACK_CORE2_LCD
+            bool "M5Stack Core2 Module with 2 inch color TFT LCD"
+            help
+                Loads correct components
+
+        config NO_DISPLAY
+            bool "No display"
+            help
+                Will not load display related code
+    endchoice
+
+        config DISPLAY_TYPE_NAME
+            int
+            default 0 if NO_DISPLAY
+            default 1 if TEXT_I2C_4x20_LCD
+            default 2 if TFT_1_9_IDEASPARK_LCD
+            default 3 if TFT_3_2_DIYMALLS_LCD
+            default 4 if M5STACK_CORE2_LCD
+
+endmenu   

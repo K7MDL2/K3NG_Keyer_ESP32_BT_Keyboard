@@ -79,6 +79,8 @@
 // For M5Stack ESP32 module with integrated ILI9341 display ONLY, remove // in line below
 
 // #define M5STACK
+#undef TFT_WIDTH
+#undef TFT_HEIGHT
 
 // For ST7789, ST7735, ILI9163 and GC9A01 ONLY, define the pixel width and height in portrait orientation
 // #define TFT_WIDTH  80
@@ -128,7 +130,7 @@
 // needs to know if the LEDs are ON with the pin HIGH or LOW. If the LEDs are to be
 // driven with a PWM signal or turned OFF/ON then this must be handled by the user
 // sketch. e.g. with digitalWrite(TFT_BL, LOW);
-
+#undef TFT_BACKLIGHT_ON
 #define TFT_BL   32            // LED back-light control pin
 #define TFT_BACKLIGHT_ON HIGH  // Level to turn ON back-light (HIGH or LOW)
 
@@ -208,6 +210,13 @@
 
 // For ESP32 Dev board (only tested with ILI9341 display)
 // The hardware SPI can be mapped to any pins
+
+#undef TFT_MISO
+#undef TFT_MOSI
+#undef TFT_SCLK
+#undef TFT_CS  // Chip select control pin
+#undef TFT_DC  // Data Command control pin
+#undef TFT_RST  // Reset pin (could connect to RST pin)
 
 #define TFT_MISO -1
 #define TFT_MOSI 23
@@ -356,6 +365,7 @@
 // With a ST7735 display more than 27MHz may not work (spurious pixels and lines)
 // With an ILI9163 display 27 MHz works OK.
 
+#undef SPI_FREQUENCY 
 // #define SPI_FREQUENCY   1000000
 // #define SPI_FREQUENCY   5000000
 // #define SPI_FREQUENCY  10000000
@@ -366,9 +376,11 @@
 // #define SPI_FREQUENCY  80000000
 
 // Optional reduced SPI frequency for reading TFT
+#undef SPI_READ_FREQUENCY
 #define SPI_READ_FREQUENCY  20000000
 
 // The XPT2046 requires a lower SPI clock rate of 2.5MHz so we define that here:
+#undef SPI_TOUCH_FREQUENCY
 #define SPI_TOUCH_FREQUENCY  2500000
 
 // The ESP32 has 2 free SPI ports i.e. VSPI and HSPI, the VSPI is the default.

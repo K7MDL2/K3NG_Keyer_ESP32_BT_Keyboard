@@ -540,7 +540,7 @@ dependencies:
       type: idf
     version: 5.5.1
   joltwallet/littlefs:
-    component_hash: 150ca47225f7c9917f7f610a5f85e5e93fe3c15402234c23496ff045ad558b0b
+    component_hash: 1808d73e99168f6f3c26dd31799a248484762b3a320ec4962dec11a145f4277f
     dependencies:
     - name: idf
       require: private
@@ -548,7 +548,25 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.20.2
+    version: 1.20.3
+  m5stack/m5gfx:
+    component_hash: a44875eb6d6577bddcf1669ad5dec35e1afa425b7ca8e99af6b38505f37840e6
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.2.9
+  m5stack/m5unified:
+    component_hash: 9ff51561f550bf6061597fef38bd023654f98502d79c68e286cca07fadb249fd
+    dependencies:
+    - name: m5stack/m5gfx
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^0.2.8
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.2.7
   panigrah/esp32-idf-hd44780:
     component_hash: f5e8c25c335cd362d1ac9613138cdea7d98a4a6e272a1365b6f1117a27bfbefd
     dependencies:
@@ -568,7 +586,9 @@ direct_dependencies:
 - espressif/arduino-esp32
 - espressif/spi_bus
 - idf
+- m5stack/m5gfx
+- m5stack/m5unified
 - panigrah/esp32-idf-hd44780
-manifest_hash: a6a21784c1f083cc29e1497b3b22c3df7f21f030c440e81a79a14a32c50220d3
+manifest_hash: 482731a58baedaf88bbe4a386ed6bc2075b90b09780df876f47778776a5f0b2c
 target: esp32
 version: 2.0.0
