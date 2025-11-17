@@ -194,5 +194,5 @@ sdkconfig.defaults.M5STACK_CORE2_LCD
 sdkconfig.defaults.TEXT_I2C_4x20_LCD
 sdkconfig.old
 sdkconfig.defaults.TFT_1_9_IDEASPARK_LCD
-.vscode/settings.json
 sdkconfig.defaults.TFT_3_2_DIYMALLS_LCD
+

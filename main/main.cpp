@@ -1646,12 +1646,16 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define STATUS_BAR_X_CURSOR 6
   #define COLUMN_WIDTH 15
   #define MY_DATUM TL_DATUM
-  #define SCREEN_WIDTH (TFT_HEIGHT-1)
+  #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
   #define SCREEN_HEIGHT (TFT_WIDTH-1)
   #define SCROLL_BOX_LEFT_SIDE 3
-  #define SCROLL_BOX_TOP 29
+  #define SCROLL_BOX_TOP 29   // 1 row below the status bar border line
+  #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
+  // 170 for the 170x320 and 240x320 displays
+  // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
+  // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter.
   #define SCROLL_BOX_WIDTH (TFT_HEIGHT-(2*SCROLL_BOX_LEFT_SIDE)) // pixel width of scroll box area
-  #define SCROLL_BOX_HEIGHT (TFT_WIDTH-SCROLL_BOX_TOP-3)  // pixel height of scrll box area
+  #define SCROLL_BOX_HEIGHT (SCREEN_BOX_HEIGHT-SCROLL_BOX_TOP-3)  // pixel height of scroll box area inside borders
   #define SCROLL_TEXT_TOP_LINE (SCROLL_BOX_TOP+20)   // stat of first row of text
   #define SCROLL_TEXT_LEFT_SIDE (SCROLL_BOX_LEFT_SIDE+8)   // start of text columns
   #define TFT_GREY 0x5AEB // New colour
@@ -23531,7 +23535,7 @@ void initialize_st7789_lcd()
         lcd.setTextFont(2);  // &fonts::FreeMonoBold12pt7b)
         lcd.drawString("K7MDL Keyer", SCROLL_TEXT_LEFT_SIDE, 6);  
         lcd.setTextColor(TFT_RED);
-        lcd.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 6, TFT_RED);
+        lcd.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_BOX_HEIGHT, 6, TFT_RED);
         lcd.drawFastHLine(0, SCROLL_BOX_TOP-2, SCREEN_WIDTH, TFT_RED);
         lcd.drawFastHLine(0,SCROLL_BOX_TOP-1, SCREEN_WIDTH, TFT_RED);
         lcd.setTextWrap(false, false);                         // turn off text wrap, else will overwrite the borders
