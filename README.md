@@ -28,12 +28,19 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 
 > [!NOTE]
 >Original K3NG CW Keyer here: https://github.com/k3ng/k3ng_cw_keyer
+> 
 >Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
-             ********************************  Nov 10, 2025  K7MDL *******************************
+             ********************************  Nov 17, 2025  K7MDL *******************************
 
-Updated CMakeLists.txt files (project and main) to search for DISPLAY_TYPE type in keyer_features_and_options_esp32_dev.h and include the correct #define and also add the DISPLAY_TYPE as a subfolder under precompiled_image folder.  Now the latest .bin files for each display model are copied every time I do a build for that display model.  See the new Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Select-Display-Type-for-Build
+No feature changes but much behind the scenes to setup for easy adaption to future larger or different geometry screen sizes.  Faster CW text scrolling.  Looking into using viewports (aka windows) to place current pop-up messages and eliminate the slow screen redraws.  This also paves the way for future info screens like memory contents, memory editing, and proper graphics scrolling in a window that won't affect the surrounds, can just use text wrap.  This should improve CPU perf a bit and look a lot better.  The Sidetone line is now set to active Low on request (for now).  
+
+There are 4 screen display models in the #defines. The M5Stack does not work yet, still working on it.  The other 3 are all good.  This one display setting (DISPLAY_TYPE) is passed up to the top level (project) CMakeLists.txt and is set ot CONFIG_DISPLAY_MODEL.  That controls the library choice of User_Settings.h for each display type and copying the bin files to the right folder at the end of a compile.
+
+Improved the startup screen sequence and text placement.  Pairing screen is hard to miss now.
+
+Nov 10, 2025 - Updated CMakeLists.txt files (project and main) to search for DISPLAY_TYPE type in keyer_features_and_options_esp32_dev.h and include the correct #define and also add the DISPLAY_TYPE as a subfolder under precompiled_image folder.  Now the latest .bin files for each display model are copied every time I do a build for that display model.  See the new Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Select-Display-Type-for-Build
 
 Minor changes to clear out the line before printing a status message on the screen at startup (No BT keyboard, Pairing Code XXXXXX, etc).
 
