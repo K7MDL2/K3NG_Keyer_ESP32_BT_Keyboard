@@ -33,6 +33,9 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 
 
              ********************************  Nov 17, 2025  K7MDL *******************************
+> [!NOTE]
+>As of Nov 17, 2025, the precompiled .bin files have new offset numbers to use when flashing.  The Wiki pages for the 2 flash tools have been updated as well as Flash_Tool_Readme.txt
+>
 
 No feature changes but much behind the scenes to setup for easy adaption to future larger or different geometry screen sizes.  Faster CW text scrolling.  Looking into using viewports (aka windows) to place current pop-up messages and eliminate the slow screen redraws.  This also paves the way for future info screens like memory contents, memory editing, and proper graphics scrolling in a window that won't affect the surrounds, can just use text wrap.  This should improve CPU perf a bit and look a lot better.  The Sidetone line is now set to active Low on request (for now).  
 
