@@ -45,4 +45,28 @@ menu "LCD_Display_Device"
             default 3 if TFT_3_2_DIYMALLS_LCD
             default 4 if M5STACK_CORE2_LCD
 
+            
+        config DISPLAY_TYPE_NAME
+            int
+            default 0 if NO_DISPLAY
+            default 1 if TEXT_I2C_4x20_LCD
+            default 2 if TFT_1_9_IDEASPARK_LCD
+            default 3 if TFT_3_2_DIYMALLS_LCD
+            default 4 if M5STACK_CORE2_LCD
+            
+        config DISPLAY_TYPE_NAME
+            int
+            default 0 if NO_DISPLAY
+            default 1 if TEXT_I2C_4x20_LCD
+            default 2 if TFT_1_9_IDEASPARK_LCD
+            default 3 if TFT_3_2_DIYMALLS_LCD
+            default 4 if M5STACK_CORE2_LCD
+            
+        config DISPLAY_TYPE_NAME
+            int
+            default 0 if NO_DISPLAY
+            default 1 if TEXT_I2C_4x20_LCD
+            default 2 if TFT_1_9_IDEASPARK_LCD
+            default 3 if TFT_3_2_DIYMALLS_LCD
+            default 4 if M5STACK_CORE2_LCD
 endmenu   

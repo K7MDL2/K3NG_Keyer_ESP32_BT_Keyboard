@@ -14,7 +14,9 @@
                 "${workspaceFolder}/components/**",
                 "D:/Documents/Arduino/libraries",
                 "${workspaceFolder}/managed_components/espressif__arduino-esp32/libraries/EEPROM/src",
-                "D:/esp-idf/v5.5.1/esp-idf/components/bt/include/esp32/include"
+                "D:/esp-idf/v5.5.1/esp-idf/components/bt/include/esp32/include",
+                "${workspaceFolder}/managed_components/espressif__arduino-esp32/cores/esp32",
+                "D:/esp-idf/v5.5.1/esp-idf/components/freertos/FreeRTOS-Kernel-SMP/portable/linux/include/freertos"
             ],
             "browse": {
                 "path": [

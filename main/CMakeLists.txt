@@ -16,16 +16,15 @@ set(IDF_TARGET "esp32")
 
 set(SDKCONFIG ${CMAKE_SOURCE_DIR}/build/sdkconfig)
 
-#set(EXTRA_COMPONENT_DIRS ${CMAKE_SOURCE_DIR}/components/LiquidCrystal_I2C)
+message(STATUS "Main:  CONFIG_DISPLAY_TYPE: ${CONFIG_DISPLAY_TYPE}")
 
 idf_component_register(SRCS "main.cpp" ${app_sources}
-#idf_component_register(SRCS "main.cpp" "LiquidCrystal_I2C.cpp" I2CIO.cpp LCD.cpp ${app_sources}
     INCLUDE_DIRS "."  ${include_dirs}
     REQUIRES nvs_flash bt_keyboard bt TFT_eSPI LiquidCrystal_I2C arduino-esp32)
     #REQUIRES nvs_flash bt_keyboard bt LiquidCrystal_I2C arduino-esp32)
 
 #  create precompiled files
-set(out_path "${CMAKE_SOURCE_DIR}/precompiled_images/${DISPLAY_TYPE_NAME}")
+set(out_path "${CMAKE_SOURCE_DIR}/precompiled_images/${CONFIG_DISPLAY_TYPE}")
 file(MAKE_DIRECTORY ${out_path})
 idf_build_get_property(build_dir BUILD_DIR)
 idf_build_get_property(elf_name EXECUTABLE_NAME GENERATOR_EXPRESSION)

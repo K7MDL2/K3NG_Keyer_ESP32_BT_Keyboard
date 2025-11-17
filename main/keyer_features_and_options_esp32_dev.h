@@ -46,28 +46,32 @@
 // Choose one of the display types by uncommenting it.  
 // If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
 //#define DISPLAY_TYPE NO_DISPLAY
-//#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
+#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD
 //#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
 
 // *** In Arduino IDE, for these 2 TFT displays, you must edit libraries TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // For now it is automatically selected, until the TFT_eSPI library is ever updated overwriting the changes in teh USer_Setup_Seleect.h file.
-#ifdef TEST
-#if (DISPLAY_TYPE == TEXT_I2C_4x20_LCDa)
+#ifndef USE_KCONFIG
+#if (DISPLAY_TYPE == TEXT_I2C_4x20_LCD)
+    //#define CONFIG_DISPLAY_TYPE TEXT_I2C_4x20_LCD
     #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
 #endif
-#if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)a
+#if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)
+    //#define CONFIG_DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD  // CONFIG_ is added to name in Project level CMakeLists.txt to control 
+                                                        // TFT_eSPI User_Select.h choice of file to match this display
     #define FEATURE_IDEASPARK_LCD                   // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
 #endif
-#if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCDa)
+#if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD)
+    //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
     #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
 #endif
-#if (DISPLAY_TYPE == M5STACK_CORE2_LCDa)
+#if (DISPLAY_TYPE == M5STACK_CORE2_LCD)
+    //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
     #define M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
 #endif
-#endif
-
+#else
 // From SDKConfig.h under ESP-IDF
 #if (CONFIG_DISPLAY_TYPE_NAME == TEXT_I2C_4x20_LCD)
     #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
@@ -80,6 +84,7 @@
 #endif
 #if (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
     #define M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+#endif
 #endif
 
 // #define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
@@ -180,7 +185,7 @@
 
 // #define OPTION_DISABLE_SERIAL_PORT_CHECKING_WHILE_SENDING_CW
 
-//#define OPTION_PERSONALIZED_STARTUP_SCREEN        // displays a user defined string of characters on the second or fourth row of the screen during startup. 1602 display requires OPTION_DO_NOT_SAY_HI
+// #define OPTION_PERSONALIZED_STARTUP_SCREEN        // displays a user defined string of characters on the second or fourth row of the screen during startup. 1602 display requires OPTION_DO_NOT_SAY_HI
 // #define OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION        // reverses the up/down direction when using the paddles to change the wpm or sidetone frequency
 #define OPTION_DISPLAY_MEMORY_CONTENTS_COMMAND_MODE
 // #define OPTION_BEACON_MODE_MEMORY_REPEAT_TIME        // to space out the repeated playing of memory 1 when in beacon mode

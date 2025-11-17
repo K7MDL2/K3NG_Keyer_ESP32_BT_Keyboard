@@ -79,8 +79,8 @@
 // For M5Stack ESP32 module with integrated ILI9341 display ONLY, remove // in line below
 
 // #define M5STACK
-#undef TFT_WIDTH
-#undef TFT_HEIGHT
+//#undef TFT_WIDTH
+//#undef TFT_HEIGHT
 
 // For ST7789, ST7735, ILI9163 and GC9A01 ONLY, define the pixel width and height in portrait orientation
 // #define TFT_WIDTH  80
