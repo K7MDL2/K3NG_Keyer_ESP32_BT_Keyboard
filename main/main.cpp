@@ -1640,26 +1640,31 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define FMB12 &FreeMonoBold12pt7b
   #endif
   //#include "Free_Fonts.h" // Include the header file attached to this sketch  
-  #define GFXFF 1
-  #define TFT_FONT_SMALL FM9
-  #define TFT_FONT_MEDIUM FMB12
+  #define GFXFF 1                 // enable FreeFont set of custom fonts from AdaFruit
+  #define TFT_FONT_SMALL FM9      // FreeFont mono 9pt, not bold.
+  #define TFT_FONT_MEDIUM FMB12  	// FreeFont Mono Bold 12pt
   #define STATUS_BAR_X_CURSOR 6
   #define COLUMN_WIDTH 15
-  #define MY_DATUM TL_DATUM
+  #define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
+
   #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
   #define SCREEN_HEIGHT (TFT_WIDTH-1)
-  #define SCROLL_BOX_LEFT_SIDE 3
-  #define SCROLL_BOX_TOP 29   // 1 row below the status bar border line
   #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
   // 170 for the 170x320 and 240x320 displays
   // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
   // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter.
+ 
+  #define SCROLL_BOX_LEFT_SIDE 3
+  #define SCROLL_BOX_TOP 29   // 1 row below the status bar border line
+
   #define SCROLL_BOX_WIDTH (TFT_HEIGHT-(2*SCROLL_BOX_LEFT_SIDE)) // pixel width of scroll box area
   #define SCROLL_BOX_HEIGHT (SCREEN_BOX_HEIGHT-SCROLL_BOX_TOP-3)  // pixel height of scroll box area inside borders
   #define SCROLL_TEXT_TOP_LINE (SCROLL_BOX_TOP+20)   // stat of first row of text
   #define SCROLL_TEXT_LEFT_SIDE (SCROLL_BOX_LEFT_SIDE+8)   // start of text columns
-  #define TFT_GREY 0x5AEB // New colour
-  #define FONT_HEIGHT ((lcd.fontHeight()+2))
+  
+  #define TFT_GREY 0x5AEB // New color
+  #define FONT_HEIGHT ((lcd.fontHeight()+2))    // using 2px padding for line separation
+  
   #define SCROLL_BOX_ROW1 (SCROLL_TEXT_TOP_LINE)
   #define SCROLL_BOX_ROW2 (SCROLL_TEXT_TOP_LINE+FONT_HEIGHT)
   #define SCROLL_BOX_ROW3 (SCROLL_TEXT_TOP_LINE+(2*FONT_HEIGHT))

@@ -285,6 +285,15 @@ GENERIC STM32F103C
 
 #endif
 
+#ifdef FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+  #define tx_key_line_active_state HIGH
+  #define tx_key_line_inactive_state LOW
+#else
+  #define tx_key_line_active_state LOW
+  #define tx_key_line_inactive_state HIGH
+#endif
+
+
 #if defined(FEATURE_TFT7789_3_2inch_240x320_LCD)
   #define bt_keyboard_LED_pin_active_state LOW
   #define bt_keyboard_LED_pin_inactive_state HIGH
@@ -296,27 +305,19 @@ GENERIC STM32F103C
   #define bt_keyboard_LED_pin_inactive_state LOW  
 #endif
 
-
+#define sidetone_line_active_state HIGH
+#define sidetone_line_inactive_state LOW
 #define sequencer_pins_active_state HIGH
 #define sequencer_pins_inactive_state LOW
 #define ptt_line_active_state LOW
 #define ptt_line_inactive_state HIGH
-#define tx_key_line_active_state LOW
-#define tx_key_line_inactive_state HIGH
+
 #define ptt_input_pin_active_state LOW
 #define ptt_input_pin_inactive_state HIGH
 #define tx_inhibit_pin_active_state LOW
 #define tx_inhibit_pin_inactive_state HIGH
 #define tx_pause_pin_active_state LOW
 #define tx_pause_pin_inactive_state HIGH
-
-#ifdef FLIP_SIDETONE_POLARITY
-  #define sidetone_line_active_state HIGH
-  #define sidetone_line_inactive_state LOW
-#else  // for text LCD version driving an inverting buffer. Can hook a buzzer betwen 3V and this pin direct
-  #define sidetone_line_active_state LOW
-  #define sidetone_line_inactive_state HIGH
-#endif
 
 #if defined(ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32f103C) || defined HARDWARE_ESP32_DEV//sp5iou 20180329, 20210825
   #define button_value_factor 4095  //sp5iou contributed
