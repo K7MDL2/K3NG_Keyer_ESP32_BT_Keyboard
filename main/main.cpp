@@ -1375,7 +1375,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.11.17"
+#define CODE_VERSION "K7MDL-2025.11.18"
 #define eeprom_magic_number 45              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1622,6 +1622,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 #ifdef FEATURE_TFT_DISPLAY
   #define CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION
+  //#define TFT_VIEWPORT
   #ifdef M5STACK_CORE2
     #include <M5ModuleDisplay.h>
     #include <M5Unified.h>
@@ -1671,6 +1672,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define SCROLL_BOX_ROW4 (SCROLL_TEXT_TOP_LINE+(3*FONT_HEIGHT))
   #define SCROLL_BOX_ROW5 (SCROLL_TEXT_TOP_LINE+(4*FONT_HEIGHT))
   #define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
+  #define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
+  #define TFT_SET_VIEWPORT (lcd.setViewport(SCROLL_BOX_LEFT_SIDE+2, SCROLL_BOX_TOP+2, SCROLL_BOX_WIDTH-4, SCROLL_BOX_HEIGHT-4, false))
+  #define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
 #endif
 
 #if defined(FEATURE_LCD_HD44780)
@@ -2577,13 +2581,13 @@ byte service_tx_inhibit_and_pause(){
       if (!pause_sending_buffer_active){
         pause_sending_buffer = 1;
         pause_sending_buffer_active = 1;
-        delay(10);
+        mydelay(10);
       }
     } else {
       if (pause_sending_buffer_active){
         pause_sending_buffer = 0;
         pause_sending_buffer_active = 0;
-        delay(10);
+        mydelay(10);
       } 
     }
 
@@ -3047,7 +3051,7 @@ void service_keypad(){
             Keyboard.write(KEY_CAPS_LOCK);
             #ifdef OPTION_CW_KEYBOARD_CAPSLOCK_BEEP
               if (cw_keyboard_capslock_on){
-                beep();delay(100);
+                beep();mydelay(100);
                 boop();
                 cw_keyboard_capslock_on = 0;
               } else {
@@ -3317,7 +3321,7 @@ void check_sleep(){
     sleep_enable();
     #ifdef DEBUG_SLEEP
     debug_serial_port->println(F("check_sleep: entering sleep"));
-    delay(1000);
+    mydelay(1000);
     #endif //DEBUG_SLEEP
 
     sleep_mode();
@@ -3382,7 +3386,7 @@ void check_sleep(){
 
     #ifdef DEBUG_SLEEP
       debug_serial_port->println(F("check_sleep: entering sleep"));
-      delay(1000);
+      mydelay(1000);
     #endif //DEBUG_SLEEP
 
     if (keyer_awake){
@@ -3465,15 +3469,22 @@ void check_backlight() {
 // claer the scrollable text area of the display
 #ifdef FEATURE_DISPLAY
 
- void lcd_scroll_box_clear() {
-  #ifdef FEATURE_TFT_DISPLAY
-    lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-  #else
-    lcd.clear();
-    lcd.noCursor();//sp5iou 20180328
-  #endif 
-  //lcd_status = LCD_CLEAR;
+void lcd_scroll_box_clear() {
+    #ifdef FEATURE_TFT_DISPLAY
+      //if (TFT_VIEWPORT_EXISTS) {
+      //    debug_serial_port->println("Close Viewport");
+          lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
+      //    lcd.resetViewport();
+      //}
+      //else {
+      //    debug_serial_port->println("Clear scroll box, no Close Viewport");
+      //    lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
+          lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+      //}
+    #else
+        lcd.clear();
+        lcd.noCursor();//sp5iou 20180328
+    #endif
 }
 #endif
 
@@ -3628,7 +3639,7 @@ void testlcd(char status, int x, int y) {
 //-------------------------------------------------------------------------------------------------------
 
 #ifdef FEATURE_DISPLAY
- void service_display() {
+void service_display() {
 
   #ifdef DEBUG_LOOP
   debug_serial_port->println(F("loop: entering service_display"));
@@ -3642,12 +3653,12 @@ void testlcd(char status, int x, int y) {
   static byte y = 0;
 
   static byte screen_refresh_status = SCREEN_REFRESH_IDLE;
-  
+
   #ifdef FEATURE_TFT_DISPLAY
     update_icons();
   #endif
 
-  if (screen_refresh_status == SCREEN_REFRESH_INIT) {   // active at begging of a even llike pause
+  if (screen_refresh_status == SCREEN_REFRESH_INIT) {   // active at beginning of an event like pause
     #ifdef FEATURE_TFT_DISPLAY
       lcd.setCursor(SCROLL_TEXT_LEFT_SIDE, SCROLL_TEXT_TOP_LINE);
     #else
@@ -3671,7 +3682,7 @@ void testlcd(char status, int x, int y) {
         #ifdef FEATURE_TFT_DISPLAY
           lcd.setCursor(SCROLL_TEXT_LEFT_SIDE, SCROLL_TEXT_TOP_LINE+(y*FONT_HEIGHT));
         #else
-          lcd.setCursor(0,y);
+        lcd.setCursor(0,y);
         #endif         
       }
     } else {
@@ -3679,7 +3690,7 @@ void testlcd(char status, int x, int y) {
         #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
           lcd.backlight();
         #endif  // FEATURE_LCD_BACKLIGHT_AUTO_DIM
-        #ifdef FEATURE_TFT_DISPLAY
+    #ifdef FEATURE_TFT_DISPLAY
           int y1=SCROLL_TEXT_TOP_LINE+(y*FONT_HEIGHT);
           int x1=SCROLL_TEXT_LEFT_SIDE+(x*COLUMN_WIDTH);
           lcd.setFreeFont(TFT_FONT_MEDIUM);
@@ -3688,9 +3699,9 @@ void testlcd(char status, int x, int y) {
           lcd.drawChar(c, x1, y1);  // use char in scroll buffer and place at x1, y1 on graphics screen
           //lcd.setCursor(x1, y1);
           //lcd.print(c);
-        #else
+    #else
           lcd.print(lcd_scroll_buffer[y].charAt(x));          
-        #endif
+    #endif
       }
       x++;
     }
@@ -3720,6 +3731,7 @@ void testlcd(char status, int x, int y) {
           else {
             mydelay(5);
           }
+          break;
         case LCD_SCROLL_MSG:
           if (lcd_scroll_buffer_dirty) { 
             if (lcd_scroll_flag) {
@@ -3745,8 +3757,6 @@ void display_scroll_print_char(char charin){
   static byte row_pointer = 0;
   static byte holding_space = 0;
   byte x = 0;
-  int x1 = 0;
-  int y1 = 0;
 
   #ifdef DEBUG_DISPLAY_SCROLL_PRINT_CHAR
     debug_serial_port->print(F("display_scroll_print_char: "));
@@ -3812,7 +3822,7 @@ void display_scroll_print_char(char charin){
   lcd_scroll_buffer[row_pointer].concat(charin);
   column_pointer++;
   
-  lcd_scroll_buffer_dirty = 1; 
+  lcd_scroll_buffer_dirty = 1;
 }
 
 #endif //FEATURE_DISPLAY
@@ -3829,6 +3839,7 @@ void clear_display_row(byte row_number)
         lcd.noCursor();//sp5iou 20180328
     #endif
   
+      // blank out line
     #ifdef FEATURE_TFT_DISPLAY
         lcd.setTextColor(TFT_BLACK, TFT_BLACK);
         lcd.setFreeFont(TFT_FONT_MEDIUM);
@@ -3860,7 +3871,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
   if (lcd_status != LCD_TIMED_MESSAGE) {
     lcd_previous_status = lcd_status;
     lcd_status = LCD_TIMED_MESSAGE;
-    lcd_scroll_box_clear();
+    lcd_scroll_box_clear();  // for TFT clears the viewport
   } else {
     clear_display_row(row_number);
   }
@@ -3868,8 +3879,8 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
     lcd.setTextColor(TFT_WHITE, TFT_BLACK); 
     lcd.setFreeFont(TFT_FONT_MEDIUM);
     lcd.setTextDatum(MC_DATUM);
-    uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT);
-    lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, 4);
+      uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT);
+      lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, 4);
     lcd.setTextDatum(MY_DATUM);   // restore o generic dataum
   #else
     lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
@@ -4376,7 +4387,7 @@ void check_ps2_keyboard()
                                 } else if (configuration.sidetone_mode == SIDETONE_ON) {
                                     configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
                                     beep();
-                                    delay(200);
+                                    mydelay(200);
                                     beep();
                                     #ifdef FEATURE_DISPLAY
                                     if (LCD_COLUMNS < 9){
@@ -4642,7 +4653,7 @@ void ps2_keyboard_program_memory(byte memory_number)
   repeat_memory = 255;
   while (looping) {
     #ifdef HARDWARE_ESP32_DEV
-      mydelay(5);
+      mydelay(1);
     #endif
     #ifdef FEATURE_PS2_KEYBOARD
     while (keyboard.available() == 0) {
@@ -4756,7 +4767,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
 
   while (looping) {
     #ifdef HARDWARE_ESP32_DEV
-      mydelay(5);
+      mydelay(1);
     #endif
     #ifdef FEATURE_PS2_KEYBOARD
     if (keyboard.available() == 0) {        // wait for the next keystroke
@@ -4894,7 +4905,7 @@ void debug_capture ()
   byte serial_byte_in;
   int x = 1022;
 
-  while (primary_serial_port->available() == 0) {}  // wait for first byte
+  while (primary_serial_port->available() == 0) {mydelay(1);}  // wait for first byte
   serial_byte_in = primary_serial_port->read();
   primary_serial_port->write(serial_byte_in);
   //if ((serial_byte_in > 47) or (serial_byte_in = 20)) { primary_serial_port->write(serial_byte_in); }  // echo back
@@ -4904,6 +4915,7 @@ void debug_capture ()
     EEPROM.write(x,serial_byte_in);
     x--;
     while ( x > 400) {
+      mydelay(1);
       if (primary_serial_port->available() > 0) {
         serial_byte_in = primary_serial_port->read();
         EEPROM.write(x,serial_byte_in);
@@ -4916,7 +4928,7 @@ void debug_capture ()
     }
   }
 
-  while (1) {}
+  while (1) {mydelay(1);}
 
 }
 #endif
@@ -4948,7 +4960,7 @@ void debug_capture_dump()
     }
   }
 
-  while (1) {}
+  while (1) {mydelay(1);}
 
 }
 #endif
@@ -5514,7 +5526,7 @@ void ptt_key(){
 
           //digitalWrite (current_tx_ptt_line, ptt_line_active_state);
 
-          //delay(configuration.ptt_lead_time[configuration.current_tx-1]);
+          //mydelay(configuration.ptt_lead_time[configuration.current_tx-1]);
           #ifdef FEATURE_SEQUENCER
             sequencer_ptt_inactive_time = 0;
           #endif  
@@ -5539,7 +5551,7 @@ void ptt_key(){
             digitalWrite (ptt_tx_2, ptt_line_active_state);
           }
         #endif
-         //delay(configuration.ptt_lead_time[configuration.current_tx-1]);
+         //mydelay(configuration.ptt_lead_time[configuration.current_tx-1]);
         #ifdef FEATURE_SEQUENCER
           sequencer_ptt_inactive_time = 0;
         #endif  
@@ -5553,6 +5565,7 @@ void ptt_key(){
     #endif
 
     while (!all_delays_satisfied){
+      mydelay(1);
       #ifdef FEATURE_SEQUENCER
         if (sequencer_1_pin){
           if (((millis() - ptt_activation_time) >= configuration.ptt_active_to_sequencer_active_time[0]) || sequencer_1_active){
@@ -6064,7 +6077,7 @@ void check_dit_paddle()
         // winkey_interrupted = 1;
 
         // tone(sidetone_line,1000);
-        // delay(500);
+        // mydelay(500);
         // noTone(sidetone_line);
 
         dit_buffer = 0;
@@ -6084,7 +6097,7 @@ void check_dit_paddle()
         repeat_memory = 255;
         #ifdef OPTION_DIT_PADDLE_NO_SEND_ON_MEM_RPT
           dit_buffer = 0;
-          while (!paddle_pin_read(dit_paddle)) {};
+          while (!paddle_pin_read(dit_paddle)) {mydelay(1);};
           memory_rpt_interrupt_flag = 1;
         #endif
       }
@@ -6462,7 +6475,7 @@ void tx_and_sidetone_key (int state)
           }
         #endif
         if ((first_extension_time) && (previous_ptt_line_activated == 0)) {
-          delay(first_extension_time);
+          mydelay(first_extension_time);
         }
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
@@ -6530,7 +6543,7 @@ void tx_and_sidetone_key (int state)
           }
         #endif
         if ((first_extension_time) && (previous_ptt_line_activated == 0)) {
-          delay(first_extension_time);
+          mydelay(first_extension_time);
         }
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
@@ -6637,7 +6650,7 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
     #else
     while (((micros() - start) < ticks) && (service_tx_inhibit_and_pause() == 0)){
     #endif
-
+      mydelay(1);
       check_ptt_tail();
       
       #if defined(FEATURE_SERIAL) && !defined(OPTION_DISABLE_SERIAL_PORT_CHECKING_WHILE_SENDING_CW)
@@ -6816,12 +6829,15 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
 #ifdef FEATURE_DISPLAY
   void lcd_center_print_timed_wpm(){
 
+    #ifndef FEATURE_TFT_DISPLAY
+      #if defined(OPTION_ADVANCED_SPEED_DISPLAY)
+        lcd_center_print_timed(String(configuration.wpm) + " wpm - " + (configuration.wpm*5) + " cpm", 0, default_display_msg_delay);
+        lcd_center_print_timed(String(1200/configuration.wpm) + ":" + (((1200/configuration.wpm)*configuration.dah_to_dit_ratio)/100) + "ms 1:" + (float(configuration.dah_to_dit_ratio)/100.00), 1, default_display_msg_delay);
+      #else
 
-    #if defined(OPTION_ADVANCED_SPEED_DISPLAY)
-      lcd_center_print_timed(String(configuration.wpm) + " wpm - " + (configuration.wpm*5) + " cpm", 0, default_display_msg_delay);
-      lcd_center_print_timed(String(1200/configuration.wpm) + ":" + (((1200/configuration.wpm)*configuration.dah_to_dit_ratio)/100) + "ms 1:" + (float(configuration.dah_to_dit_ratio)/100.00), 1, default_display_msg_delay);
-    #else
-      lcd_center_print_timed(String(configuration.wpm) + " wpm", 0, default_display_msg_delay);
+          lcd_center_print_timed(String(configuration.wpm) + " wpm", 0, default_display_msg_delay);
+
+      #endif
     #endif
 
   }
@@ -6851,7 +6867,9 @@ void speed_change_command_mode(int change)
   
 
   #ifdef FEATURE_DISPLAY
-    lcd_center_print_timed(String(configuration.wpm_command_mode) + " wpm", 0, default_display_msg_delay);
+    #ifndef FEATURE_TFT_DISPLAY
+      lcd_center_print_timed(String(configuration.wpm_command_mode) + " wpm", 0, default_display_msg_delay);
+    #endif
   #endif
 }
 
@@ -6906,7 +6924,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
   unsigned long entry_time = millis();
 
   while (looping) {
-
+    mydelay(1);
     #ifdef OPTION_WATCHDOG_TIMER
       wdt_reset();
     #endif  //OPTION_WATCHDOG_TIMER
@@ -6952,6 +6970,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
 
     #ifdef FEATURE_BUTTONS
       while (analogbuttonread(0)) {    // hit the button to get out of command mode if no paddle was hit
+        mydelay(1);
         looping = 0;
         button_hit = 1;
       }
@@ -7046,9 +7065,11 @@ void command_mode() {
   #endif
 
   while (stay_in_command_mode) {
+    mydelay(1);
     cw_char = 0;
     looping = 1;
     while (looping) {
+      mydelay(1);
       int8_t button_temp = button_array.Pressed();
 
           #ifdef FEATURE_DISPLAY
@@ -7092,9 +7113,9 @@ void command_mode() {
       if (button_temp >=0 ){  // check for a button press
         looping = 0;
         cw_char = 9;
-        delay(50);
+        mydelay(50);
         button_that_was_pressed = button_temp;
-        while (button_array.Held(button_that_was_pressed)) {}
+        while (button_array.Held(button_that_was_pressed)) {mydelay(1);}
       }
 
       #if defined(FEATURE_SERIAL)
@@ -7175,7 +7196,7 @@ void command_mode() {
               lcd_center_print_timed("Speed " + String(configuration.wpm) + " wpm", 0, default_display_msg_delay);
             #endif                                                                      // OPTION_ADVANCED_SPEED_DISPLAY_DISPLAY
           #endif                                                                        // FEATURE_DISPLAY
-          delay(250);
+          mydelay(250);
           sprintf(c, "%d", configuration.wpm);
           send_char(c[0],KEYER_NORMAL);
           send_char(c[1],KEYER_NORMAL);
@@ -7385,7 +7406,7 @@ void command_mode() {
             configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
             #if !defined(FEATURE_COMMAND_MODE_ENHANCED_CMD_ACKNOWLEDGEMENT) 
               beep();
-              delay(200);
+              mydelay(200);
               beep();
             #else
               send_chars((char*)command_o_sidetone_paddle_only); 
@@ -7638,7 +7659,7 @@ void command_mode() {
           #ifdef FEATURE_DISPLAY
             lcd_center_print_timed("Status", 0, default_display_msg_delay);
             lcd_center_print_timed("wpm  " + String(configuration.wpm), 1, default_display_msg_delay);
-            delay(250);
+            mydelay(250);
           #endif                                                         // FEATURE_DISPLAY
 
           sprintf(c, "%d", configuration.wpm);
@@ -7650,21 +7671,21 @@ void command_mode() {
             case IAMBIC_A:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Iambic A", 1, default_display_msg_delay);
-                delay(250);
+                mydelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('A',KEYER_NORMAL);
               break;
             case IAMBIC_B:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Iambic B", 1, default_display_msg_delay);
-                delay(250);
+                mydelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('B',KEYER_NORMAL);
               break;
             case SINGLE_PADDLE:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Single Pdl", 1, default_display_msg_delay);
-                delay(250);
+                mydelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('S',KEYER_NORMAL);
               break;
@@ -7673,7 +7694,7 @@ void command_mode() {
             case ULTIMATIC:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Ultimatic", 1, default_display_msg_delay);
-                delay(250);
+                mydelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('U',KEYER_NORMAL);
               break;
@@ -7681,7 +7702,7 @@ void command_mode() {
             case BUG:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Bug", 1, default_display_msg_delay);
-                delay(250);
+                mydelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('G',KEYER_NORMAL);
               break;
@@ -7691,7 +7712,7 @@ void command_mode() {
 
           #ifdef FEATURE_DISPLAY
             lcd_center_print_timed("weighting  " + String(configuration.weighting), 1, default_display_msg_delay);
-            delay(250);
+            mydelay(250);
           #endif                                                       // FEATURE_DISPLAY
           sprintf(c, "%d", configuration.weighting);
           send_char(c[0],KEYER_NORMAL);
@@ -7705,7 +7726,7 @@ void command_mode() {
               weight_deci[1] = (configuration.dah_to_dit_ratio % 10) + '0';                 // get the single digit units part
             }                                                                               // end if ((configuration.dah_to_dit_ratio % 100) != 0)
             lcd_center_print_timed("dah:dit  " + String(configuration.dah_to_dit_ratio / 100) + "." + weight_deci, 1, default_display_msg_delay);
-            delay(250);
+            mydelay(250);
           #endif                                                                            // FEATURE_DISPLAY
           sprintf(c, "%d", configuration.dah_to_dit_ratio);
           send_char(c[0],KEYER_NORMAL);
@@ -7858,6 +7879,7 @@ void command_progressive_5_char_echo_practice() {
   #endif 
 
   while (loop1) {
+    mydelay(1);
     // if (practice_mode_called == ECHO_MIXED){
     //   practice_mode = random(ECHO_2_CHAR_WORDS,ECHO_QSO_WORDS+1);
     // } else {
@@ -7910,6 +7932,7 @@ void command_progressive_5_char_echo_practice() {
     
     loop2 = 1;
     while (loop2) {
+      mydelay(1);
       user_send_loop = 1;
       user_sent_cw = "";
       cw_char = 0;
@@ -7917,6 +7940,7 @@ void command_progressive_5_char_echo_practice() {
 
       // send the CW to the user
       while ((x < (cw_to_send_to_user.length())) && (x < progressive_step_counter)) {
+        mydelay(1);
         send_char(cw_to_send_to_user[x],KEYER_NORMAL);
         // test
         // port_to_use->print(cw_to_send_to_user[x]);
@@ -7926,6 +7950,7 @@ void command_progressive_5_char_echo_practice() {
       //port_to_use->println();
 
       while (user_send_loop) {
+        mydelay(1);
         // get their paddle input
 
         #ifdef FEATURE_DISPLAY
@@ -7982,6 +8007,7 @@ void command_progressive_5_char_echo_practice() {
 
         // does the user want to exit?
         while (analogbuttonread(0)) {
+          mydelay(1);
           user_send_loop = 0;
           loop1 = 0;
           loop2 = 0;
@@ -8022,7 +8048,7 @@ void command_progressive_5_char_echo_practice() {
 #else  
                                                                 // a loop to generate some increasing tones
                 tone(sidetone_line,NEWtone);                                              // generate a tone on the speaker pin
-                delay(TONEduration);                                                      // hold the tone for the specified delay period
+                mydelay(TONEduration);                                                      // hold the tone for the specified delay period
                 noTone(sidetone_line); 
 #endif                                                                   // turn off the tone
                 NEWtone = NEWtone*1.25;                                                                  // calculate a new value for the tone frequency
@@ -8162,6 +8188,7 @@ void command_keying_compensation_adjust() {
   #endif
 
   while (looping) {
+    mydelay(1);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8175,6 +8202,7 @@ void command_keying_compensation_adjust() {
       }
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
+      mydelay(1);
       looping = 0;
     }
    
@@ -8184,7 +8212,7 @@ void command_keying_compensation_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {mydelay(1);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
   config_dirty = 1;
@@ -8208,6 +8236,7 @@ void command_dah_to_dit_ratio_adjust() {
   #endif
 
   while (looping) {
+    mydelay(1);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8217,6 +8246,7 @@ void command_dah_to_dit_ratio_adjust() {
       adjust_dah_to_dit_ratio(-10);
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
+      mydelay(1);
       looping = 0;
     }
    
@@ -8226,7 +8256,7 @@ void command_dah_to_dit_ratio_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {mydelay(1);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
 }
@@ -8248,6 +8278,7 @@ void command_weighting_adjust() {
   #endif
 
   while (looping) {
+    mydelay(1);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8259,6 +8290,7 @@ void command_weighting_adjust() {
       if (configuration.weighting < 10){configuration.weighting = 10;}
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
+      mydelay(1);
       looping = 0;
     }
    
@@ -8267,7 +8299,7 @@ void command_weighting_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {mydelay(1);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
 }
@@ -8299,7 +8331,7 @@ void command_tuning_mode() {
 
   key_tx = 1;
   while (looping) {
-
+    mydelay(1);
     #ifdef OPTION_WATCHDOG_TIMER
       wdt_reset();
     #endif  //OPTION_WATCHDOG_TIMER
@@ -8323,7 +8355,7 @@ void command_tuning_mode() {
       tx_and_sidetone_key(1);
       ptt_key();
       while ((paddle_pin_read(paddle_right) == LOW) && (paddle_pin_read(paddle_left) == HIGH)) {
-        delay(10);
+        mydelay(10);
       }
     } else {
       if ((paddle_pin_read(paddle_right) == LOW) && (latched)) {
@@ -8332,7 +8364,7 @@ void command_tuning_mode() {
         tx_and_sidetone_key(0);
         ptt_unkey();
         while ((paddle_pin_read(paddle_right) == LOW) && (paddle_pin_read(paddle_left) == HIGH)) {
-          delay(10);
+          mydelay(10);
         }
       }
     }
@@ -8344,7 +8376,7 @@ void command_tuning_mode() {
   sending_mode = MANUAL_SENDING;
   tx_and_sidetone_key(0);
   ptt_unkey();
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {mydelay(1);}  // wait for all lines to go high
   key_tx = 0;
   send_dit();
   dit_buffer = 0;
@@ -8385,6 +8417,7 @@ void command_sidetone_freq_adj() {
   #endif
 
   while (looping) {
+    mydelay(1);
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
         #ifdef M5STACK_CORE2
             M5.Speaker.tone(700, configuration.hz_sidetone);
@@ -8413,7 +8446,7 @@ void command_sidetone_freq_adj() {
 	  sidetone_adj(1);
 	#endif                                              // OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
       #endif                                                // FEATURE_DISPLAY
-      delay(10);
+      mydelay(10);
     }
     if (paddle_pin_read(paddle_right) == LOW) {
       #ifdef FEATURE_DISPLAY
@@ -8434,9 +8467,10 @@ void command_sidetone_freq_adj() {
 	    sidetone_adj(-1);
 	#endif                                              // OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
       #endif                                                // FEATURE_DISPLAY
-      delay(10);
+      mydelay(10);
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
+      mydelay(1);
       looping = 0;
     }
 
@@ -8445,7 +8479,7 @@ void command_sidetone_freq_adj() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {mydelay(1);}  // wait for all lines to go high
           #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
             noTone(sidetone_line);
           #else
@@ -8484,6 +8518,7 @@ void command_speed_mode(byte mode) {
   }         
   
   while (looping) {
+    mydelay(1);
     send_dit();
     if ((paddle_pin_read(paddle_left) == LOW)) {
       if (mode == COMMAND_SPEED_MODE_KEYER_WPM) {
@@ -8517,6 +8552,7 @@ void command_speed_mode(byte mode) {
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0) ))  // if paddles are squeezed or button0 pressed - exit
     {
+      mydelay(1);
       looping = 0;
     }
 
@@ -8531,7 +8567,7 @@ void command_speed_mode(byte mode) {
   dit_buffer = 0;
   dah_buffer = 0;
 
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {mydelay(1);}  // wait for all lines to go high
   #ifndef FEATURE_DISPLAY
     // announce speed in CW
     if (mode == COMMAND_SPEED_MODE_KEYER_WPM){
@@ -8689,6 +8725,7 @@ void check_buttons() {
   button_depress_time = button_array.last_pressed_ms;
 
   while (button_array.Held(analogbuttontemp, button_depress_time + 1000)) {
+    mydelay(1);
     if ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
       button_depress_time = 1001;  // if button 0 is held and a paddle gets hit, assume we have a hold and shortcut out
     }
@@ -8751,6 +8788,7 @@ void check_buttons() {
         key_tx = 0;
         // do stuff if this is a command button hold down
         while (button_array.Held(analogbuttontemp)) {
+          mydelay(1);
           if (paddle_pin_read(paddle_left) == LOW) { 
  	          #ifdef OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
               speed_change(-1);                                           // left paddle decrease speed
@@ -8814,6 +8852,7 @@ void check_buttons() {
       }  // (analogbuttontemp == 0)
       if ((analogbuttontemp > 0) && (analogbuttontemp < analog_buttons_number_of_buttons)) {
         while (button_array.Held(analogbuttontemp)) {
+          mydelay(1);
           if (((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) && (analogbuttontemp < (number_of_memories + 1))){
             #ifdef FEATURE_MEMORIES
               repeat_memory = analogbuttontemp - 1;
@@ -8962,7 +9001,7 @@ void beep()
   #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
     // #if defined(FEATURE_SINEWAVE_SIDETONE)
     //   tone(sidetone_line, hz_high_beep);
-    //   delay(200);
+    //   mydelay(200);
     //   noTone(sidetone_line);
     // #else
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
@@ -8977,7 +9016,7 @@ void beep()
   #else
     if (sidetone_line) {
       digitalWrite(sidetone_line, sidetone_line_active_state);
-      delay(200);
+      mydelay(200);
       digitalWrite(sidetone_line, sidetone_line_inactive_state);
     }
   #endif
@@ -8996,14 +9035,14 @@ void boop()
             #endif
         #else  
             tone(sidetone_line, hz_low_beep);
-            delay(100);
+            mydelay(100);
             noTone(sidetone_line);
         #endif
 
     #else
         if (sidetone_line) {
         digitalWrite(sidetone_line, sidetone_line_active_state);
-        delay(100);
+        mydelay(100);
         digitalWrite(sidetone_line, sidetone_line_inactive_state);
         }
     #endif    
@@ -9024,15 +9063,15 @@ void beep_boop()
             #endif
         #else  
             tone(sidetone_line, hz_high_beep);
-            delay(100);
+            mydelay(100);
             tone(sidetone_line, hz_low_beep);
-            delay(100);
+            mydelay(100);
             noTone(sidetone_line);
         #endif
     #else
             if (sidetone_line) {
             digitalWrite(sidetone_line, sidetone_line_active_state);
-            delay(200);
+            mydelay(200);
             digitalWrite(sidetone_line, sidetone_line_inactive_state);
             }
     #endif     
@@ -9053,15 +9092,15 @@ void boop_beep()
         #endif
      #else  
         tone(sidetone_line, hz_low_beep);
-        delay(100);
+        mydelay(100);
         tone(sidetone_line, hz_high_beep);
-        delay(100);
+        mydelay(100);
         noTone(sidetone_line);
     #endif
   #else
     if (sidetone_line) {
       digitalWrite(sidetone_line, sidetone_line_active_state);
-      delay(200);
+      mydelay(200);
       digitalWrite(sidetone_line, sidetone_line_inactive_state);
     }
   #endif         
@@ -9093,7 +9132,7 @@ void send_the_dits_and_dahs(char const * cw_to_send){
   #endif  
 
   #if defined(FEATURE_FARNSWORTH)
-    float additional_intercharacter_time_ms;
+    //float additional_intercharacter_time_ms;
   #endif
 
   for (int x = 0;x < 12;x++){
@@ -9489,6 +9528,7 @@ void serial_qrss_mode()
   byte error =0;
 
   while (looping) {
+    mydelay(1);
     if (primary_serial_port->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -9524,7 +9564,10 @@ void serial_qrss_mode()
 
   if (error) {
     primary_serial_port->println(F("Error..."));
-    while (primary_serial_port->available() > 0) { incoming_serial_byte = primary_serial_port->read(); }  // clear out buffer
+    while (primary_serial_port->available() > 0) { 
+      mydelay(1);
+      incoming_serial_byte = primary_serial_port->read(); 
+    }  // clear out buffer
     return;
   } else {
     primary_serial_port->print(F("Setting keyer to QRSS Mode. Dit length: "));
@@ -10834,9 +10877,9 @@ void winkey_port_write(byte byte_to_send,byte override_filter){
   #ifdef DEBUG_WINKEY_PORT_WRITE
   if ((byte_to_send > 4) && (byte_to_send < 31)){
     boop();
-    delay(500);
+    mydelay(500);
     boop();
-    delay(500);
+    mydelay(500);
     boop();
     //return;
   }
@@ -10893,7 +10936,7 @@ void service_winkey(byte action) {
     if (!winkey_discard_bytes_init_done) {
       if (primary_serial_port->available()) {
         for (int z = winkey_discard_bytes_startup;z > 0;z--) {
-          while (primary_serial_port->available() == 0) {}
+          while (primary_serial_port->available() == 0) {mydelay(1);}
           primary_serial_port->read();
         }
         winkey_discard_bytes_init_done = 1;
@@ -12092,6 +12135,7 @@ void check_serial(){
 
 
   while (primary_serial_port->available() > 0) {
+    mydelay(1);
     incoming_serial_byte = primary_serial_port->read();
     #ifdef FEATURE_SLEEP
       last_activity_time = millis(); 
@@ -12142,6 +12186,7 @@ void check_serial(){
 
   #ifdef FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
     while (secondary_serial_port->available() > 0) {
+      mydelay(1);
       incoming_serial_byte = secondary_serial_port->read();     
       #ifdef FEATURE_SLEEP
         last_activity_time = millis(); 
@@ -12185,8 +12230,8 @@ void serial_page_pause(PRIMARY_SERIAL_CLS * port_to_use,byte seconds_timeout){
   unsigned long pause_start_time = millis();
 
   port_to_use->println(F("\r\nPress enter..."));
-  while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){}
-  while (port_to_use->available()){port_to_use->read();}
+  while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){mydelay(1);}
+  while (port_to_use->available()){mydelay(1); port_to_use->read();}
 
 
 }
@@ -12473,7 +12518,7 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
       } else if (configuration.sidetone_mode == SIDETONE_ON) {
         configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
         beep();
-        delay(200);
+        mydelay(200);
         beep();
         port_to_use->println(F("Paddle Only"));
       } else {
@@ -12722,6 +12767,7 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
   String userinput = "";
 
   while (looping) {
+    mydelay(1);
     if (port_to_use->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -12975,6 +13021,7 @@ void cli_sd_ls_command(PRIMARY_SERIAL_CLS * port_to_use,String directory){
   File dir = SD.open(directory);
 
   while (true) {
+    mydelay(1);
     File entry =  dir.openNextFile();
     if (! entry) {
       // no more files
@@ -13226,7 +13273,7 @@ void service_paddle_echo()
         Keyboard.write(KEY_CAPS_LOCK);
         #ifdef OPTION_CW_KEYBOARD_CAPSLOCK_BEEP
           if (cw_keyboard_capslock_on){
-            beep();delay(100);
+            beep();mydelay(100);
             boop();
             cw_keyboard_capslock_on = 0;
           } else {
@@ -13603,6 +13650,7 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit,PRIMARY
   int numbers[6];
 
   while (looping) {
+    mydelay(1);
     if (port_to_use->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -13645,7 +13693,7 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit,PRIMARY
     if (raise_error_message == RAISE_ERROR_MSG){
       port_to_use->println(F("Error..."));
     }
-    while (port_to_use->available() > 0) { incoming_serial_byte = port_to_use->read(); }  // clear out buffer
+    while (port_to_use->available() > 0) { mydelay(1); incoming_serial_byte = port_to_use->read(); }  // clear out buffer
     return(-1);
   } else {
     int y = 1;
@@ -13824,8 +13872,9 @@ void serial_set_weighting(PRIMARY_SERIAL_CLS * port_to_use) {
 void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
   byte incoming;
 
-  delay(100);
+  mydelay(100);
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     incoming = port_to_use->read();
   }
 
@@ -13833,11 +13882,12 @@ void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
   tx_and_sidetone_key(1);
   port_to_use->println(F("\r\nKeying tx - press a key to unkey"));
   #ifdef FEATURE_BUTTONS
-    while ((port_to_use->available() == 0) && (!analogbuttonread(0))) {}  // keystroke or button0 hit gets us out of here
+    while ((port_to_use->available() == 0) && (!analogbuttonread(0))) {mydelay(1);}  // keystroke or button0 hit gets us out of here
   #else
-    while (port_to_use->available() == 0) {}
+    while (port_to_use->available() == 0) {mydelay(1);}
   #endif
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     incoming = port_to_use->read();
   }
   tx_and_sidetone_key(0);
@@ -13968,6 +14018,7 @@ String generate_callsign(byte callsign_mode) {
 //   int caller_wpm_delta = 0;
 
 //   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+//   mydelay(1);
 //     port_to_use->read();
 //   }  
 
@@ -13985,6 +14036,7 @@ String generate_callsign(byte callsign_mode) {
 //   term.println(F("-------- ---- -------\n\n"));    
   
 //   while (loop1){
+//      mydelay(1);
 //     // get user keyboard input
 //     if (port_to_use->available()){      
 //       user_input_buffer[user_input_buffer_characters] = toupper(port_to_use->read());
@@ -14179,6 +14231,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+      mydelay(1);
       port_to_use->read();
     }  
    
@@ -14194,7 +14247,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
     menu_loop2 = 1;
     
     while (menu_loop2) {
-    
+      mydelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -14237,6 +14290,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use) {
   while(menu_loop) {
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+      mydelay(1);
       port_to_use->read();
     }  
    
@@ -14257,6 +14311,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use) {
     menu_loop2 = 1;
     
     while (menu_loop2) {   
+      mydelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)) {
@@ -14317,7 +14372,9 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
   randomSeed(millis());
 
   #ifdef FEATURE_DISPLAY
-    lcd_scroll_box_clear();
+    #ifndef FEATURE_TFT_DISPLAY
+      lcd_scroll_box_clear();
+    #endif
     if (LCD_COLUMNS > 17) {
       lcd_center_print_timed("Receive / Transmit", 0, default_display_msg_delay);
       lcd_center_print_timed("Echo Practice", 1, default_display_msg_delay);
@@ -14337,16 +14394,20 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
   port_to_use->println(F("Receive / Transmit Echo Practice\r\n\r\nCopy the code and send it back using the paddle."));
   port_to_use->println(F("Enter a blackslash \\ to exit.\r\n"));
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     incoming_char = port_to_use->read();
   }
   port_to_use->print(F("Press enter to start...\r\n"));
   while (port_to_use->available() == 0) {
+    mydelay(1);
   }
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     incoming_char = port_to_use->read();
   }
 
   while (loop1) {
+    mydelay(1);
     if (practice_mode_called == ECHO_MIXED){
       practice_mode = random(ECHO_2_CHAR_WORDS,ECHO_QSO_WORDS+1);
     } else {
@@ -14396,6 +14457,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
     loop2 = 1;
     
     while (loop2){
+      mydelay(1);
       user_send_loop = 1;
       user_sent_cw = "";
       cw_char = 0;
@@ -14403,6 +14465,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 
       // send the CW to the user
       while ((x < (cw_to_send_to_user.length())) && (x < progressive_step_counter)) {
+        mydelay(1);
         send_char(cw_to_send_to_user[x],KEYER_NORMAL);
         // test
         port_to_use->print(cw_to_send_to_user[x]);
@@ -14413,7 +14476,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 
       while (user_send_loop) {
         // get their paddle input
-
+        mydelay(1);
         #ifdef FEATURE_DISPLAY
           service_display();
         #endif
@@ -14486,6 +14549,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
         }
         #ifdef FEATURE_BUTTONS
           while (analogbuttonread(0)) {                                                 // can exit by pressing the Command Mode button
+            mydelay(1);
             user_send_loop = 0;
             loop1 = 0;
             loop2 = 0;
@@ -14519,7 +14583,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
                     #endif
                 #else  
                     tone(sidetone_line,NEWtone);                                            // generate a tone on the speaker pin
-                    delay(TONEduration);                                                    // hold the tone for the specified delay period
+                    mydelay(TONEduration);                                                    // hold the tone for the specified delay period
                     noTone(sidetone_line);
                 #endif                                                  // turn off the tone
                 NEWtone = NEWtone*1.25;                                                 // calculate a new value for the tone frequency
@@ -14570,6 +14634,7 @@ void serial_receive_practice_menu(PRIMARY_SERIAL_CLS * port_to_use,byte practice
   while(menu_loop) {
  
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+      mydelay(1);
       port_to_use->read();
     }  
    
@@ -14592,7 +14657,7 @@ void serial_receive_practice_menu(PRIMARY_SERIAL_CLS * port_to_use,byte practice
     menu_loop2 = 1;
     
     while (menu_loop2){
-    
+      mydelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -14654,6 +14719,7 @@ void serial_set_wordspace_parameters(PRIMARY_SERIAL_CLS * port_to_use,byte mode_
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+      mydelay(1);
       port_to_use->read();
     }  
   
@@ -14668,7 +14734,7 @@ void serial_set_wordspace_parameters(PRIMARY_SERIAL_CLS * port_to_use,byte mode_
     temp_value = 0;
     
     while (menu_loop2){
-    
+      mydelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char > 47) && (incoming_char < 58)){
@@ -14724,6 +14790,7 @@ void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use){
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+      mydelay(1);
       port_to_use->read();
     }  
     
@@ -14736,7 +14803,7 @@ void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use){
     menu_loop2 = 1;
     
     while (menu_loop2){
-    
+      mydelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -14775,7 +14842,9 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
   port_to_use->println(F("Random group practice\r\n"));
 
   #ifdef FEATURE_DISPLAY
-    lcd_scroll_box_clear();
+    #ifndef FEATURE_TFT_DISPLAY
+      lcd_scroll_box_clear();
+    #endif
     if (LCD_COLUMNS < 9){
       lcd_center_print_timed("RndGroup", 0, default_display_msg_delay);
     } else {
@@ -14788,11 +14857,12 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
   #endif
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     incoming_char = port_to_use->read();
   }
 
   while (loop1){
-
+    mydelay(1);
     switch(random_mode){
       case RANDOM_LETTER_GROUPS: random_character = random(65,91); break;
       case RANDOM_NUMBER_GROUPS: random_character = random(48,58); break;
@@ -14839,6 +14909,7 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
       }
     #else 
       while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
+        mydelay(1);
         loop1 = 0;
       }    
     #endif //FEATURE_BUTTONS
@@ -14862,6 +14933,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+      mydelay(1);
       port_to_use->read();
     }  
     
@@ -14889,7 +14961,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
     menu_loop2 = 1;
     
     while (menu_loop2){
-    
+      mydelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -14945,7 +15017,9 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
   port_to_use->println(F("Wordsworth practice...\n"));
 
   #ifdef FEATURE_DISPLAY
-    lcd_scroll_box_clear();
+    //#ifndef FEATURE_TFT_DISPLAY
+      lcd_scroll_box_clear();
+   // #endif 
     if (LCD_COLUMNS < 9){
       lcd_center_print_timed("Wrdswrth", 0, default_display_msg_delay);
     } else {
@@ -14958,12 +15032,13 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
   #endif
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     port_to_use->read();
   }
 
 
   while (loop1){
-
+    mydelay(1);
     if (practice_type_called == WORDSWORTH_MIXED){
       practice_type = random(WORDSWORTH_2_CHAR_WORDS,WORDSWORTH_QSO_WORDS+1);
     } else {
@@ -15004,12 +15079,12 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
     repetitions = 0;
 
     while ((loop3) && (repetitions < configuration.wordsworth_repetition)){ // word sending loop
-
+      mydelay(1);
       loop2 = 1;
       x = 0;
 
       while (loop2){ //character sending loop
-
+        mydelay(1);
         #if defined(DEBUG_WORDSWORTH)
           debug_serial_port->print(F("wordsworth_practice: send_char:"));
           debug_serial_port->print(word_buffer[x]);
@@ -15104,12 +15179,14 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   char incoming_char = ' ';
   String user_entered_cw = "";
   byte practice_type = 0;
-  char word_buffer[10];
+  char word_buffer[20];
 
   randomSeed(millis());
 
   #ifdef FEATURE_DISPLAY
-    lcd_scroll_box_clear();
+    //#ifdef FEATURE_TFT_DISPLAY
+      lcd_scroll_box_clear();
+    //#endif
     if (LCD_COLUMNS < 9){
       lcd_center_print_timed("IntrctRX", 0, default_display_msg_delay);
     } else {
@@ -15125,17 +15202,20 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   port_to_use->println(F("If you are using the Arduino serial monitor, select \"Carriage Return\" line ending."));
   port_to_use->println(F("Enter a blackslash \\ to exit.\r\n"));
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     incoming_char = port_to_use->read();
   }
   port_to_use->print(F("Press enter to start...\r\n"));
   while (port_to_use->available() == 0) {
+    mydelay(1);
   }
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     incoming_char = port_to_use->read();
   }
 
   while (loop1){
-
+    mydelay(1);
     if (practice_type_called == PRACTICE_MIXED){
       practice_type = random(PRACTICE_2_CHAR_WORDS,PRACTICE_QSO_WORDS+1);
     } else {
@@ -15189,7 +15269,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
     loop2 = 1;
     
     while (loop2){
-  
+      mydelay(1);
       #if defined(DEBUG_CALLSIGN_PRACTICE_SHOW_CALLSIGN)
         port_to_use->println(callsign);
       #endif
@@ -15198,7 +15278,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
       user_entered_cw = "";
       x = 0;
       while (serialwaitloop) {
-
+        mydelay(1);
         if(x < (cw_to_send_to_user.length())){
           send_char(cw_to_send_to_user[x],KEYER_NORMAL);
           #ifdef FEATURE_DISPLAY
@@ -15209,6 +15289,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
         }
 
         while(port_to_use->available() > 0) {
+          mydelay(1);
           incoming_char = port_to_use->read();
           incoming_char = toUpperCase(incoming_char);
           port_to_use->print(incoming_char);
@@ -15232,15 +15313,19 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
           if (cw_to_send_to_user.compareTo(user_entered_cw) == 0) {
             port_to_use->println(F("\nCorrect!"));
             #ifdef FEATURE_DISPLAY
-              lcd_scroll_box_clear();
-              lcd_center_print_timed("Correct!", 0, default_display_msg_delay);
+              #ifndef FEATURE_TFT_DISPLAY
+                lcd_scroll_box_clear();
+              #endif
+                lcd_center_print_timed("Correct!", 0, default_display_msg_delay);
               service_display();
             #endif
             loop2 = 0;
           } else {
             port_to_use->println(F("\nWrong!"));
             #ifdef FEATURE_DISPLAY
-              lcd_scroll_box_clear();
+              #ifndef FEATURE_TFT_DISPLAY
+                lcd_scroll_box_clear();
+              #endif
               lcd_center_print_timed("Wrong!", 0, default_display_msg_delay);
               service_display();
             #endif            
@@ -15250,11 +15335,13 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   
       #ifdef FEATURE_BUTTONS
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
+          mydelay(1);
           loop1 = 0;
           loop2 = 0;
         }
       #else 
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
+          mydelay(1);
           loop1 = 0;
           loop2 = 0;
         }    
@@ -15284,7 +15371,9 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
   randomSeed(millis());
 
   #ifdef FEATURE_DISPLAY
-    lcd_scroll_box_clear();
+    #ifndef FEATURE_TFT_DISPLAY
+      lcd_scroll_box_clear();
+    #endif
     if (LCD_COLUMNS < 9){
       lcd_center_print_timed("Call RX", 0, default_display_msg_delay);
     } else {
@@ -15299,15 +15388,14 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
   port_to_use->println(F("Callsign receive practice\r\n"));
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
+    mydelay(1);
     incoming_char = port_to_use->read();
   }
 
 
 
   while (loop1){
-
-
-
+    mydelay(1);
     if (practice_type_called == PRACTICE_MIXED){
       practice_type = random(PRACTICE_2_CHAR_WORDS,PRACTICE_QSO_WORDS+1);
     } else {
@@ -15329,9 +15417,9 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
         #endif
         break;
       case PRACTICE_3_CHAR_WORDS:
-        //strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[random(0,s3_size)])));
+        strcpy_P(word_buffer, (char*)pgm_read_dword(&(s3_table[random(0,s3_size)])));
         cw_to_send_to_user = word_buffer;
-        #ifndef DEBUG_PRACTICE_SERIAL
+        #ifdef DEBUG_PRACTICE_SERIAL
           debug_serial_port->print(F("serial_practice_non_interactive: PRACTICE_3_CHAR_WORDS:"));
         #endif        
         break;
@@ -15366,7 +15454,7 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
     x = 0;
 
     while ((loop2) && (x < (cw_to_send_to_user.length()))) {
-
+      mydelay(1);
       send_char(cw_to_send_to_user[x],KEYER_NORMAL);
       #ifdef FEATURE_DISPLAY
         display_scroll_print_char(cw_to_send_to_user[x]);
@@ -15383,12 +15471,14 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
 
       #ifdef FEATURE_BUTTONS
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
+          mydelay(1);
           loop1 = 0;
           loop2 = 0;
           x = 99;
         }
       #else 
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
+          mydelay(1);
           loop1 = 0;
           loop2 = 0;
           x = 99;
@@ -15986,12 +16076,14 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
 
 
   while (looping){
+    mydelay(1);
     if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
       check_paddles();
       service_dit_dah_buffers();
     }
 
     while ((port_to_use->available()) && (incoming_serial_byte_buffer_size < serial_program_memory_buffer_size)){  // get serial data if available
+      mydelay(1);
       incoming_serial_byte_buffer[incoming_serial_byte_buffer_size] = uppercase(port_to_use->read()); 
       incoming_serial_byte_buffer_size++;
     }
@@ -16042,6 +16134,7 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
           memory_data_entered = 1;
           #if !defined(OPTION_SAVE_MEMORY_NANOKEYER)
             while ((port_to_use->available()) && (incoming_serial_byte_buffer_size < serial_program_memory_buffer_size)){  // get serial data if available
+              mydelay(1);
               incoming_serial_byte_buffer[incoming_serial_byte_buffer_size] = uppercase(port_to_use->read()); 
               incoming_serial_byte_buffer_size++;
             }  
@@ -16049,6 +16142,7 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
           EEPROM.write((memory_start(memory_number-1)+memory_index),incoming_serial_byte);
           #if !defined(OPTION_SAVE_MEMORY_NANOKEYER)
             while ((port_to_use->available()) && (incoming_serial_byte_buffer_size < serial_program_memory_buffer_size)){  // get serial data if available
+              mydelay(1);
               incoming_serial_byte_buffer[incoming_serial_byte_buffer_size] = uppercase(port_to_use->read()); 
               incoming_serial_byte_buffer_size++;
             }   
@@ -16145,6 +16239,7 @@ byte memory_nonblocking_delay(unsigned long delaytime)
   unsigned long starttime = millis();
 
   while ((millis() - starttime) < delaytime) {
+    mydelay(1);
     check_paddles();
     #ifdef FEATURE_BUTTONS
       if (((dit_buffer) || (dah_buffer) || (analogbuttonread(0))) && (keyer_machine_mode != BEACON)) {   // exit if the paddle or button0 was hit
@@ -16154,7 +16249,7 @@ byte memory_nonblocking_delay(unsigned long delaytime)
       dit_buffer = 0;
       dah_buffer = 0;
       #ifdef FEATURE_BUTTONS
-        while (analogbuttonread(0)) {}
+        while (analogbuttonread(0)) {mydelay(1);}
       #endif
       return 1;
     }
@@ -16805,7 +16900,7 @@ byte play_memory(byte memory_number) {
               button0_buffer = 0;
               repeat_memory = 255;
               #ifdef FEATURE_BUTTONS
-                while (analogbuttonread(0)) {}
+                while (analogbuttonread(0)) {mydelay(1);}
               #endif  
               return 0;
             }
@@ -16816,7 +16911,7 @@ byte play_memory(byte memory_number) {
               button0_buffer = 0;
               repeat_memory = 255;
               #ifdef FEATURE_BUTTONS
-                while (analogbuttonread(0)) {}
+                while (analogbuttonread(0)) {mydelay(1);}
               #endif  
               return 0;
             }
@@ -16949,15 +17044,15 @@ void program_memory(int memory_number)
   dah_buffer = 0;
   
   #if defined(FEATURE_BUTTONS) && !defined(FEATURE_STRAIGHT_KEY)
-    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0))) { }  // loop until user starts sending or hits the button
+    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0))) {mydelay(1); }  // loop until user starts sending or hits the button
   #endif
 
   #if defined(FEATURE_BUTTONS) && defined(FEATURE_STRAIGHT_KEY)
-    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { }  // loop until user starts sending or hits the button
+    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
   #endif
 
   while (loop2) {
-
+    mydelay(1);
     #ifdef DEBUG_MEMORY_WRITE
       debug_serial_port->println(F("program_memory: entering loop2\r"));
     #endif
@@ -16969,6 +17064,7 @@ void program_memory(int memory_number)
 
 
     while (loop1) {
+       mydelay(1);
        check_paddles();
        if (dit_buffer) {
          sending_mode = MANUAL_SENDING;
@@ -17029,6 +17125,7 @@ void program_memory(int memory_number)
 
        #ifdef FEATURE_BUTTONS
          while (analogbuttonread(0)) {    // hit the button to get out of command mode if no paddle was hit
+           mydelay(1);
            loop1 = 0;
            loop2 = 0;
          }
@@ -17887,7 +17984,7 @@ void check_eeprom_for_initialization(){
    #endif
   // do an eeprom reset to defaults if paddles are squeezed
   if (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {
-    while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {}
+    while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {mydelay(1);}
     initialize_eeprom();
   }
   
@@ -17974,7 +18071,7 @@ void initialize_serial_ports(){
             primary_serial_port_baud_rate = PRIMARY_SERIAL_PORT_BAUD;
           #endif  //ifndef OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION
         }
-        while (analogbuttonread(0)) {}
+        while (analogbuttonread(0)) {mydelay(1);}
       #else //FEATURE_BUTTONS  
         #ifdef OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION
           primary_serial_port_mode = SERIAL_WINKEY_EMULATION;
@@ -18060,7 +18157,7 @@ void initialize_ps2_keyboard(){
   attachInterrupt(1, ps2int_write, FALLING);
   digitalWrite(ps2_keyboard_data, LOW); // pullup off
   pinMode(ps2_keyboard_data, OUTPUT); // pull clock low
-  delay(200);
+  mydelay(200);
   #endif //OPTION_PS2_KEYBOARD_RESET
 
 
@@ -18194,8 +18291,10 @@ void queueadd(const char ch)
  
 void queueadd(const char *s)
 {
-  while (*s)
+  while (*s) {
+      mydelay(1);
       queueadd(*s++);
+  }
 }
  
 char queuepop()
@@ -18334,7 +18433,7 @@ void initialize_display(){
     }
 
     #if defined(FEATURE_WIFI) //SP5IOU 20220129
-        delay(1000);
+        mydelay(1000);
         char IPString[18];
         sprintf(IPString, "%03d.%03d.%03d.%03d", configuration.ip[0], configuration.ip[1], configuration.ip[2], configuration.ip[3]);
         lcd_center_print_timed(IPString, 0, 4000);
@@ -18372,18 +18471,18 @@ void blink_ptt_dits_and_dahs(char const * cw_to_send){
     switch(cw_to_send[x]){
       case '.':
         ptt_key();
-        delay(100);
+        mydelay(100);
         ptt_unkey();
-        delay(100);
+        mydelay(100);
         break;
       case '-':
         ptt_key();
-        delay(300);
+        mydelay(300);
         ptt_unkey();
-        delay(100);
+        mydelay(100);
         break;
       case ' ':
-        delay(400);
+        mydelay(400);
         break;        
     }
 
@@ -18831,7 +18930,7 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key)
         } else if (configuration.sidetone_mode == SIDETONE_ON) {
           configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
           beep();
-             delay(200);
+             mydelay(200);
           beep();
           #ifdef FEATURE_DISPLAY
             if (LCD_COLUMNS < 9){
@@ -19193,7 +19292,7 @@ void initialize_usb()
       debug_serial_port->println(F("\rinitialize_usb: initializing"));
       #endif //DEBUG_USB
     }      
-    delay(200);
+    mydelay(200);
     next_time = millis() + 5000;
     #endif // (FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
     
@@ -19208,6 +19307,7 @@ void initialize_usb()
     #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
     unsigned long start_init = millis();
     while ((millis() - start_init) < 2000){
+      mydelay(1);
       Usb.Task();
     }
     #ifdef DEBUG_USB
@@ -19327,7 +19427,7 @@ uint8_t read_capacitive_pin(int pinToMeasure) {
   // Discharge the pin first by setting it low and output
   *port &= ~(bitmask);
   *ddr  |= bitmask;
-  delay(1);
+  mydelay(1);
   // Prevent the timer IRQ from disturbing our measurement
   noInterrupts();
   // Make the pin an input with the internal pull-up on
@@ -19596,6 +19696,7 @@ void command_alphabet_send_practice(){
   
   do
   {
+    mydelay(1);
     cw_char = get_cw_input_from_user(0);
     if (letter == (char)(convert_cw_number_to_ascii(cw_char))){  
       if (correct_answer_led) {
@@ -19695,7 +19796,7 @@ boolean wifiConnect(char* ssid = WIFI_SSID, char* password = WIFI_PASSWORD, int 
 #endif    
         WiFi.begin(ssid, password); //begin with credentials from function parameters
     for (int i = 0; (i < attempts) && (WiFi.status() != WL_CONNECTED); i++) {
-        delay(500);
+        mydelay(500);
 #if defined DEBUG_WIFI
         debug_serial_port->print(F("."));
 #endif    
@@ -19877,7 +19978,8 @@ void service_web_server() {
 
     valid_request = 0;
 
-    while (client.connected()){   
+    while (client.connected()){ 
+      mydelay(1);  
       if (client.available()){
         char c = client.read();
      
@@ -19963,7 +20065,7 @@ void service_web_server() {
             web_print_page_404(client);                      
           }
 
-          delay(1);
+          mydelay(1);
           client.stop();
           web_server_incoming_string = "";  
          }
@@ -22428,9 +22530,9 @@ void so2r_command() {
 void debug_blink(){
   #if defined(DEBUG_STARTUP_BLINKS)
     digitalWrite(13,HIGH);
-    delay(250);
+    mydelay(250);
     digitalWrite(13,LOW);
-    delay(1000);
+    mydelay(1000);
   #endif //DEBUG_STARTUP
 }    
 
@@ -22835,7 +22937,7 @@ void update_time(){
         while (1)
         {
     #endif
-      
+          mydelay(1);
           #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
                 //uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
@@ -23453,6 +23555,7 @@ static void listSPIFFS(char * path) {
 	DIR* dir = opendir(path);
 	assert(dir != NULL);
 	while (true) {
+    mydelay(1);
 		struct dirent*pe = readdir(dir);
 		if (!pe) break;
 		ESP_LOGI(__FUNCTION__,"d_name=%s d_ino=%d d_type=%x", pe->d_name,pe->d_ino, pe->d_type);
@@ -23543,7 +23646,8 @@ void initialize_st7789_lcd()
         lcd.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_BOX_HEIGHT, 6, TFT_RED);
         lcd.drawFastHLine(0, SCROLL_BOX_TOP-2, SCREEN_WIDTH, TFT_RED);
         lcd.drawFastHLine(0,SCROLL_BOX_TOP-1, SCREEN_WIDTH, TFT_RED);
-        lcd.setTextWrap(false, false);                         // turn off text wrap, else will overwrite the borders
+        //lcd.setTextWrap(false, false);                         // turn off text wrap, else will overwrite the borders
+        lcd.setTextWrap(true, true);                         // turn off text wrap, else will overwrite the borders
         update_icons();
         lcd.setTextColor(TFT_WHITE,TFT_BLACK);
         // now updae scroll box area with satus messages and eventually CW text to send
@@ -23561,7 +23665,7 @@ void initialize_st7789_lcd()
         //lcd.print(F("Binary = ")); lcd.println((int)fnumber, BIN); // Print as integer value in binary
         //lcd.print(F("Hexadecimal = ")); lcd.println((int)fnumber, HEX); // Print as integer number in Hexadecimal
 
-        //lcd.setCursor(SCROLL_TEXT_LEFT_SIDE, SCROLL_TEXT_TOP_LINE);
+        lcd.setCursor(SCROLL_TEXT_LEFT_SIDE, SCROLL_TEXT_TOP_LINE);
         lcd.setTextColor(TFT_WHITE,TFT_BLACK);  
         //lcd.setTextFont(4); //&fonts::FreeMonoBold12pt7b)
         lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
@@ -23595,7 +23699,7 @@ void initialize_st7789_lcd()
 void setup()
 {
     initialize_pins();
-    initialize_serial_ports();        // Goody - this is available for testing startup issues
+    //initialize_serial_ports();        // Goody - this is available for testing startup issues
     initialize_display();
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues
@@ -23651,19 +23755,20 @@ void main_loop(void * pvParameters )
       
       #if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
           if (keyer_machine_mode == BEACON) {
-             mydelay(5);                                                                 // an odd duration delay before we enter BEACON mode
+              mydelay(1);                                                                 // an odd duration delay before we enter BEACON mode
               #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
                   unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
               #endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
 
               while (keyer_machine_mode == BEACON) {                                        // if we're in beacon mode, just keep playing memory 1
+                  mydelay(1);
                   if (!send_buffer_bytes) {
                       add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
                       add_to_send_buffer(0);
                   }
                   service_send_buffer(PRINTCHAR);
                   #ifdef OPTION_BEACON_MODE_PTT_TAIL_TIME
-                      delay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
+                      mydelay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
                       check_ptt_tail();                                                         // this resets things so that the ptt line will go high during the next playout
                       digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
                   #endif                                                                      // OPTION_BEACON_MODE_PTT_TAIL_TIME
@@ -23677,7 +23782,7 @@ void main_loop(void * pvParameters )
                   #endif                                                                      // OPTION_WATCHDOG_TIMER
 
                   #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-                      if (time_to_delay > 0) delay(time_to_delay);                              // this provdes a delay between succesive playouts of the memory contents
+                      if (time_to_delay > 0) mydelay(time_to_delay);                              // this provdes a delay between succesive playouts of the memory contents
                   #endif                                                                      // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
               }                                                                             // end while (keyer_machine_mode == BEACON)
           }                                                                               // end if (keyer_machine_mode == BEACON)
@@ -23862,6 +23967,7 @@ void loop()
     
     while (1)
     {
+      mydelay(1);
       #ifdef USE_TASK
         mydelay(5000);
       #else
