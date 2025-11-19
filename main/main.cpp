@@ -1612,11 +1612,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "LiquidCrystal_I2C.h"
 #endif
 
-#if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(M5STACK_CORE2)
+#if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(M5STACK_CORE2) || defined(TFT_HOSYOND_320x48_LCD)
   #define FEATURE_TFT_DISPLAY
 #endif
 
-#if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(M5STACK_CORE2)
+#if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(M5STACK_CORE2) && !defined(TFT_HOSYOND_320x48_LCD)
   #define FEATURE_TFT_DISPLAY_NOT
 #endif
 
@@ -18357,7 +18357,7 @@ void initialize_display(){
     #if defined (FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_LCD_I2C_FDEBRABANDER)
       lcd.begin();
       lcd.home();
-    #elif !defined (FEATURE_IDEASPARK_LCD) && !defined (FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined (M5STACK_CORE2)
+    #elif defined (FEATURE_TFT_DISPLAY_NOT)
       lcd.begin(LCD_COLUMNS, LCD_ROWS);
       lcd.clear();
     #endif
