@@ -193,7 +193,7 @@
 // On NodeMCU V3  S0 =MISO, S1 =MOSI, S2 =SCLK
 // In ESP8266 overlap mode the following must be defined
 
-//#define TFT_SPI_OVERLAP
+#define TFT_SPI_OVERLAP
 
 // In ESP8266 overlap mode the TFT chip select MUST connect to pin D3
 //#define TFT_CS   PIN_D3
@@ -207,7 +207,7 @@
 // For ESP32 Dev board (only tested with ILI9341 display)
 // The hardware SPI can be mapped to any pins
 
-#define TFT_MISO 12
+#define TFT_MISO -1
 #define TFT_MOSI 13
 #define TFT_SCLK 14
 #define TFT_CS   15  // Chip select control pin
@@ -386,4 +386,4 @@
 // Transactions are automatically enabled by the library for an ESP32 (to use HAL mutex)
 // so changing it here has no effect
 
-// #define SUPPORT_TRANSACTIONS
+#define SUPPORT_TRANSACTIONS
