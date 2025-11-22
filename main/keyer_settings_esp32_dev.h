@@ -285,7 +285,7 @@ GENERIC STM32F103C
 
 #endif
 
-#ifdef FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (TFT_HOSYOND_320x48_LCD)           // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
   #define tx_key_line_active_state HIGH
   #define tx_key_line_inactive_state LOW
 #else
@@ -294,12 +294,9 @@ GENERIC STM32F103C
 #endif
 
 
-#if defined(FEATURE_TFT7789_3_2inch_240x320_LCD)
+#if defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(TFT_HOSYOND_320x48_LCD)
   #define bt_keyboard_LED_pin_active_state LOW
   #define bt_keyboard_LED_pin_inactive_state HIGH
-#elif defined(FEATURE_IDEASPARK_LCD)
-  #define bt_keyboard_LED_pin_active_state HIGH
-  #define bt_keyboard_LED_pin_inactive_state LOW  
 #else
   #define bt_keyboard_LED_pin_active_state HIGH
   #define bt_keyboard_LED_pin_inactive_state LOW  

@@ -1375,7 +1375,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.11.18"
+#define CODE_VERSION "K7MDL-2025.11.21"
 #define eeprom_magic_number 45              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1540,11 +1540,20 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "keyer_pin_settings.h"
   #include "keyer_settings.h"
 #endif
-#if !defined(HARDWARE_GENERIC_STM32F103C)
+
+#ifdef FEATURE_MCP23017_EXPANDER
+  #include <mcp23x17.h>
+  #include <driver/gpio.h>
+  //#include "i2c_bus.h"
+  #include <Wire.h>
+#endif
+
+#if !defined(HARDWARE_GENERIC_STM32F103C) && !defined(FEATURE_MCP23017_EXPANDER) // bypass when using mcp23017_write_io in place of digital write
   #if (paddle_left == 0) || (paddle_right == 0)
   #error "You cannot define paddle_left or paddle_right as 0 to disable"
   #endif
 #endif
+
 #if defined(FEATURE_BUTTONS)
   #include "src/buttonarray/buttonarray.h"
 #endif
@@ -1612,37 +1621,46 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "LiquidCrystal_I2C.h"
 #endif
 
-#if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(M5STACK_CORE2) || defined(TFT_HOSYOND_320x48_LCD)
+#if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(FEATURE_M5STACK_CORE2) || defined(FEATURE_TFT_HOSYOND_320x48_LCD) 
   #define FEATURE_TFT_DISPLAY
 #endif
 
-#if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(M5STACK_CORE2) && !defined(TFT_HOSYOND_320x48_LCD)
+#if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(FEATURE_M5STACK_CORE2) && !defined(FEATURE_TFT_HOSYOND_320x48_LCD)
   #define FEATURE_TFT_DISPLAY_NOT
 #endif
 
-#ifdef FEATURE_TFT_DISPLAY
+#if defined(FEATURE_TFT_DISPLAY)
   #define CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION
   //#define TFT_VIEWPORT
-  #ifdef M5STACK_CORE2
-    #include <M5ModuleDisplay.h>
-    #include <M5Unified.h>
-    #define lcd M5.Display
+  #ifdef M5STACK_CORE2a
+    //#include <M5ModuleDisplay.h>
+    #include "SPI.h"
+    #include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
+    TFT_eSPI lcd = TFT_eSPI();  // Invoke library
+    //#include <m5stack_core_2.h>
+    //#include  <m5gfx.h>
+    //#include <M5Unified.h>
+    //#define lcd M5.Lcd
+
     //#define setTextColor(a,b,c) setTextColor(a,b)
     //#define fillSmoothRoundRect(x,y,w,h,r,fg,bg) fillSmoothRoundRect(x,y,w,h,r,fg)
     //#define drawSmoothRoundRect(x,y,r,ir,w,h,fg,bg) drawRoundRect(x,y,w,h,r,fg) 
     #define setFreeFont(a) setFont(a)
     #define FM9 &fonts::FreeMono9pt7b
     #define FMB12 &fonts::FreeMonoBold12pt7b 
+    #define FS9 &fonts::FreeSans9pt7b
+    #define TFT_HEIGHT 240
   #else
     #include "SPI.h"
     #include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
     TFT_eSPI lcd = TFT_eSPI();  // Invoke library
     #define FM9 &FreeMono9pt7b
+    #define FS9 &FreeSans9pt7b
     #define FMB12 &FreeMonoBold12pt7b
   #endif
   //#include "Free_Fonts.h" // Include the header file attached to this sketch  
   #define GFXFF 1                 // enable FreeFont set of custom fonts from AdaFruit
-  #define TFT_FONT_SMALL FM9      // FreeFont mono 9pt, not bold.
+  #define TFT_FONT_SMALL FS9      // FreeFont mono 9pt, not bold.
   #define TFT_FONT_MEDIUM FMB12  	// FreeFont Mono Bold 12pt
   #define STATUS_BAR_X_CURSOR 6
   #define COLUMN_WIDTH 15
@@ -1675,6 +1693,14 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
   #define TFT_SET_VIEWPORT (lcd.setViewport(SCROLL_BOX_LEFT_SIDE+2, SCROLL_BOX_TOP+2, SCROLL_BOX_WIDTH-4, SCROLL_BOX_HEIGHT-4, false))
   #define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
+  #define STATUS_BAR_FONT 2   // 2  or FM9 or FS9
+  #define SCROLL_BOX_FONT FMB12   // 4
+#endif
+
+#ifdef FEATURE_MCP23017_EXPANDER
+  #define MCP23X17_ADDR 0x27
+  static EventGroupHandle_t eg = NULL;
+  static mcp23x17_t MCP23017 = { I2C_NUM_0 };
 #endif
 
 #if defined(FEATURE_LCD_HD44780)
@@ -1872,7 +1898,6 @@ void mydelay(unsigned long ms);
 #ifdef FEATURE_TFT_DISPLAY
 void initialize_TFT_LCD_display(void);
 void initialize_m5stack_core2();
-
 int32_t h = 320;  // calculate actual at run time
 int32_t w = 240;
 #endif
@@ -3513,7 +3538,7 @@ void update_icons(void) {
     const int32_t row = STATUS_BAR_X_CURSOR;
 
     lcd.setTextDatum(MY_DATUM);
-    //lcd.setFreeFont(FM9);
+    //lcd.setFreeFont(STATUS_BAR_FONT);
     lcd.setTextFont(2);
     lcd.setTextColor(TFT_BLUE, TFT_BLACK);
     if (strncmp(GridSq, last_GridSq, row))  // grid changed. update display
@@ -3533,7 +3558,7 @@ void update_icons(void) {
       itoa(configuration.wpm, WPM, 10);
       strncat(WPM, "WPM", 6);
       lcd.drawString("       ", 164, row);  // erase old
-      lcd.drawString(WPM,       164, row, 2);  // WPM rate
+      lcd.drawString(WPM,       164, row);  // WPM rate
       last_WPM = configuration.wpm;
     }
 
@@ -3547,11 +3572,11 @@ void update_icons(void) {
       }
       if (sending_mode == AUTOMATIC_SENDING_INTERRUPTED ) {
           lcd.setTextColor(TFT_ORANGE, TFT_BLACK);
-          lcd.drawChar('I', 252, row, 2);
+          lcd.drawChar('I', 252, row);
       }
       if (sending_mode == MANUAL_SENDING ) {
           lcd.setTextColor(TFT_PINK, TFT_BLACK);
-          lcd.drawChar('M', 252, row, 2);
+          lcd.drawChar('M', 252, row);
       }
     }
     static byte last_keyer_machine_mode = 255;
@@ -3559,18 +3584,18 @@ void update_icons(void) {
     if (last_keyer_machine_mode != keyer_machine_mode)    // modes are : Beacon KEYER_NORMAL KEYER_COMMAND_MODE
     {
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-      lcd.drawChar(' ', 264, row, 2);
+      lcd.drawChar(' ', 264, row);
       if (keyer_machine_mode == BEACON ) {
           lcd.setTextColor(TFT_ORANGE, TFT_BLACK);
-          lcd.drawChar('B', 264, row, 2);
+          lcd.drawChar('B', 264, row);
       }
       if (keyer_machine_mode == KEYER_NORMAL ) {
           lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-          lcd.drawChar('N', 264, row, 2);
+          lcd.drawChar('N', 264, row);
       }
       if (keyer_machine_mode == KEYER_COMMAND_MODE ) {
           lcd.setTextColor(TFT_PINK, TFT_BLACK);
-          lcd.drawChar('C', 264, row, 2);
+          lcd.drawChar('C', 264, row);
       }
       last_keyer_machine_mode = keyer_machine_mode;
     }
@@ -3579,13 +3604,13 @@ void update_icons(void) {
 
     if (last_ptt_line_activated != ptt_line_activated)  // Tx state changed
     {
-      lcd.drawChar(' ', 280, row, 2); // Tx Rx state
+      lcd.drawChar(' ', 280, row); // Tx Rx state
       if (ptt_line_activated) {
           lcd.setTextColor(TFT_RED, TFT_BLACK);
-          lcd.drawChar('T', 276, row, 2);
+          lcd.drawChar('T', 276, row);
       } else {
           lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-          lcd.drawChar('R', 276, row, 2);
+          lcd.drawChar('R', 276, row);
       }
       last_ptt_line_activated = ptt_line_activated;
     }
@@ -3596,10 +3621,10 @@ void update_icons(void) {
     {
       if (pause_sending_buffer != 0) {
           lcd.setTextColor(TFT_GOLD, TFT_BLACK);
-          lcd.drawChar('P', 288, row, 2);   // Sending Paused
+          lcd.drawChar('P', 288, row);   // Sending Paused
       } else {
           lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-          lcd.drawChar('P', 288, row, 2);   
+          lcd.drawChar('P', 288, row);   
       }
       last_pause_sending_buffer = pause_sending_buffer;
     }
@@ -3611,10 +3636,10 @@ void update_icons(void) {
       {
         if (bt_keyboard.is_connected()) {
             lcd.setTextColor(TFT_BLUE, TFT_BLACK);
-            lcd.drawChar('B', 300, row, 2); // BT connected status
+            lcd.drawChar('B', 300, row); // BT connected status
         } else {
             lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-            lcd.drawChar('B', 300, row, 2);
+            lcd.drawChar('B', 300, row);
         }
         last_BT_Connected = bt_keyboard.is_connected();
       }
@@ -6481,7 +6506,7 @@ void tx_and_sidetone_key (int state)
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
         #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
             #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-                #ifdef M5STACK_CORE2
+                #ifdef FEATURE_M5STACK_CORE2
                     M5.Speaker.tone(700, configuration.hz_sidetone);
                 #else
                     tone(sidetone_line,configuration.hz_sidetone);
@@ -6510,7 +6535,7 @@ void tx_and_sidetone_key (int state)
         if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
           #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
           #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-                #ifdef M5STACK_CORE2
+                #ifdef FEATURE_M5STACK_CORE2
                     if (M5.Speaker.isPlaying(0))
                     {
                         M5.Speaker.stop();
@@ -8419,7 +8444,7 @@ void command_sidetone_freq_adj() {
   while (looping) {
     mydelay(1);
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-        #ifdef M5STACK_CORE2
+        #ifdef FEATURE_M5STACK_CORE2
             M5.Speaker.tone(700, configuration.hz_sidetone);
         #else
               tone(sidetone_line,configuration.hz_sidetone,100);                                              // generate a tone on the speaker pin
@@ -9005,7 +9030,7 @@ void beep()
     //   noTone(sidetone_line);
     // #else
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-        #ifdef M5STACK_CORE2
+        #ifdef FEATURE_M5STACK_CORE2a
             M5.Speaker.tone(hz_high_beep, 200);
         #else
             tone(sidetone_line,hz_high_beep,200);                                              // generate a tone on the speaker pin
@@ -9028,7 +9053,7 @@ void boop()
 {
     #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
         #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-            #ifdef M5STACK_CORE2
+            #ifdef FEATURE_M5STACK_CORE2a
                 M5.Speaker.tone(hz_low_beep, 100);
             #else
                 tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
@@ -9054,7 +9079,7 @@ void beep_boop()
 {
     #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
         #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-            #ifdef M5STACK_CORE2
+            #ifdef FEATURE_M5STACK_CORE2a
                 M5.Speaker.tone(hz_high_beep, 100);
                 M5.Speaker.tone(hz_low_beep, 100);
             #else
@@ -9083,7 +9108,7 @@ void boop_beep()
 {
   #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-        #ifdef M5STACK_CORE2
+        #ifdef FEATURE_M5STACK_CORE2a
             M5.Speaker.tone(hz_low_beep, 100);
             M5.Speaker.tone(hz_high_beep, 100);
         #else
@@ -14576,7 +14601,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
               unsigned int TONEduration          =   50;                                // define the duration of each tone element in the tone sequence to drive a speaker
               for (int k=0; k<6; k++) {                                                 // a loop to generate some increasing tones
                  #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220115
-                    #ifdef M5STACK_CORE2
+                    #ifdef FEATURE_M5STACK_CORE2a
                         M5.Speaker.tone(NEWtone, TONEduration);
                     #else
                         tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
@@ -17227,8 +17252,17 @@ int memory_end(byte memory_number) {
 void initialize_pins() {
   
 #if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) //sp5iou 20180329, sp5iou 20220129
-  pinMode (paddle_left, INPUT_PULLUP);
-  pinMode (paddle_right, INPUT_PULLUP);
+  #ifdef FEATURE_MCP23017_EXPANDER
+    ESP_ERROR_CHECK(i2cdev_init());
+    ESP_ERROR_CHECK(mcp23x17_init_desc(&MCP23017, MCP23X17_ADDR, I2C_NUM_0, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SDA_PIN, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SCL_PIN));
+    mcp23x17_set_mode(&MCP23017, paddle_left, MCP23X17_GPIO_INPUT);
+    mcp23x17_set_pullup(&MCP23017, paddle_left, true);
+    mcp23x17_set_mode(&MCP23017, paddle_right, MCP23X17_GPIO_INPUT);
+    mcp23x17_set_pullup(&MCP23017, paddle_right, true);
+  #else
+    pinMode (paddle_left, INPUT_PULLUP);
+    pinMode (paddle_right, INPUT_PULLUP);
+  #endif
 #else
   pinMode (paddle_left, INPUT);
   digitalWrite (paddle_left, HIGH);
@@ -19607,39 +19641,51 @@ int paddle_pin_read(int pin_to_read){
 
 
 #if !defined FEATURE_CAPACITIVE_PADDLE_PINS && !defined FEATURE_TOUCH_PADDLE_PINS //SP5IOU 20220131
-#ifndef OPTION_INVERT_PADDLE_PIN_LOGIC
-#ifdef OPTION_DIRECT_PADDLE_PIN_READS_MEGA
-    switch (pin_to_read) {
-    case 2:  return(bitRead(PINE, 4)); break;           // pins 2 and 5 are the default paddle pins and are placed at the top 
-    case 5:  return(bitRead(PINE, 3)); break;           // as the greatest liklihood is that they will be examined first and then we exit
-    case 3:  return(bitRead(PINE, 5)); break;           // this should cover cases where board makers are not using the generic pins 2 and 5 for paddle connections
-    case 4:  return(bitRead(PING, 5)); break;           // additional case statements are here to provide responses for testing pins other than 2 or 5, in the range 2-13
-    case 6:  return(bitRead(PINH, 3)); break;           // this adds a few bytes of code, but a MEGA2560 is not constrained by available flash memory
-    case 7:  return(bitRead(PINH, 4)); break;
-    case 8:  return(bitRead(PINH, 5)); break;
-    case 9:  return(bitRead(PINH, 6)); break;
-    case 10: return(bitRead(PINB, 4)); break;
-    case 11: return(bitRead(PINB, 5)); break;
-    case 12: return(bitRead(PINB, 6)); break;
-    case 13: return(bitRead(PINB, 7)); break;
-}                                                     // end switch(pin_to_read)
-#endif                                                  // OPTION_DIRECT_PADDLE_READS_MEGA
-#ifdef OPTION_DIRECT_PADDLE_PIN_READS_UNO
-    return (bitRead(PIND, pin_to_read));                  // use this line on Unos and Nanos
-#endif                                                  // OPTION_DIRECT_PADDLE_PIN_READS_UNO
-#ifdef OPTION_SAVE_MEMORY_NANOKEYER                     // 
-    switch (pin_to_read) {
-    case 2: return(bitRead(PIND, 2)); break;            // code here just in case the nanoKeyer uses pin 2
-    case 5: return(bitRead(PIND, 5)); break;            // the nanoKeyer uses pin 5 for the dah paddle
-    case 8: return(bitRead(PINB, 0)); break;            // the nanoKeyer uses pin 8 for the dit paddle
-    }                                                     // end switch
-#endif                                                  // OPTION_SAVE_MEMORY_NANOKEYER
-#if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
-    return digitalRead((uint8_t) pin_to_read);                      // code using digitalRead
-#endif                                                  // !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
-#else                                                     // !OPTION_INVERT_PADDLE_PIN_LOGIC
-    return !digitalRead(pin_to_read);                       // we do the regular digitalRead() if none of the direct register read options are valid
-#endif                                                    // !OPTION_INVERT_PADDLE_PIN_LOGIC
+  #ifndef OPTION_INVERT_PADDLE_PIN_LOGIC
+    #ifdef OPTION_DIRECT_PADDLE_PIN_READS_MEGA
+        switch (pin_to_read) {
+        case 2:  return(bitRead(PINE, 4)); break;           // pins 2 and 5 are the default paddle pins and are placed at the top 
+        case 5:  return(bitRead(PINE, 3)); break;           // as the greatest liklihood is that they will be examined first and then we exit
+        case 3:  return(bitRead(PINE, 5)); break;           // this should cover cases where board makers are not using the generic pins 2 and 5 for paddle connections
+        case 4:  return(bitRead(PING, 5)); break;           // additional case statements are here to provide responses for testing pins other than 2 or 5, in the range 2-13
+        case 6:  return(bitRead(PINH, 3)); break;           // this adds a few bytes of code, but a MEGA2560 is not constrained by available flash memory
+        case 7:  return(bitRead(PINH, 4)); break;
+        case 8:  return(bitRead(PINH, 5)); break;
+        case 9:  return(bitRead(PINH, 6)); break;
+        case 10: return(bitRead(PINB, 4)); break;
+        case 11: return(bitRead(PINB, 5)); break;
+        case 12: return(bitRead(PINB, 6)); break;
+        case 13: return(bitRead(PINB, 7)); break;
+    }                                                     // end switch(pin_to_read)
+    #endif                                                  // OPTION_DIRECT_PADDLE_READS_MEGA
+    #ifdef OPTION_DIRECT_PADDLE_PIN_READS_UNO
+        return (bitRead(PIND, pin_to_read));                  // use this line on Unos and Nanos
+    #endif                                                  // OPTION_DIRECT_PADDLE_PIN_READS_UNO
+    #ifdef OPTION_SAVE_MEMORY_NANOKEYER                     // 
+        switch (pin_to_read) {
+        case 2: return(bitRead(PIND, 2)); break;            // code here just in case the nanoKeyer uses pin 2
+        case 5: return(bitRead(PIND, 5)); break;            // the nanoKeyer uses pin 5 for the dah paddle
+        case 8: return(bitRead(PINB, 0)); break;            // the nanoKeyer uses pin 8 for the dit paddle
+        }                                                     // end switch
+    #endif                                                  // OPTION_SAVE_MEMORY_NANOKEYER
+    #if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER) // && !defined(FEATURE_MCP23017_EXPANDER)
+        #if defined(FEATURE_MCP23017_EXPANDER)
+            uint32_t val;
+            mcp23x17_get_level(&MCP23017, (uint8_t) pin_to_read, &val); // !OPTION_INVERT_PADDLE_PIN_LOGIC    
+            return (int) val;
+        #else
+            return digitalRead((uint8_t) pin_to_read);                      // code using digitalRead
+        #endif
+    #endif                                                  // !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
+  #else                                               // !OPTION_INVERT_PADDLE_PIN_LOGIC
+      #if defined(FEATURE_MCP23017_EXPANDER)
+          uint32_t val;
+          mcp23x17_get_level(&MCP23017, (uint8_t) pin_to_read, &val); // !OPTION_INVERT_PADDLE_PIN_LOGIC    
+          return (int) !val;
+      #else
+          return !digitalRead(pin_to_read);                       // we do the regular digitalRead() if none of the direct register read options are valid
+      #endif
+  #endif
 #elif defined(FEATURE_CAPACITIVE_PADDLE_PINS)              // FEATURE_CAPACITIVE_PADDLE_PINS
     if (capactive_paddle_pin_inhibit_pin) {
         if (digitalRead(capactive_paddle_pin_inhibit_pin) == HIGH) {
@@ -23297,7 +23343,7 @@ void update_time(){
     } // check_bt_keyboard
 #endif // FEATURE_BT_KEYBOARD
 
-#ifdef M5STACK_CORE2
+#ifdef FEATURE_M5STACK_CORE2a
 static void m_volume_up(bool)
 {
   int v = M5.Speaker.getVolume() + 1;
@@ -23627,8 +23673,10 @@ void initialize_st7789_lcd()
 #ifdef FEATURE_TFT_DISPLAY
   void initialize_TFT_LCD_display(void) 
   {
-        #ifdef M5STACK_CORE2
-            initialize_m5stack_core2();
+        #ifdef FEATURE_M5STACK_CORE2
+            //lcd.setRotation(1);
+            //lcd.invertDisplay(true);
+            //initialize_m5stack_core2();
             // h and w are defined as 320 and 240 globally.  Crashes when calling height() or width() functions.            
         #else
             lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
@@ -23816,7 +23864,7 @@ void main_loop(void * pvParameters )
               check_rotary_encoder();
           #endif
 
-          #ifdef M5STACK_CORE2
+          #ifdef M5STACK_CORE2a
                 M5.update();
           #endif
   

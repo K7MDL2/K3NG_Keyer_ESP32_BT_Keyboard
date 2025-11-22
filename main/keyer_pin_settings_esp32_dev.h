@@ -6,6 +6,26 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 25, 26, 27, 14, 12, 13, 21, 22, 24, but can be used as digital i/o or PWM, interrupts etc.
 */
 
+#ifdef FEATURE_MCP23017_EXPANDER
+  // Skip pin 0 for paddles.
+  #define MCP23017_PIN0     0  // ptt_tx_1
+  #define MCP23017_PIN1     1  // paddle_left
+  #define MCP23017_PIN2     2  // paddle right
+  #define MCP23017_PIN3     3  // tx_key_line_1
+  #define MCP23017_PIN4     4  // ptt_tx_1
+  #define MCP23017_PIN5     5  // tx_key_line_2
+  #define MCP23017_PIN6     6  // ptt_tx_2
+  #define MCP23017_PIN7     7  // tx_key_line_3
+  #define MCP23017_PIN8     8  // ptt_tx_3
+  #define MCP23017_PIN9     9  // tx_key_line_4
+  #define MCP23017_PIN10   10  // ptt_tx_4
+  #define MCP23017_PIN11   11  // tx_key_line_5
+  #define MCP23017_PIN12   12  // ptt_tx_5
+  #define MCP23017_PIN13   13  // tx_key_line_6
+  #define MCP23017_PIN14   14  // ptt_tx_6
+  #define MCP23017_PIN15   15  // spare
+#endif
+
 /* Pins - you must review these and configure ! */
 #ifndef keyer_pin_settings_esdp32_dev_h
 #define keyer_pin_settings_esdp32_dev_h
@@ -15,22 +35,26 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 
 #if defined (M5STACK_CORE2)
   #define bt_keyboard_LED 19  // indicates BT keyboard connection status
-  #define paddle_left 32 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-  #define paddle_right 33 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-  #define tx_key_line_1 26  // (high = key down/tx on)
-  #define sidetone_line 0 //23         // connect a speaker for sidetone
-  #define potentiometer 35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-  #define ptt_tx_1 27     // PTT ("push to talk") lines
-  #define tx_inhibit_pin 13   //9
-  #define tx_pause_pin  14  //10
-  // 36 ADC input free - input only
+  #define paddle_left     27//32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define paddle_right    33 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define tx_key_line_1   26  // (high = key down/tx on)
+  #define sidetone_line    0 //23         // connect a speaker for sidetone
+  #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+  #define ptt_tx_1         0     //27   PTT ("push to talk") lines
+  #define tx_inhibit_pin  13   //9
+  #define tx_pause_pin    14  //10
+  #define SD_SPI_CS_PIN    4
+  #define SD_SPI_SCK_PIN  18
+  #define SD_SPI_MISO_PIN 38
+  #define SD_SPI_MOSI_PIN 23
+  // 21,22 are i2c shared with touch, 39 is touch int.
 #elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD)     // for DIY Malls 3.2" 320x240 TFT st7789
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE
-    #define paddle_left     25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-    #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+    #define paddle_left     MCP23017_PIN1 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+    #define paddle_right    MCP23017_PIN2 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define tx_key_line_1   16 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
-    #define sidetone_line   18 //23         // connect a speaker for sidetone
-    #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+    #define sidetone_line   26 // connect a speaker for sidetone
+    #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         4 // PTT ("push to talk") lines   (4 on 3.2" DIY malls st7789 TFT, red LED)
     #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
     #define tx_pause_pin     0 //14
@@ -44,8 +68,20 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define ptt_tx_1         5 // PTT ("push to talk") lines 
     #define tx_inhibit_pin   0  //13 
     #define tx_pause_pin     0  //14
+    #define LCD_H_RES      320
+    #define LCD_V_RES      240
+    #define LCD_HOST VSPI_HOST
+    #define LCD_BUF_LINES   60
+    #define LV_TICK_PERIOD_MS 1
+    #define SD_SPI_CS_PIN   15
+    #define SD_SPI_SCK_PIN  18
+    #define SD_SPI_MISO_PIN -1
+    #define SD_SPI_MOSI_PIN 23
+    #define SD_SPI_RST_PIN   4
+    #define SD_SPI_BLK_PIN  32
+    #define SD_SPI_DC_PIN    2
   // 36 ADC input free - input only
-#elif defined (TFT_HOSYOND_320x48_LCD)
+#elif defined (FEATURE_TFT_HOSYOND_320x48_LCD)
     #define bt_keyboard_LED 17  // indicates BT keyboard connection status  3 on IdeaSpark 1.9" onboard Blue LED
     #define paddle_left     23 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define paddle_right    19 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
@@ -126,28 +162,6 @@ FEATURE_SIDETONE_SWITCH
   #define lcd_d6 18
   #define lcd_d7 19
 #endif //FEATURE_LCD1602_N07DH
-
-#ifdef M5STACK_CORE2
-  #define SD_SPI_CS_PIN   4
-  #define SD_SPI_SCK_PIN  18
-  #define SD_SPI_MISO_PIN 38
-  #define SD_SPI_MOSI_PIN 23
-#endif  // M5STACK_CORE2
-
-#ifdef IDEASPARK_LCD
-  #define LCD_H_RES      320
-  #define LCD_V_RES      240
-  #define LCD_HOST VSPI_HOST
-  #define LCD_BUF_LINES   60
-  #define LV_TICK_PERIOD_MS 1
-  #define SD_SPI_CS_PIN   15
-  #define SD_SPI_SCK_PIN  18
-  #define SD_SPI_MISO_PIN -1
-  #define SD_SPI_MOSI_PIN 23
-  #define SD_SPI_RST_PIN   4
-  #define SD_SPI_BLK_PIN  32
-  #define SD_SPI_DC_PIN    2
-#endif  // IDEASPARK_LCD
 
 //ps2 keyboard pins
 #ifdef FEATURE_PS2_KEYBOARD
