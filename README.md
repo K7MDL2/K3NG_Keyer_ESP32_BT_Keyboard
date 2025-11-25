@@ -1,8 +1,8 @@
 | Support Targets | ![alt text][esp32] | ![alt text][Has_Precompiled_Firmware_Images] |
 | --- | --- | --- |
 
-| Boards Used | ![alt text][esp32-WROOM]| ![alt text][esp32-WROOM_with_st7789_Color_TFT_display]|
-| --- | --- | --- |
+| Boards Used | ![alt text][ESP32-WROOM]| ![alt text][ESP32-WROOM_with_st7789_Color_TFT_display]| ![alt text][ESP32-WROOM_with_st7796_Color_TFT_display]|
+| --- | --- | --- | --- |
 
 | Dev Environment Used | ![alt text][ESP-IDF]|
 | --- | --- |
@@ -10,17 +10,18 @@
 | BT Keyboards Tested | ![alt text][K380]|![alt text][K380s]|![alt text][Rii_mini]|
 | --- | --- | --- | --- |
 
-[esp32]: https://img.shields.io/badge/ESP32-green "ESP32"
-[esp32-WROOM]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
-[esp32-WROOM_with_st7789_Color_TFT_display]: https://img.shields.io/badge/esp32--WROOM--with--st7789--Color--TFT--display-orange "ESP32-WROOM-TFT"
-[ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5-cyan "ESP-IDF v5.5"
+[ESP32]: https://img.shields.io/badge/ESP32-green "ESP32"
+[ESP32-WROOM]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
+[ESP32-WROOM_with_st7789_Color_TFT_display]: https://img.shields.io/badge/ESP32--WROOM--with--st7789--Color--TFT--display-orange "ESP32-WROOM-TFT"
+[ESP32-WROOM_with_st7796_Color_TFT_display]: https://img.shields.io/badge/ESP32--WROOM--with--st7796--Color--TFT--display-orange "ESP32-WROOM-TFT"
+[ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5.1-cyan "ESP-IDF v5.5.1"
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 [K380]: https://img.shields.io/badge/K380-violet "K380"
 [K380s]: https://img.shields.io/badge/K380s-violet "K380s"
 [Rii_mini]: https://img.shields.io/badge/Rii_mini-violet "Rii i8+"
 
 
-# K3NG CW Keyer (Modified for esp32)
+# K3NG CW Keyer (Modified for ESP32)
 
 Based on a 2022 version, modifed to run on ESP32-WROOM32 with BT keyboards and TFT and LCD displays
 
