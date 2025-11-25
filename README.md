@@ -1,8 +1,8 @@
 | Support Targets | ![alt text][esp32] | ![alt text][Has_Precompiled_Firmware_Images] |
 | --- | --- | --- |
 
-| Boards Used | ![alt text][esp32-WROOM]| ![alt text][esp32-WROOM_with_st7789_Color_TFT_display]|
-| --- | --- | --- |
+| Boards Used | ![alt text][ESP32-WROOM]| ![alt text][ESP32-WROOM_with_st7789_Color_TFT_display]| ![alt text][ESP32-WROOM_with_st7796_Color_TFT_display]|
+| --- | --- | --- | --- |
 
 | Dev Environment Used | ![alt text][ESP-IDF]|
 | --- | --- |
@@ -10,17 +10,18 @@
 | BT Keyboards Tested | ![alt text][K380]|![alt text][K380s]|![alt text][Rii_mini]|
 | --- | --- | --- | --- |
 
-[esp32]: https://img.shields.io/badge/ESP32-green "ESP32"
-[esp32-WROOM]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
-[esp32-WROOM_with_st7789_Color_TFT_display]: https://img.shields.io/badge/esp32--WROOM--with--st7789--Color--TFT--display-orange "ESP32-WROOM-TFT"
-[ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5-cyan "ESP-IDF v5.5"
+[ESP32]: https://img.shields.io/badge/ESP32-green "ESP32"
+[ESP32-WROOM]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
+[ESP32-WROOM_with_st7789_Color_TFT_display]: https://img.shields.io/badge/ESP32--WROOM--with--st7789--Color--TFT--display-orange "ESP32-WROOM-TFT"
+[ESP32-WROOM_with_st7796_Color_TFT_display]: https://img.shields.io/badge/ESP32--WROOM--with--st7796--Color--TFT--display-orange "ESP32-WROOM-TFT"
+[ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5.1-cyan "ESP-IDF v5.5.1"
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 [K380]: https://img.shields.io/badge/K380-violet "K380"
 [K380s]: https://img.shields.io/badge/K380s-violet "K380s"
 [Rii_mini]: https://img.shields.io/badge/Rii_mini-violet "Rii i8+"
 
 
-# K3NG CW Keyer (Modified for esp32)
+# K3NG CW Keyer (Modified for ESP32)
 
 Based on a 2022 version, modifed to run on ESP32-WROOM32 with BT keyboards and TFT and LCD displays
 
@@ -32,12 +33,17 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 >Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
-             ********************************  Nov 17, 2025  K7MDL *******************************
+             ********************************  Nov 24, 2025  K7MDL *******************************
 > [!NOTE]
 >As of Nov 17, 2025, the precompiled .bin files have new offset numbers to use when flashing.  The Wiki pages for the 2 flash tools have been updated as well as Flash_Tool_Readme.txt
 >
+> My fork of TFT_eSPI is here https://github.com/K7MDL2/TFT_eSPI
 
-No feature changes but much behind the scenes to setup for easy adaption to future larger or different geometry screen sizes.  Faster CW text scrolling.  Looking into using viewports (aka windows) to place current pop-up messages and eliminate the slow screen redraws.  This also paves the way for future info screens like memory contents, memory editing, and proper graphics scrolling in a window that won't affect the surrounds, can just use text wrap.  This should improve CPU perf a bit and look a lot better.  The Sidetone line is now set to active Low on request (for now).  
+Added support for 16 pin MCP23017 I2C port expansion board.  The larger display boards have very few external IO pins.  The MCP23017 connects via I2C and gives you 16 IO ports.  The program used polling for the paddles. I replaced the polling with an interrupt routine to eliminate time consuming polling over the I2C bus. Need to test with straight key, should work.   I was able to move the top WPM speed limit up to 40WPM, maybe more.   
+
+Added some code to make display size scaling easier.  The 3.5" display is a 320x480.  It is set up with 30 chars per line, 5 lines, and a larger size status bar and larger font.   Deleted many .h config files for non-esp32 boards as they will never compile under esp-idf.
+
+Nov 17, 2025 - No feature changes but much behind the scenes to setup for easy adaption to future larger or different geometry screen sizes.  Faster CW text scrolling.  Looking into using viewports (aka windows) to place current pop-up messages and eliminate the slow screen redraws.  This also paves the way for future info screens like memory contents, memory editing, and proper graphics scrolling in a window that won't affect the surrounds, can just use text wrap.  This should improve CPU perf a bit and look a lot better.  The Sidetone line is now set to active Low on request (for now).  
 
 There are 4 screen display models in the #defines. The M5Stack does not work yet, still working on it.  The other 3 are all good.  This one display setting (DISPLAY_TYPE) is passed up to the top level (project) CMakeLists.txt and is set ot CONFIG_DISPLAY_MODEL.  That controls the library choice of User_Settings.h for each display type and copying the bin files to the right folder at the end of a compile.
 
