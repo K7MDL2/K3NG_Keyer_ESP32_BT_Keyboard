@@ -1655,20 +1655,42 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define GFXFF 1                 // enable FreeFont set of custom fonts from AdaFruit
   #define TFT_FONT_SMALL FS9      // FreeFont mono 9pt, not bold.
   #define TFT_FONT_MEDIUM FMB12  	// FreeFont Mono Bold 12pt
-  #define STATUS_BAR_X_CURSOR 6
-  #define COLUMN_WIDTH 15
+  #define COLUMN_WIDTH 15         // width of mono-spaced scroll box font in pixels
   #define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
 
   #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
   #define SCREEN_HEIGHT (TFT_WIDTH-1)
-  #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
-  // 170 for the 170x320 and 240x320 displays
-  // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
-  // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter.
- 
+  
   #define SCROLL_BOX_LEFT_SIDE 3
-  #define SCROLL_BOX_TOP 29   // 1 row below the status bar border line
-
+  #ifdef FEATURE_TFT_HOSYOND_320x480_LCD
+    #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
+    // 170 for the 170x320 and 240x320 displays
+    // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
+    // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter.
+    #define SCROLL_BOX_TOP 39   // 1 row below the status bar border line
+    #define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
+    #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
+    #define SCROLL_BOX_FONT FMB12   // 4
+    #define ICON_SPACING (ICON_COLUMN_WIDTH+2)   
+    #define GRID_ANCHOR (160))
+    #define WPM_ANCHOR (260)
+    #define ICON_ANCHOR (385)
+    #define STATUS_BAR_X_CURSOR (12)
+  #else
+  #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
+    // 170 for the 170x320 and 240x320 displays
+    // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
+    // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter. 
+    #define SCROLL_BOX_TOP 29   // 1 row below the status bar border line
+    #define STATUS_BAR_FONT 2   // 2  or FM9 or FS9
+    #define ICON_COLUMN_WIDTH 12    // width of mono-spaced status bar font in pixels
+    #define SCROLL_BOX_FONT FMB12   // 4
+    #define ICON_SPACING (ICON_COLUMN_WIDTH+2)
+    #define GRID_ANCHOR (110)
+    #define WPM_ANCHOR (180)
+    #define ICON_ANCHOR (250)
+    #define STATUS_BAR_X_CURSOR (6)
+  #endif
   #define SCROLL_BOX_WIDTH (TFT_HEIGHT-(2*SCROLL_BOX_LEFT_SIDE)) // pixel width of scroll box area
   #define SCROLL_BOX_HEIGHT (SCREEN_BOX_HEIGHT-SCROLL_BOX_TOP-3)  // pixel height of scroll box area inside borders
   #define SCROLL_TEXT_TOP_LINE (SCROLL_BOX_TOP+20)   // stat of first row of text
@@ -1686,8 +1708,6 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
   #define TFT_SET_VIEWPORT (lcd.setViewport(SCROLL_BOX_LEFT_SIDE+2, SCROLL_BOX_TOP+2, SCROLL_BOX_WIDTH-4, SCROLL_BOX_HEIGHT-4, false))
   #define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
-  #define STATUS_BAR_FONT 2   // 2  or FM9 or FS9
-  #define SCROLL_BOX_FONT FMB12   // 4
 #endif
 
 #ifdef FEATURE_MCP23017_EXPANDER
@@ -3542,15 +3562,22 @@ void update_icons(void) {
 
     lcd.setTextDatum(MY_DATUM);
     //lcd.setFreeFont(STATUS_BAR_FONT);
-    lcd.setTextFont(2);
+    lcd.setTextFont(STATUS_BAR_FONT);
     lcd.setTextColor(TFT_BLUE, TFT_BLACK);
-    if (strncmp(GridSq, last_GridSq, row))  // grid changed. update display
+    if (strncmp(GridSq, last_GridSq, 6))  // grid changed. update display
     {
       lcd.setTextColor(TFT_DARKCYAN, TFT_BLACK);
-      //lcd.drawString("           ", 100, 8row;  // 8 digit grid square
-      lcd.drawString(GridSq,        101, row);   // blank out space 
-      strncpy(last_GridSq, GridSq, row);  // write grid square
+      //lcd.drawString("           ", GRID_ANCHOR-1, row;  // 8 digit grid square
+      lcd.drawString(GridSq,        GRID_ANCHOR, row);   // blank out space 
+      strncpy(last_GridSq, GridSq, 6);  // write grid square
     }
+
+
+//    GRID_ANCHOR (SCREEN_WIDTH/4)
+//    #define WPM_ANCHOR (SCREEN_WIDTH/2)
+//    #define ICON_ANCHOR (479-5-(5*COLUMN_WIDTH))
+//    #define ICON_WIDTH COLUMN_WIDTH
+
 
     char WPM[7] = "\0";
     static int last_WPM = 0;
@@ -3560,26 +3587,26 @@ void update_icons(void) {
       lcd.setTextColor(TFT_CYAN, TFT_BLACK);
       itoa(configuration.wpm, WPM, 10);
       strncat(WPM, "WPM", 6);
-      lcd.drawString("       ", 164, row);  // erase old
-      lcd.drawString(WPM,       164, row);  // WPM rate
+      lcd.drawString("       ", WPM_ANCHOR, row);  // erase old
+      lcd.drawString(WPM,       WPM_ANCHOR, row);  // WPM rate
       last_WPM = configuration.wpm;
     }
 
     if (last_sending_mode != sending_mode)    // modes are : Auto, Manual, Auto-Interrupted
     {
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-      lcd.drawChar(' ', 252, row);
+      lcd.drawChar(' ', ICON_ANCHOR, row);
       if (sending_mode == AUTOMATIC_SENDING ) {
           lcd.setTextColor(TFT_ORANGE, TFT_BLACK);
-          lcd.drawChar('A', 252, row);
+          lcd.drawChar('A', ICON_ANCHOR, row);
       }
       if (sending_mode == AUTOMATIC_SENDING_INTERRUPTED ) {
           lcd.setTextColor(TFT_ORANGE, TFT_BLACK);
-          lcd.drawChar('I', 252, row);
+          lcd.drawChar('I', ICON_ANCHOR, row);
       }
       if (sending_mode == MANUAL_SENDING ) {
           lcd.setTextColor(TFT_PINK, TFT_BLACK);
-          lcd.drawChar('M', 252, row);
+          lcd.drawChar('M', ICON_ANCHOR, row);
       }
     }
     static byte last_keyer_machine_mode = 255;
@@ -3587,18 +3614,18 @@ void update_icons(void) {
     if (last_keyer_machine_mode != keyer_machine_mode)    // modes are : Beacon KEYER_NORMAL KEYER_COMMAND_MODE
     {
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-      lcd.drawChar(' ', 264, row);
+      lcd.drawChar(' ', ICON_ANCHOR+ICON_SPACING, row);
       if (keyer_machine_mode == BEACON ) {
           lcd.setTextColor(TFT_ORANGE, TFT_BLACK);
-          lcd.drawChar('B', 264, row);
+          lcd.drawChar('B', ICON_ANCHOR+ICON_SPACING, row);
       }
       if (keyer_machine_mode == KEYER_NORMAL ) {
           lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-          lcd.drawChar('N', 264, row);
+          lcd.drawChar('N', ICON_ANCHOR+ICON_SPACING, row);
       }
       if (keyer_machine_mode == KEYER_COMMAND_MODE ) {
           lcd.setTextColor(TFT_PINK, TFT_BLACK);
-          lcd.drawChar('C', 264, row);
+          lcd.drawChar('C', ICON_ANCHOR+ICON_SPACING, row);
       }
       last_keyer_machine_mode = keyer_machine_mode;
     }
@@ -3607,13 +3634,13 @@ void update_icons(void) {
 
     if (last_ptt_line_activated != ptt_line_activated)  // Tx state changed
     {
-      lcd.drawChar(' ', 280, row); // Tx Rx state
+      lcd.drawChar(' ', ICON_ANCHOR+(2*ICON_SPACING), row); // Tx Rx state
       if (ptt_line_activated) {
           lcd.setTextColor(TFT_RED, TFT_BLACK);
-          lcd.drawChar('T', 276, row);
+          lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
       } else {
           lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-          lcd.drawChar('R', 276, row);
+          lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
       }
       last_ptt_line_activated = ptt_line_activated;
     }
@@ -3624,10 +3651,10 @@ void update_icons(void) {
     {
       if (pause_sending_buffer != 0) {
           lcd.setTextColor(TFT_GOLD, TFT_BLACK);
-          lcd.drawChar('P', 288, row);   // Sending Paused
+          lcd.drawChar('P', ICON_ANCHOR+(3*ICON_SPACING), row);   // Sending Paused
       } else {
           lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-          lcd.drawChar('P', 288, row);   
+          lcd.drawChar('P', ICON_ANCHOR+(3*ICON_SPACING), row);   
       }
       last_pause_sending_buffer = pause_sending_buffer;
     }
@@ -3639,10 +3666,10 @@ void update_icons(void) {
       {
         if (bt_keyboard.is_connected()) {
             lcd.setTextColor(TFT_BLUE, TFT_BLACK);
-            lcd.drawChar('B', 300, row); // BT connected status
+            lcd.drawChar('B', ICON_ANCHOR+(4*ICON_SPACING), row); // BT connected status
         } else {
             lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-            lcd.drawChar('B', 300, row);
+            lcd.drawChar('B', ICON_ANCHOR+(4*ICON_SPACING), row);
         }
         last_BT_Connected = bt_keyboard.is_connected();
       }
