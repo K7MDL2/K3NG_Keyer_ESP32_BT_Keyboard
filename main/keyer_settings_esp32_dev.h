@@ -29,7 +29,7 @@ GENERIC STM32F103C
 #define initial_pot_wpm_low_value 6 //13     // Potentiometer WPM fully CCW //SP5IOU to narrow range
 #define initial_pot_wpm_high_value 30 //35    // Potentiometer WPM fully CW
 #define wpm_limit_low 5
-#define wpm_limit_high 30
+#define wpm_limit_high 40
 #define potentiometer_change_threshold 0.9 // don't change the keyer speed until pot wpm has changed more than this
 #define send_buffer_size 150
 #define default_length_letterspace 3
@@ -46,13 +46,18 @@ GENERIC STM32F103C
 #define winkey_xoff_threshold 20         // the number of chars in the buffer when we begin sending XOFFs
 #define winkey_xon_threshold 10          // the number of chars in the buffer below which we deactivate XOFF
 #define default_memory_repeat_time 3000  // time in milliseconds
-#ifdef FEATURE_IDEASPARK_LCD
+
+#ifdef FEATURE_TFT_HOSYOND_320x480_LCD
+  #define LCD_COLUMNS 26
+  #define LCD_ROWS 5
+#elif FEATURE_TFT_DISPLAY  // all other TFT displays
   #define LCD_COLUMNS 20
   #define LCD_ROWS 5
 #else
   #define LCD_COLUMNS 20
   #define LCD_ROWS 4
 #endif
+ 
 #define lcd_i2c_address_mathertel_PCF8574 0x27             // I2C address of display for FEATURE_LCD_MATHERTEL_PCF8574
 #define lcd_i2c_address_fdebrander_lcd 0x27                // I2C address of display for FEATURE_LCD_I2C_FDEBRABANDER
 #define lcd_i2c_address_ydv1_lcd 0x27                      // I2C address of display for FEATURE_LCD_YDv1
@@ -285,7 +290,7 @@ GENERIC STM32F103C
 
 #endif
 
-#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (TFT_HOSYOND_320x48_LCD)           // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (TFT_HOSYOND_320x480_LCD)           // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
   #define tx_key_line_active_state HIGH
   #define tx_key_line_inactive_state LOW
 #else
@@ -294,7 +299,7 @@ GENERIC STM32F103C
 #endif
 
 
-#if defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(TFT_HOSYOND_320x48_LCD)
+#if defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(TFT_HOSYOND_320x480_LCD)
   #define bt_keyboard_LED_pin_active_state LOW
   #define bt_keyboard_LED_pin_inactive_state HIGH
 #else

@@ -1541,13 +1541,6 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "keyer_settings.h"
 #endif
 
-#ifdef FEATURE_MCP23017_EXPANDER
-  #include <mcp23x17.h>
-  #include <driver/gpio.h>
-  //#include "i2c_bus.h"
-  #include <Wire.h>
-#endif
-
 #if !defined(HARDWARE_GENERIC_STM32F103C) && !defined(FEATURE_MCP23017_EXPANDER) // bypass when using mcp23017_write_io in place of digital write
   #if (paddle_left == 0) || (paddle_right == 0)
   #error "You cannot define paddle_left or paddle_right as 0 to disable"
@@ -1621,11 +1614,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "LiquidCrystal_I2C.h"
 #endif
 
-#if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(FEATURE_M5STACK_CORE2) || defined(FEATURE_TFT_HOSYOND_320x48_LCD) 
+#if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(FEATURE_M5STACK_CORE2) || defined(FEATURE_TFT_HOSYOND_320x480_LCD) 
   #define FEATURE_TFT_DISPLAY
 #endif
 
-#if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(FEATURE_M5STACK_CORE2) && !defined(FEATURE_TFT_HOSYOND_320x48_LCD)
+#if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(FEATURE_M5STACK_CORE2) && !defined(FEATURE_TFT_HOSYOND_320x480_LCD)
   #define FEATURE_TFT_DISPLAY_NOT
 #endif
 
@@ -1698,8 +1691,17 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #ifdef FEATURE_MCP23017_EXPANDER
+  #include <driver/gpio.h>
+  #include <freertos/event_groups.h>
+  #include <freertos/task.h>
+  #include "i2cdev.h"
+  #include <mcp23x17.h>
+  #include <Wire.h>
   #define MCP23X17_ADDR 0x27
-  static EventGroupHandle_t eg = NULL;
+  bool paddle_left_state = true;   // 1 is pulled high, 0 is contact closed
+  bool paddle_right_state = true;
+  bool straight_key_state = true;
+  static EventGroupHandle_t MCP23017_Events = NULL;
   static mcp23x17_t MCP23017 = { I2C_NUM_0 };
 #endif
 
@@ -1892,6 +1894,7 @@ void send_serial_number(byte cut_numbers,int increment_serial_number,byte buffer
 void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 void mydelay(unsigned long ms);
+void display_scroll_print_char(char charin);
 
 // ________________________________
 // 
@@ -17226,8 +17229,6 @@ void program_memory(int memory_number)
   #endif
 
   play_memory(memory_number);
-
-
 }
 #endif
 
@@ -17247,18 +17248,115 @@ int memory_end(byte memory_number) {
 }
 #endif
 
+#ifdef FEATURE_MCP23017_EXPANDER
+//---------------------------------------------------------------------
+// Paddle Interrupt Handler from MCP23017
+/*-----------------------------------------------------------*/
+#include "freertos/FreeRTOS.h"
+#include <freertos/event_groups.h>
+
+#define BIT_PADDLE_LEFT	( 1 << 0 )
+#define BIT_PADDLE_RIGHT	( 1 << 1 )
+#define BIT_STRAIGHT_KEY	( 1 << 2 )
+volatile bool MCP23017_Input_Event = false;
+
+static void IRAM_ATTR paddle_intr_handler(void *arg)
+{
+    // On interrupt set bit in event group
+    BaseType_t hp_task, xResult;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    MCP23017_Input_Event = true;
+    if (xEventGroupSetBitsFromISR(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {
+      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
+        portYIELD_FROM_ISR(hp_task);
+      #else
+        portYIELD_FROM_ISR();
+      #endif
+    }
+}
+//---------------------------------------------------------------------
+
+void read_expansion_io_handler(void *pvParameters)
+{
+    EventBits_t e_bits;
+    uint16_t bits = 0;
+    mydelay(100);
+    while (1)
+    {
+        e_bits = xEventGroupWaitBits(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, 10/portTICK_PERIOD_MS);
+        if (e_bits) {
+        //if (MCP23017_Input_Event) {
+            //debug_serial_port->print("e_bits = "); debug_serial_port->print(e_bits, HEX);
+            mcp23x17_port_read(&MCP23017, &bits);  // read all pins
+            debug_serial_port->print("  Bits = "); debug_serial_port->print(bits, HEX);
+
+            paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
+            debug_serial_port->print("  Left Paddle  "); debug_serial_port->print(paddle_left_state);
+        
+            paddle_right_state = bits & (1 << paddle_right);  // mask right paddle     
+            debug_serial_port->print("  Right Paddle = "); debug_serial_port->print(paddle_right_state);
+
+            #ifdef FEATURE_STRAIGHT_KEY
+              straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle     
+              debug_serial_port->print("  Straight Key = "); debug_serial_port->print(straight_key_state);
+            #endif
+
+            debug_serial_port->println("");
+
+            bits = 0x00;
+            MCP23017_Input_Event = false;
+        }
+        mydelay(1);
+    }
+}
+#endif
 //---------------------------------------------------------------------
 
 void initialize_pins() {
   
+BaseType_t xReturned;
+
 #if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) //sp5iou 20180329, sp5iou 20220129
   #ifdef FEATURE_MCP23017_EXPANDER
+    MCP23017_Events = xEventGroupCreate();
+    // Set the expander port A pins for the paddles to input with pullup
     ESP_ERROR_CHECK(i2cdev_init());
     ESP_ERROR_CHECK(mcp23x17_init_desc(&MCP23017, MCP23X17_ADDR, I2C_NUM_0, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SDA_PIN, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SCL_PIN));
+    MCP23017.cfg.master.clk_speed = 400000;
+    
     mcp23x17_set_mode(&MCP23017, paddle_left, MCP23X17_GPIO_INPUT);
     mcp23x17_set_pullup(&MCP23017, paddle_left, true);
+    mcp23x17_set_interrupt(&MCP23017, paddle_left, MCP23X17_INT_ANY_EDGE);
+
     mcp23x17_set_mode(&MCP23017, paddle_right, MCP23X17_GPIO_INPUT);
     mcp23x17_set_pullup(&MCP23017, paddle_right, true);
+    mcp23x17_set_interrupt(&MCP23017, paddle_right, MCP23X17_INT_ANY_EDGE);
+    
+    #ifdef FEATURE_STRAIGHT_KEY
+        mcp23x17_set_mode(&MCP23017, pin_straight_key, MCP23X17_GPIO_INPUT);
+        mcp23x17_set_pullup(&MCP23017, pin_straight_key, true);
+        mcp23x17_set_interrupt(&MCP23017, pin_straight_key, MCP23X17_INT_ANY_EDGE);
+    #endif
+
+    // create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.
+    xReturned = xTaskCreate(read_expansion_io_handler, "read_expansion_io_handler", 4096, NULL, 0, NULL);
+
+    // Setup CPU side GPIO interrupt for IntA 
+    gpio_set_direction((gpio_num_t) MCP23017_INTA_GPIO, GPIO_MODE_INPUT);
+    gpio_set_pull_mode((gpio_num_t) MCP23017_INTA_GPIO, GPIO_PULLUP_ONLY);
+    gpio_set_intr_type((gpio_num_t) MCP23017_INTA_GPIO, GPIO_INTR_ANYEDGE);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add((gpio_num_t) MCP23017_INTA_GPIO, paddle_intr_handler, (void *)(gpio_num_t) MCP23017_INTA_GPIO);
+   
+    uint16_t val;
+    if (ESP_OK == mcp23x17_port_read(&MCP23017, &val)) {
+      debug_serial_port->print("Completed Init for Paddle Lines val=");
+    } else {
+      debug_serial_port->print("Paddle Lines Monitoring Init FAILED val=");
+    }
+    debug_serial_port->println(val, HEX);
+
+    // Now any pin state change will call the handler.
   #else
     pinMode (paddle_left, INPUT_PULLUP);
     pinMode (paddle_right, INPUT_PULLUP);
@@ -19630,6 +19728,7 @@ void update_led_ring(){
         
 }
 #endif //FEATURE_LED_RING
+
 //---------------------------------------------------------------------
 int paddle_pin_read(int pin_to_read){
 
@@ -19668,20 +19767,31 @@ int paddle_pin_read(int pin_to_read){
         case 8: return(bitRead(PINB, 0)); break;            // the nanoKeyer uses pin 8 for the dit paddle
         }                                                     // end switch
     #endif                                                  // OPTION_SAVE_MEMORY_NANOKEYER
-    #if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER) // && !defined(FEATURE_MCP23017_EXPANDER)
+    #if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
         #if defined(FEATURE_MCP23017_EXPANDER)
-            uint32_t val;
-            mcp23x17_get_level(&MCP23017, (uint8_t) pin_to_read, &val); // !OPTION_INVERT_PADDLE_PIN_LOGIC    
-            return (int) val;
+            // !OPTION_INVERT_PADDLE_PIN_LOGIC
+            if (pin_to_read == paddle_left) {              
+              //debug_serial_port->print("Paddle Left  Val = "); debug_serial_port->println(paddle_left_state);
+              return (int) paddle_left_state;
+            }
+            else {
+              //debug_serial_port->print("Paddle Right Val = "); debug_serial_port->println(paddle_right_state);
+              return (int) paddle_right_state;
+            }
         #else
             return digitalRead((uint8_t) pin_to_read);                      // code using digitalRead
         #endif
     #endif                                                  // !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
   #else                                               // !OPTION_INVERT_PADDLE_PIN_LOGIC
       #if defined(FEATURE_MCP23017_EXPANDER)
-          uint32_t val;
-          mcp23x17_get_level(&MCP23017, (uint8_t) pin_to_read, &val); // !OPTION_INVERT_PADDLE_PIN_LOGIC    
-          return (int) !val;
+            if (pin_to_read == paddle_left) {              
+              //debug_serial_port->print("Paddle Left  Val = "); debug_serial_port->println(paddle_left_state);
+              return (int) !paddle_left_state;
+            }
+            else {
+              //debug_serial_port->print("Paddle Right Val = "); debug_serial_port->println(paddle_right_state);
+              return (int) !paddle_right_state;
+            }
       #else
           return !digitalRead(pin_to_read);                       // we do the regular digitalRead() if none of the direct register read options are valid
       #endif
@@ -22982,7 +23092,7 @@ void update_time(){
 
         while (1)
         {
-    #endif
+    #endif    
           mydelay(1);
           #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
@@ -23746,8 +23856,8 @@ void initialize_st7789_lcd()
 
 void setup()
 {
+    initialize_serial_ports();        // Goody - this is available for testing startup issues  
     initialize_pins();
-    //initialize_serial_ports();        // Goody - this is available for testing startup issues
     initialize_display();
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues

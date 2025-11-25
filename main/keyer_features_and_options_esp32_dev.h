@@ -45,10 +45,10 @@
 // InMain, near the top of the file where FEATURE_TFT_DISPLAY and FEATURE_TFT_DISPLAY are defined, add new display to the 2 lines. See example below
 
 /// Example lines in main.cpp
-/// #if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(M5STACK_CORE2) || defined(TFT_HOSYOND_320x48_LCD)
+/// #if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(M5STACK_CORE2) || defined(TFT_HOSYOND_320x480_LCD)
 ///  #define FEATURE_TFT_DISPLAY
 /// #endif
-/// #if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(M5STACK_CORE2) && !defined(TFT_HOSYOND_320x48_LCD)
+/// #if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(M5STACK_CORE2) && !defined(TFT_HOSYOND_320x480_LCD)
 ///  #define FEATURE_TFT_DISPLAY_NOT
 /// #endif
 
@@ -58,17 +58,17 @@
 #define TFT_1_9_IDEASPARK_LCD  2
 #define TFT_3_2_DIYMALLS_LCD   3
 #define M5STACK_CORE2_LCD      4
-#define TFT_HOSYOND_320x48_LCD 5
+#define TFT_HOSYOND_320x480_LCD 5
 
 // Choose one of the display types by uncommenting it.  
 // If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
-//#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
+#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
-//#define DISPLAY_TYPE TFT_HOSYOND_320x48_LCD  // 320x480 
+//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
 
 // *** In Arduino IDE, for these 2 TFT displays, you must edit libraries TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // For now it is automatically selected, until the TFT_eSPI library is ever updated overwriting the changes in teh USer_Setup_Seleect.h file.
@@ -91,9 +91,9 @@
     //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
     #define FEATURE_M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
 #endif
-#if (DISPLAY_TYPE == TFT_HOSYOND_320x48_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x48_LCD)
-    //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x48_LCD
-    #define FEATURE_TFT_HOSYOND_320x48_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+#if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
+    //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
+    #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
 #endif
 
 // #define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library

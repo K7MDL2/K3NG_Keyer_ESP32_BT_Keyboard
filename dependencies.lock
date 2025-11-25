@@ -446,20 +446,6 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 2.7.2
-  espressif/i2c_bus:
-    component_hash: 4e990dc11734316186b489b362c61d41f23f79d58bc169795cec215e528cba14
-    dependencies:
-    - name: espressif/cmake_utilities
-      registry_url: https://components.espressif.com
-      require: private
-      version: '*'
-    - name: idf
-      require: private
-      version: '>=4.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.5.0
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
@@ -527,24 +513,6 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.20~2
-  espressif/mcp23017:
-    component_hash: 71e7b079997178caf317c544e857b5f7d35b2a5d44a03664d1c985d3db6d7fc4
-    dependencies:
-    - name: espressif/cmake_utilities
-      registry_url: https://components.espressif.com
-      require: private
-      version: 0.*
-    - name: espressif/i2c_bus
-      registry_url: https://components.espressif.com
-      require: public
-      version: '*'
-    - name: idf
-      require: private
-      version: '>=4.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 0.1.1
   espressif/mdns:
     component_hash: 29e47564b1a7ee778135e17fbbf2a2773f71c97ebabfe626c8eda7c958a7ad16
     dependencies:
@@ -625,10 +593,9 @@ direct_dependencies:
 - esp-idf-lib/mcp23x17
 - esp-idf-lib/pcf8574
 - espressif/arduino-esp32
-- espressif/mcp23017
 - espressif/spi_bus
 - idf
 - panigrah/esp32-idf-hd44780
-manifest_hash: 5fd783908ace8998853177389a54dcfb529aaa020ee5a89e936ccaa1d4eca01d
+manifest_hash: ac897850772e0b5eba6f76697b20c3f7fd8f594e69ebc9722a724170c30cce6d
 target: esp32
 version: 2.0.0
