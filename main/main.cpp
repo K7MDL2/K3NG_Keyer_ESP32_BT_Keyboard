@@ -1660,10 +1660,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
   #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
   #define SCREEN_HEIGHT (TFT_WIDTH-1)
-  
   #define SCROLL_BOX_LEFT_SIDE 3
+  
   #ifdef FEATURE_TFT_HOSYOND_320x480_LCD
-    #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
+    #define SCREEN_BOX_HEIGHT 180    // This is set to the working area defined in the currently red border area.  
     // 170 for the 170x320 and 240x320 displays
     // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
     // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter.
@@ -1671,11 +1671,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
     #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
-    #define ICON_SPACING (ICON_COLUMN_WIDTH+2)   
-    #define GRID_ANCHOR (160))
-    #define WPM_ANCHOR (260)
-    #define ICON_ANCHOR (385)
-    #define STATUS_BAR_X_CURSOR (12)
+    #define ICON_SPACING (ICON_COLUMN_WIDTH+3)   
+    #define GRID_ANCHOR (180)
+    #define WPM_ANCHOR (280)
+    #define ICON_ANCHOR (380)
+    #define STATUS_BAR_X_CURSOR (8)
   #else
   #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
     // 170 for the 170x320 and 240x320 displays
@@ -23821,12 +23821,12 @@ void initialize_st7789_lcd()
             lcd.setRotation(3);
             lcd.fillScreen(TFT_BLACK);  
         #endif
-        
+        lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
         // Set up new screen and draw status bar and icons in it
         lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
         //lcd.setFreeFont(FM9);
-        lcd.setTextFont(2);  // &fonts::FreeMonoBold12pt7b)
-        lcd.drawString("K7MDL Keyer", SCROLL_TEXT_LEFT_SIDE, 6);  
+        lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)
+        lcd.drawString("K7MDL Keyer", SCROLL_TEXT_LEFT_SIDE, STATUS_BAR_X_CURSOR);  
         lcd.setTextColor(TFT_RED);
         lcd.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_BOX_HEIGHT, 6, TFT_RED);
         lcd.drawFastHLine(0, SCROLL_BOX_TOP-2, SCREEN_WIDTH, TFT_RED);
