@@ -2813,7 +2813,11 @@ void service_keypad(){
 
     static byte last_straight_key_state = 0;
 
-    if (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE){
+    #ifdef FEATURE_MCP23017_EXPANDER
+      if (straight_key_state == STRAIGHT_KEY_ACTIVE_STATE) {
+    #else
+      if (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE){
+    #endif
       if (!last_straight_key_state){
         sending_mode = MANUAL_SENDING;
         tx_and_sidetone_key(1);
@@ -16949,7 +16953,11 @@ byte play_memory(byte memory_number) {
         }
         if (keyer_machine_mode != BEACON) {
           #ifdef FEATURE_STRAIGHT_KEY
-            if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE)) {   // exit if the paddle or button0 was hit
+            #ifdef FEATURE_MCP23017_EXPANDER
+              if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (straight_key_state) == STRAIGHT_KEY_ACTIVE_STATE) {   // exit if the paddle or button0 was hit
+            #else
+              if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE)) {   // exit if the paddle or button0 was hit
+            #endif
               dit_buffer = 0;
               dah_buffer = 0;
               button0_buffer = 0;
@@ -17103,7 +17111,11 @@ void program_memory(int memory_number)
   #endif
 
   #if defined(FEATURE_BUTTONS) && defined(FEATURE_STRAIGHT_KEY)
-    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
+    #ifdef FEATURE_MCP23017_EXPANDER
+      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state) == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
+    #else
+      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
+    #endif
   #endif
 
   while (loop2) {
@@ -17282,17 +17294,16 @@ int memory_end(byte memory_number) {
 #include "freertos/FreeRTOS.h"
 #include <freertos/event_groups.h>
 
-#define BIT_PADDLE_LEFT	( 1 << 0 )
-#define BIT_PADDLE_RIGHT	( 1 << 1 )
-#define BIT_STRAIGHT_KEY	( 1 << 2 )
-volatile bool MCP23017_Input_Event = false;
+#define BIT_PADDLE_LEFT	( 1 << paddle_left )
+#define BIT_PADDLE_RIGHT	( 1 << paddle_right )
+#define BIT_STRAIGHT_KEY	( 1 << pin_straight_key )
 
 static void IRAM_ATTR paddle_intr_handler(void *arg)
 {
     // On interrupt set bit in event group
     BaseType_t hp_task, xResult;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    MCP23017_Input_Event = true;
+
     if (xEventGroupSetBitsFromISR(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {
       #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
         portYIELD_FROM_ISR(hp_task);
@@ -17310,30 +17321,27 @@ void read_expansion_io_handler(void *pvParameters)
     mydelay(100);
     while (1)
     {
-        e_bits = xEventGroupWaitBits(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, 10/portTICK_PERIOD_MS);
-        if (e_bits) {
-        //if (MCP23017_Input_Event) {
-            //debug_serial_port->print("e_bits = "); debug_serial_port->print(e_bits, HEX);
+        if (xEventGroupWaitBits(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {
+
             mcp23x17_port_read(&MCP23017, &bits);  // read all pins
-            debug_serial_port->print("  Bits = "); debug_serial_port->print(bits, HEX);
+            //debug_serial_port->print("  Bits = "); debug_serial_port->print(bits, HEX);
 
             paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
-            debug_serial_port->print("  Left Paddle  "); debug_serial_port->print(paddle_left_state);
+            //debug_serial_port->print("  Left Paddle  "); debug_serial_port->print(paddle_left_state);
         
             paddle_right_state = bits & (1 << paddle_right);  // mask right paddle     
-            debug_serial_port->print("  Right Paddle = "); debug_serial_port->print(paddle_right_state);
+            //debug_serial_port->print("  Right Paddle = "); debug_serial_port->print(paddle_right_state);
 
             #ifdef FEATURE_STRAIGHT_KEY
               straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle     
-              debug_serial_port->print("  Straight Key = "); debug_serial_port->print(straight_key_state);
+              //debug_serial_port->print("  Straight Key = "); debug_serial_port->print(straight_key_state);
             #endif
 
-            debug_serial_port->println("");
+            //debug_serial_port->println("");
 
             bits = 0x00;
-            MCP23017_Input_Event = false;
         }
-        mydelay(1);
+        vTaskDelay(1);
     }
 }
 #endif
@@ -17349,7 +17357,7 @@ BaseType_t xReturned;
     // Set the expander port A pins for the paddles to input with pullup
     ESP_ERROR_CHECK(i2cdev_init());
     ESP_ERROR_CHECK(mcp23x17_init_desc(&MCP23017, MCP23X17_ADDR, I2C_NUM_0, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SDA_PIN, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SCL_PIN));
-    MCP23017.cfg.master.clk_speed = 400000;
+    MCP23017.cfg.master.clk_speed = 1000000;
     
     mcp23x17_set_mode(&MCP23017, paddle_left, MCP23X17_GPIO_INPUT);
     mcp23x17_set_pullup(&MCP23017, paddle_left, true);
@@ -17516,16 +17524,15 @@ BaseType_t xReturned;
     // }
   #endif //FEATURE_PTT_INTERLOCK
 
-  #ifdef FEATURE_STRAIGHT_KEY
+  #if defined(FEATURE_STRAIGHT_KEY) && !defined(FEATURE_MCP23017_EXPANDER)
     pinMode(pin_straight_key,INPUT);
     if (STRAIGHT_KEY_ACTIVE_STATE == HIGH){
       digitalWrite (pin_straight_key, LOW);
     } else {
       digitalWrite (pin_straight_key, HIGH);
-#if defined(ARDUINO_MAPLE_MINI)|| defined(ARDUINO_GENERIC_STM32F103C) || defined(__STM32F1__)//SP5IOU 20210802
-      pinMode(pin_straight_key,INPUT_PULLUP); //SP5IOU 20210802
-#endif //SP5IOU 20210802
-    }
+    #if defined(ARDUINO_MAPLE_MINI)|| defined(ARDUINO_GENERIC_STM32F103C) || defined(__STM32F1__)//SP5IOU 20210802
+          pinMode(pin_straight_key,INPUT_PULLUP); //SP5IOU 20210802
+    #endif //SP5IOU 20210802
   #endif //FEATURE_STRAIGHT_KEY
 
   #if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)

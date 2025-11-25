@@ -65,8 +65,8 @@
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
-#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
+//#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
+#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
 //#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
 
@@ -115,10 +115,10 @@
 //#define FEATURE_PTT_INTERLOCK 
 #define FEATURE_QLF
 // #define FEATURE_EEPROM_E24C1024
-// #define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
+#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
 #define FEATURE_DYNAMIC_DAH_TO_DIT_RATIO
 #define FEATURE_PADDLE_ECHO         // you may also need to comment out line 19 in the file keyer_dependencies.h
-// #define FEATURE_STRAIGHT_KEY_ECHO
+#define FEATURE_STRAIGHT_KEY_ECHO
 // #define FEATURE_AMERICAN_MORSE
 // #define FEATURE_4x4_KEYPAD          // code contributed by Jack, W0XR - documentation: https://github.com/k3ng/k3ng_cw_keyer/wiki/380-Feature:-Keypad
 // #define FEATURE_3x4_KEYPAD          // code contributed by Jack, W0XR - documentation: https://github.com/k3ng/k3ng_cw_keyer/wiki/380-Feature:-Keypad
