@@ -37,6 +37,7 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 > [!NOTE]
 >As of Nov 17, 2025, the precompiled .bin files have new offset numbers to use when flashing.  The Wiki pages for the 2 flash tools have been updated as well as Flash_Tool_Readme.txt
 >
+> My fork of TFT_eSPI is here https://github.com/K7MDL2/TFT_eSPI
 
 Added support for 16 pin MCP23017 I2C port expansion board.  The larger display boards have very few external IO pins.  The MCP23017 connects via I2C and gives you 16 IO ports.  The program used polling for the paddles. I replaced the polling with an interrupt routine to eliminate time consuming polling over the I2C bus. Need to test with straight key, should work.   I was able to move the top WPM speed limit up to 40WPM, maybe more.   
 
