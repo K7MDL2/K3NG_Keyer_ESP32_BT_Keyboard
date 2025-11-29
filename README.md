@@ -33,13 +33,16 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 >Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
-             ********************************  Nov 24, 2025  K7MDL *******************************
+             ********************************  Nov 28, 2025  K7MDL *******************************
 > [!NOTE]
 >As of Nov 17, 2025, the precompiled .bin files have new offset numbers to use when flashing.  The Wiki pages for the 2 flash tools have been updated as well as Flash_Tool_Readme.txt
->
-> My fork of TFT_eSPI is here https://github.com/K7MDL2/TFT_eSPI
 
-Added support for 16 pin MCP23017 I2C port expansion board.  The larger display boards have very few external IO pins.  The MCP23017 connects via I2C and gives you 16 IO ports.  The program used polling for the paddles. I replaced the polling with an interrupt routine to eliminate time consuming polling over the I2C bus.  Both Paddles and straight key work.   I was able to move the top WPM speed limit up to 40WPM, maybe more.   
+
+Enabled touch on 5 buttons on lower unused part of the 3.2" display.  This capacitive touch screen is an ESP32-2432S032C-I clone using a GT911 touch controller. The TFT_eSPI library looks for a SPI touch controller which is used for resistive display versions such as the 3.5" which I have a build for here. It needed to be initialized as I2C bus #1 despite it using pins 21 and 22 because the touch library is using pins 33 and 32 and using I2C bus #0.  When Button #1 is pressed, a blue popup window is presented over the CW text scroll area with some test text in it.  After a few seconds, it goes away and the CW text is redrawn.  This window mechanism will be used for future features like help, menus, grid and callsign input, viewing memory contents, activating memories without a keyboard, etc.  Some of these are what a physical button can do if enabled today in the code, now can be touch.   
+
+Additionally I now can scale the status bar for higher res screens and is now done on the 3.5" 320x480 display.  I also populated the repo here with the complete components content as used in my builds so you do not need to hunt them down. The libraries folder is not used and is a carry over from the original project and some of them may be moved to components when needed to enable certain features in the future like PS2 keyboard.  It will eventually go away.
+
+Nov 24, 2025 - Added support for 16 pin MCP23017 I2C port expansion board.  The larger display boards have very few external IO pins.  The MCP23017 connects via I2C and gives you 16 IO ports.  The program used polling for the paddles. I replaced the polling with an interrupt routine to eliminate time consuming polling over the I2C bus.  Both Paddles and straight key work.   I was able to move the top WPM speed limit up to 40WPM, maybe more.   
 
 Added some code to make display size scaling easier.  The 3.5" display is a 320x480.  It is set up with 30 chars per line, 5 lines, and a larger size status bar and larger font.   Deleted many .h config files for non-esp32 boards as they will never compile under esp-idf.
 
