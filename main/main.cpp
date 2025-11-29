@@ -1375,7 +1375,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.11.21"
+#define CODE_VERSION "K7MDL-2025.11.28"
 #define eeprom_magic_number 45              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1705,6 +1705,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define SCROLL_BOX_ROW4 (SCROLL_TEXT_TOP_LINE+(3*FONT_HEIGHT))
   #define SCROLL_BOX_ROW5 (SCROLL_TEXT_TOP_LINE+(4*FONT_HEIGHT))
   #define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
+  #define SCROLL_BOX_BOTTOM (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT)
+  #define BUTTON_ROW (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+8)
   #define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
   #define TFT_SET_VIEWPORT (lcd.setViewport(SCROLL_BOX_LEFT_SIDE+2, SCROLL_BOX_TOP+2, SCROLL_BOX_WIDTH-4, SCROLL_BOX_HEIGHT-4, false))
   #define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
@@ -1915,6 +1917,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 void mydelay(unsigned long ms);
 void display_scroll_print_char(char charin);
+void popup();
 
 // ________________________________
 // 
@@ -2823,12 +2826,10 @@ void service_keypad(){
         tx_and_sidetone_key(1);
         last_straight_key_state = 1;
 
-
         #ifdef FEATURE_MEMORIES
           clear_send_buffer();
           repeat_memory = 255;
         #endif
-
       }
     } else {
       if (last_straight_key_state){
@@ -6543,10 +6544,10 @@ void tx_and_sidetone_key (int state)
                 #ifdef FEATURE_M5STACK_CORE2
                     M5.Speaker.tone(700, configuration.hz_sidetone);
                 #else
-                    tone(sidetone_line,configuration.hz_sidetone);
+                    tone(sidetone_line,configuration.hz_sidetone,0);
                 #endif                                            // generate a tone on the speaker pin
             #else  
-                tone(sidetone_line, configuration.hz_sidetone);
+                tone(sidetone_line, configuration.hz_sidetone,0);
             #endif
         #else
           if (sidetone_line) {
@@ -6607,7 +6608,7 @@ void tx_and_sidetone_key (int state)
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
         #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-          tone(sidetone_line, configuration.hz_sidetone);
+          tone(sidetone_line, configuration.hz_sidetone,0);
         #else
           if (sidetone_line) {
             digitalWrite(sidetone_line, sidetone_line_active_state);
@@ -8484,7 +8485,7 @@ void command_sidetone_freq_adj() {
               tone(sidetone_line,configuration.hz_sidetone,100);                                              // generate a tone on the speaker pin
         #endif
     #else  
-        tone(sidetone_line, configuration.hz_sidetone);
+        tone(sidetone_line, configuration.hz_sidetone, 0);
     #endif
     if (paddle_pin_read(paddle_left) == LOW) {
       #ifdef FEATURE_DISPLAY
@@ -9093,7 +9094,7 @@ void boop()
                 tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
             #endif
         #else  
-            tone(sidetone_line, hz_low_beep);
+            tone(sidetone_line, hz_low_beep, 0);
             mydelay(100);
             noTone(sidetone_line);
         #endif
@@ -16954,7 +16955,7 @@ byte play_memory(byte memory_number) {
         if (keyer_machine_mode != BEACON) {
           #ifdef FEATURE_STRAIGHT_KEY
             #ifdef FEATURE_MCP23017_EXPANDER
-              if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (straight_key_state) == STRAIGHT_KEY_ACTIVE_STATE) {   // exit if the paddle or button0 was hit
+              if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (straight_key_state == STRAIGHT_KEY_ACTIVE_STATE)) {   // exit if the paddle or button0 was hit
             #else
               if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE)) {   // exit if the paddle or button0 was hit
             #endif
@@ -17006,9 +17007,6 @@ byte play_memory(byte memory_number) {
           jump_back_to_y = 9999;
           jump_back_to_memory_number = 255;
         } else {        
-        
-        
-        
          return 0;
         }
       }
@@ -17112,7 +17110,7 @@ void program_memory(int memory_number)
 
   #if defined(FEATURE_BUTTONS) && defined(FEATURE_STRAIGHT_KEY)
     #ifdef FEATURE_MCP23017_EXPANDER
-      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state) == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
+      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
     #else
       while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
     #endif
@@ -17296,20 +17294,25 @@ int memory_end(byte memory_number) {
 
 #define BIT_PADDLE_LEFT	( 1 << paddle_left )
 #define BIT_PADDLE_RIGHT	( 1 << paddle_right )
-#define BIT_STRAIGHT_KEY	( 1 << pin_straight_key )
-
+#ifdef FEATURE_STRAIGHT_KEY
+  #define BIT_STRAIGHT_KEY	( 1 << pin_straight_key )
+#endif
 static void IRAM_ATTR paddle_intr_handler(void *arg)
 {
     // On interrupt set bit in event group
     BaseType_t hp_task, xResult;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    if (xEventGroupSetBitsFromISR(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {
-      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
-        portYIELD_FROM_ISR(hp_task);
-      #else
-        portYIELD_FROM_ISR();
-      #endif
+    #ifdef FEATURE_STRAIGHT_KEY
+      if (xEventGroupSetBitsFromISR(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {
+    #else
+      if (xEventGroupSetBitsFromISR(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT, &hp_task) != pdFAIL) {
+    #endif
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
+          portYIELD_FROM_ISR(hp_task);
+        #else
+          portYIELD_FROM_ISR();
+        #endif
     }
 }
 //---------------------------------------------------------------------
@@ -17321,8 +17324,11 @@ void read_expansion_io_handler(void *pvParameters)
     mydelay(100);
     while (1)
     {
+      #ifdef FEATURE_STRAIGHT_KEY  
         if (xEventGroupWaitBits(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {
-
+      #else
+        if (xEventGroupWaitBits(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT, pdTRUE, pdFALSE, portMAX_DELAY)) {
+      #endif
             mcp23x17_port_read(&MCP23017, &bits);  // read all pins
             //debug_serial_port->print("  Bits = "); debug_serial_port->print(bits, HEX);
 
@@ -17346,17 +17352,16 @@ void read_expansion_io_handler(void *pvParameters)
 }
 #endif
 //---------------------------------------------------------------------
+//E (606) gpio: gpio_pullup_en(78): GPIO number error (input-only pad has no internal PU)
+#ifdef FEATURE_MCP23017_EXPANDER
+  void init_MCP23017(void) {
+    BaseType_t xReturned;
 
-void initialize_pins() {
-  
-BaseType_t xReturned;
-
-#if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) //sp5iou 20180329, sp5iou 20220129
-  #ifdef FEATURE_MCP23017_EXPANDER
     MCP23017_Events = xEventGroupCreate();
     // Set the expander port A pins for the paddles to input with pullup
-    ESP_ERROR_CHECK(i2cdev_init());
-    ESP_ERROR_CHECK(mcp23x17_init_desc(&MCP23017, MCP23X17_ADDR, I2C_NUM_0, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SDA_PIN, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SCL_PIN));
+    //Wire1.begin(CONFIG_I2CDEV_DEFAULT_SDA_PIN, CONFIG_I2CDEV_DEFAULT_SCL_PIN, 1000000);   // Touch has 1 instance set in library so we get 2nd
+    ESP_ERROR_CHECK(i2cdev_init());  // on 21, 22.  Use bus num 1 since the TP assumes bus 0.
+    ESP_ERROR_CHECK(mcp23x17_init_desc(&MCP23017, MCP23X17_ADDR, I2C_NUM_1, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SDA_PIN, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SCL_PIN));
     MCP23017.cfg.master.clk_speed = 1000000;
     
     mcp23x17_set_mode(&MCP23017, paddle_left, MCP23X17_GPIO_INPUT);
@@ -17378,20 +17383,26 @@ BaseType_t xReturned;
 
     // Setup CPU side GPIO interrupt for IntA 
     gpio_set_direction((gpio_num_t) MCP23017_INTA_GPIO, GPIO_MODE_INPUT);
-    gpio_set_pull_mode((gpio_num_t) MCP23017_INTA_GPIO, GPIO_PULLUP_ONLY);
+    //gpio_set_pull_mode((gpio_num_t) MCP23017_INTA_GPIO, GPIO_PULLUP_ONLY);  // no pullup on pin 35
     gpio_set_intr_type((gpio_num_t) MCP23017_INTA_GPIO, GPIO_INTR_ANYEDGE);
     gpio_install_isr_service(0);
     gpio_isr_handler_add((gpio_num_t) MCP23017_INTA_GPIO, paddle_intr_handler, (void *)(gpio_num_t) MCP23017_INTA_GPIO);
    
     uint16_t val;
     if (ESP_OK == mcp23x17_port_read(&MCP23017, &val)) {
-      debug_serial_port->print("Completed Init for Paddle Lines val=");
+      debug_serial_port->print("Completed MCP23017 Init for Paddle Lines val=");
     } else {
-      debug_serial_port->print("Paddle Lines Monitoring Init FAILED val=");
+      debug_serial_port->print("Paddle Lines Monitoring Init on MCP23017 FAILED val=");
     }
     debug_serial_port->println(val, HEX);
-
     // Now any pin state change will call the handler.
+  }
+#endif
+
+void initialize_pins() {
+#if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) //sp5iou 20180329, sp5iou 20220129
+  #ifdef FEATURE_MCP23017_EXPANDER
+    init_MCP23017();
   #else
     pinMode (paddle_left, INPUT_PULLUP);
     pinMode (paddle_right, INPUT_PULLUP);
@@ -17530,6 +17541,7 @@ BaseType_t xReturned;
       digitalWrite (pin_straight_key, LOW);
     } else {
       digitalWrite (pin_straight_key, HIGH);
+    }
     #if defined(ARDUINO_MAPLE_MINI)|| defined(ARDUINO_GENERIC_STM32F103C) || defined(__STM32F1__)//SP5IOU 20210802
           pinMode(pin_straight_key,INPUT_PULLUP); //SP5IOU 20210802
     #endif //SP5IOU 20210802
@@ -17672,7 +17684,7 @@ BaseType_t xReturned;
 
 //---------------------------------------------------------------------
 
-void initialize_debug_startup(){
+void initialize_debug_startup()  {
 #ifdef DEBUG_STARTUP
 
   serial_status(debug_serial_port);  
@@ -18508,7 +18520,19 @@ void mydelay(unsigned long ms)
 
 //--------------------------------------------------------------------- 
 
-void initialize_display(){
+#ifdef FEATURE_TOUCH_DISPLAY
+
+  #include "TAMC_GT911.h"
+  #define TOUCH_SDA  33
+  #define TOUCH_SCL  32
+  #define TOUCH_INT  21  // not used because R25 is not installed on DIYMalls 3.2" display
+  #define TOUCH_RST  25
+  #define TOUCH_WIDTH  320
+  #define TOUCH_HEIGHT 240
+  TAMC_GT911 tp = TAMC_GT911(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, TOUCH_WIDTH, TOUCH_HEIGHT);
+#endif
+
+void initialize_display() {
 
   #ifdef FEATURE_DISPLAY    
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU fix for nothing on serial port for ESP32_dev
@@ -18517,6 +18541,11 @@ void initialize_display(){
       #endif
       #ifdef FEATURE_TFT_DISPLAY
         initialize_TFT_LCD_display();
+      #endif
+      #ifdef FEATURE_TOUCH_DISPLAY
+        tp.begin();  // does a Wire.begin() on 1st I2C bus 0
+        tp.setRotation(ROTATION_LEFT);
+        debug_serial_port->println("Completed setup on 2nd i2c bus for Touch Sensor");
       #endif
     #endif
 
@@ -18542,8 +18571,6 @@ void initialize_display(){
 
     #ifdef OPTION_DISPLAY_NON_ENGLISH_EXTENSIONS  // OZ1JHM provided code, cleaned up by LA3ZA
       // Store bit maps, designed using editor at http://omerk.github.io/lcdchargen/
-
-
       byte U_umlaut[8] =   {B01010,B00000,B10001,B10001,B10001,B10001,B01110,B00000}; // 'Ü'  
       byte O_umlaut[8] =   {B01010,B00000,B01110,B10001,B10001,B10001,B01110,B00000}; // 'Ö'  
       byte A_umlaut[8] =   {B01010,B00000,B01110,B10001,B11111,B10001,B10001,B00000}; // 'Ä'    
@@ -18624,6 +18651,91 @@ void initialize_display(){
       blink_ptt_dits_and_dahs(".... ..");
     #endif
   }
+}
+
+void popup()
+{
+    lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+    lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+    lcd.setTextWrap(true,true);
+    lcd.setCursor(10,20);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.print("Before clearing frame and turning color");
+    mydelay(3000);
+    //lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+    lcd.frameViewport(TFT_BLUE, 3);
+    //lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.setCursor(10,70);
+    lcd.print("1234567890123456789012345678901234567890");
+    mydelay(300);
+    lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+    lcd.resetViewport();
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
+    display_scroll_print_char('~');
+}
+
+ #ifdef FEATURE_TOUCH_DISPLAY
+  TFT_eSPI_Button btn_func;             // Button instance
+  TFT_eSPI_Button btn_1;
+  TFT_eSPI_Button btn_2;
+  TFT_eSPI_Button btn_3;
+  TFT_eSPI_Button btn_4;
+#endif
+
+void create_buttons(){
+  uint16_t parameters[5];
+  lcd.setFreeFont(TFT_FONT_SMALL);
+  //lcd.setLabelDatum(MY_DATUM);
+  #ifdef FEATURE_TOUCH_DISPLAY
+    //lcd.calibrateTouch(0,TFT_BLUE, TFT_GREY,2);
+    btn_func.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "FUNC", 2);  // library modified to ignore text size
+    btn_1.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 1 ", 2);  // library modified to ignore text size
+    btn_2.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+128, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 2 ", 2);  // library modified to ignore text size
+    btn_3.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 3 ", 2);  // library modified to ignore text size
+    btn_4.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 4 ", 2);  // library modified to ignore text size
+    btn_func.drawButton(false, "FUNC");
+    btn_1.drawButton(false, " 1 ");
+    btn_2.drawButton(false, " 2 ");
+    btn_3.drawButton(false, " 3 ");
+    btn_4.drawButton(false, " 4 ");
+  #endif
+  lcd.setFreeFont(TFT_FONT_MEDIUM);
+}
+
+uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
+void check_buttons() {
+  // Check for touch
+  #ifdef FEATURE_TOUCH_DISPLAY
+    tp.read();
+    if (tp.isTouched){
+        t_x = tp.points[0].x;
+        t_y = tp.points[0].y;
+      if (btn_func.contains(t_x, t_y)) {
+          debug_serial_port->println("Got touch event FUNC");
+          //popup(); 
+        }
+      if (btn_1.contains(t_x, t_y)) { 
+          debug_serial_port->println("Got touch event 1");
+          popup(); 
+        }
+      if (btn_2.contains(t_x, t_y)) { 
+          debug_serial_port->println("Got touch event 2");
+          //popup();
+        }
+      if (btn_3.contains(t_x, t_y)) { 
+          debug_serial_port->println("Got touch event 3");
+          //popup();
+        }
+      if (btn_4.contains(t_x, t_y)) { 
+          debug_serial_port->println("Got touch event 4");
+          //popup();
+        }
+      //lcd.setFreeFont(TFT_FONT_SMALL);
+      //btn_func.drawButton(false,"FUNC");
+      //lcd.setFreeFont(TFT_FONT_MEDIUM);
+      //lcd.setTextDatum(MY_DATUM);
+    }
+  #endif
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -19764,7 +19876,7 @@ void update_led_ring(){
 #endif //FEATURE_LED_RING
 
 //---------------------------------------------------------------------
-int paddle_pin_read(int pin_to_read){
+int paddle_pin_read(int pin_to_read) {
 
   // Updated code provided by Fred, VK2EFL
   // 
@@ -19843,9 +19955,7 @@ int paddle_pin_read(int pin_to_read){
     else return HIGH;
 #endif                                                      // FEATURE_TOUCH_PADDLE_PINS
 
-
-
-    // #ifndef FEATURE_CAPACITIVE_PADDLE_PINS
+  // #ifndef FEATURE_CAPACITIVE_PADDLE_PINS
   //   #ifndef OPTION_INVERT_PADDLE_PIN_LOGIC
   //     #if defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
   //       switch(pin_to_read){
@@ -19863,18 +19973,15 @@ int paddle_pin_read(int pin_to_read){
   //       if (digitalRead(capactive_paddle_pin_inhibit_pin) == HIGH){
   //         return digitalRead(pin_to_read);
   //       }
-
   //     }
-
   //     if (read_capacitive_pin(pin_to_read) > capacitance_threshold) {
   //       return LOW;
   //     } else {
   //       return HIGH;
   //     }
-      
   // #endif //FEATURE_CAPACITIVE_PADDLE_PINS  
-
 }
+
 //---------------------------------------------------------------------
 #ifdef FEATURE_ALPHABET_SEND_PRACTICE
 void command_alphabet_send_practice(){
@@ -22586,134 +22693,130 @@ void so2r_command() {
 // Based on https://forum.arduino.cc/index.php?topic=446209.15
 
 
-// #if defined(FEATURE_SINEWAVE_SIDETONE)
+#if defined(FEATURE_SINEWAVE_SIDETONE)
+#include <driver/dac_oneshot.h>
+#include <driver/dac_cosine.h>
+#include <driver/dac_continuous.h>
 
-// void compute_sinetone(int hz, int volume){ //dl2dbg 
+const float pi = 3.14159265359;  // Define Pi as a constant
+const float T = 100;  // sample time in microseconds
+float freq = 600;  // frquency of tone in Hz
+float omega = 2*pi*1;  // part of sine wave conversion factor
+const float A = 490;  // amplitude
+// next line initializes oscillation with amplitude A
+float a[]={0.0, A*sin(omega*T/1000000.0),0.0}; 
+// c1 is the difference equation coefficient
+const float c1 = (8.0 - 2.0*pow(omega*T/1000000.0,2))/(4.0+pow(omega*T/1000000.0,2));
+const int resolution = 8;
 
+//#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
 
-//   omega = 2*pi*hz ;
-//   c1 = (8.0 - 2.0*pow(omega*T/1000000.0,2))/(4.0+pow(omega*T/1000000.0,2));
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-//     Timer1.detachInterrupt();
-//   #endif  
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-//     Timer3.detachInterrupt();
-//   #endif
-//   a[0]= 0.0;
-//   a[1]= volume*sin(omega*T/1000000.0);
-//   a[2]= 0.0;
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-//     Timer1.attachInterrupt(sinewave_interrupt_compute);
-//   #endif  
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-//     Timer3.attachInterrupt(sinewave_interrupt_compute);
-//   #endif
+void compute_sinetone(int hz, int volume){ //dl2dbg 
+  float omega = omega*hz;
 
-
-// }
-// #endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
-
-// #if defined(FEATURE_SINEWAVE_SIDETONE)
-
-// void sinewave_interrupt_compute(){ //dl2dbg
-
-//   a[2] = c1 * a[1] - a[0];
-//   a[0] = a[1] ;
-//   a[1] = a[2] ;  
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-//     Timer1.setPwmDuty(sidetone_line, map( a[2],-512, 512, 0, 1000));
-//   #endif  
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-//     Timer3.setPwmDuty(sidetone_line, map( a[2],-512, 512, 0, 1000));
-//   #endif
-
-  
-
-// }
-// #endif //FEATURE_SINEWAVE_SIDETONE
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
+    Timer1.detachInterrupt();
+  #endif  
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
+    Timer3.detachInterrupt();
+  #endif
+  a[0]= 0.0;
+  a[1]= volume*sin(omega*T/1000000.0);
+  a[2]= 0.0;
+  sinewave_interrupt_compute();
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
+    Timer1.attachInterrupt(sinewave_interrupt_compute);
+  #endif  
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
+    Timer3.attachInterrupt(sinewave_interrupt_compute);
+  #endif
+}
+#endif //FEATURE_SINEWAVE_SIDETONE
 
 //-------------------------------------------------------------------------------------------------------
-// #if defined(FEATURE_SINEWAVE_SIDETONE)
 
-// void initialize_tonsin(){ //dl2dbg
+#if defined(FEATURE_SINEWAVE_SIDETONE)
 
-//   //configuration.sidetone_volume = sidetone_volume_low_limit + ((sidetone_volume_high_limit - sidetone_volume_low_limit) / 2);
-//   compute_sinetone(configuration.hz_sidetone,configuration.sidetone_volume);
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-//     Timer1.initialize(T);  // set sample time for discrete tone signal
-//     Timer1.pwm(sidetone_line, 0, T);
-//     Timer1.attachInterrupt(sinewave_interrupt_compute);
-//     Timer1.stop();
-//   #endif  
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-//     Timer3.initialize(T);  // set sample time for discrete tone signal
-//     Timer3.pwm(sidetone_line, 0, T);
-//     Timer3.attachInterrupt(sinewave_interrupt_compute);
-//     Timer3.stop();
-//   #endif
+void sinewave_interrupt_compute(){ //dl2dbg
+  a[2] = c1 * a[1] - a[0];
+  a[0] = a[1] ;
+  a[1] = a[2] ;  
+  dacWrite(sidetone_line, map( a[2],-512, 512, 0, 1000));
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
+    Timer1.setPwmDuty(sidetone_line, map( a[2],-512, 512, 0, 1000));
+  #endif  
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
+    Timer3.setPwmDuty(sidetone_line, map( a[2],-512, 512, 0, 1000));
+  #endif
+}
+#endif //FEATURE_SINEWAVE_SIDETONE
 
+//-------------------------------------------------------------------------------------------------------
+#if defined(FEATURE_SINEWAVE_SIDETONE)
 
+void initialize_tonsin(){ //dl2dbg
 
-
-
-// }
-// #endif //FEATURE_SINEWAVE_SIDETONE
+  //configuration.sidetone_volume = sidetone_volume_low_limit + ((sidetone_volume_high_limit - sidetone_volume_low_limit) / 2);
+  //compute_sinetone(configuration.hz_sidetone,configuration.sidetone_volume);
+  ledcAttach(sidetone_line, configuration.hz_sidetone, 255);
+ 
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
+    Timer1.initialize(T);  // set sample time for discrete tone signal
+    Timer1.pwm(sidetone_line, 0, T);
+    Timer1.attachInterrupt(sinewave_interrupt_compute);
+    Timer1.stop();
+  #endif  
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
+    Timer3.initialize(T);  // set sample time for discrete tone signal
+    Timer3.pwm(sidetone_line, 0, T);
+    Timer3.attachInterrupt(sinewave_interrupt_compute);
+    Timer3.stop();
+  #endif
+}
+#endif //FEATURE_SINEWAVE_SIDETONE
 //-------------------------------------------------------------------------------------------------------
 
-// #if defined(FEATURE_SINEWAVE_SIDETONE)
-// void sinetone(uint8_t pin_dummy_variable, unsigned short freq){  //dl2dbg
+#if defined(FEATURE_SINEWAVE_SIDETONE)
+void sinetone(uint8_t pin_dummy_variable, unsigned short freq){  //dl2dbg
+  static int last_freq;
+  static int last_volume;
 
-//   static int last_freq;
-//   static int last_volume;
+  if ((freq != last_freq) || (configuration.sidetone_volume != last_volume)){ 
+    compute_sinetone(freq,configuration.sidetone_volume);
+    last_freq = freq;
+    last_volume = configuration.sidetone_volume;
+  }
 
-//   if ((freq != last_freq) || (configuration.sidetone_volume != last_volume)){ 
-//     compute_sinetone(freq,configuration.sidetone_volume);
-//     last_freq = freq;
-//     last_volume = configuration.sidetone_volume;
-//   }
+  //delay (2); compute_sinetone(freq,sidetone_volume/4);
+  //delay (2); compute_sinetone(freq,sidetone_volume/2);
+  //compute_sinetone(freq,configuration.sidetone_volume); 
 
-//   //delay (2); compute_sinetone(freq,sidetone_volume/4);
-//   //delay (2); compute_sinetone(freq,sidetone_volume/2);
-//   //compute_sinetone(freq,configuration.sidetone_volume); 
-
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-//     Timer1.restart();
-//   #endif  
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-//     Timer3.restart();
-//   #endif
-
-  
-
-
-// }
-// #endif //FEATURE_SINEWAVE_SIDETONE
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
+    Timer1.restart();
+  #endif  
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
+    Timer3.restart();
+  #endif
+}
+#endif //FEATURE_SINEWAVE_SIDETONE
 
 //------------------------------------------------------------------------------------------------------- 
 
-// #if defined(FEATURE_SINEWAVE_SIDETONE)
-// void nosineTone(uint8_t pin_dummy_variable){    // disable tone on specified pin, if any    dl2dbg
+#if defined(FEATURE_SINEWAVE_SIDETONE)
+void nosineTone(uint8_t pin_dummy_variable) {    // disable tone on specified pin, if any    dl2dbg
+  //delay (2); compute_sinetone(freq,sidetone_volume/2);
+  //delay (2); compute_sinetone(freq,sidetone_volume/4);
+  compute_sinetone(configuration.hz_sidetone,0);
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
+    Timer1.stop();
+  #endif  
+  #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
+    Timer3.stop();
+  #endif
+  //digitalWrite(sidetone_line,LOW);
+}
 
-//   //delay (2); compute_sinetone(freq,sidetone_volume/2);
-//   //delay (2); compute_sinetone(freq,sidetone_volume/4);
-//   // compute_sinetone(configuration.hz_sidetone,0);
-
-
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-//     Timer1.stop();
-//   #endif  
-//   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-//     Timer3.stop();
-//   #endif
-  
-
-//   //digitalWrite(sidetone_line,LOW);
-
-// }
-
-// #endif //FEATURE_SINEWAVE_SIDETONE
+#endif //FEATURE_SINEWAVE_SIDETONE
 
 //-------------------------------------------------------------------------------------------------------
 
@@ -23310,8 +23413,9 @@ void update_time(){
                                 {   
                                     switch (ch) 
                                     {
+                                        case 0x04 : ch = 0; popup(); break;
                                         case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
-                                        case 0x06 : ch = PS2_ESC; 
+                                        case 0x29 : ch = PS2_ESC; 
                                                     queueflush();
                                                     break;  // ALT-C, clear the LCD scrollable area
                                     }
@@ -23893,6 +23997,7 @@ void setup()
     initialize_serial_ports();        // Goody - this is available for testing startup issues  
     initialize_pins();
     initialize_display();
+    create_buttons();
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues
     initialize_keyer_state();
@@ -23999,6 +24104,9 @@ void main_loop(void * pvParameters )
 
           service_send_buffer(PRINTCHAR);
           check_ptt_tail();
+
+check_buttons();
+
 
           #ifdef FEATURE_POTENTIOMETER
               check_potentiometer();

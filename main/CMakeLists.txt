@@ -20,7 +20,7 @@ message(STATUS "Main:  CONFIG_DISPLAY_TYPE: ${CONFIG_DISPLAY_TYPE}")
 
 idf_component_register(SRCS "main.cpp" ${app_sources}
     INCLUDE_DIRS "."  ${include_dirs}
-    REQUIRES nvs_flash bt_keyboard bt TFT_eSPI LiquidCrystal_I2C arduino-esp32)
+    REQUIRES nvs_flash bt_keyboard bt TFT_eSPI gt911-arduino LiquidCrystal_I2C arduino-esp32)
     #REQUIRES nvs_flash bt_keyboard bt LiquidCrystal_I2C arduino-esp32)
 
 #  create precompiled files

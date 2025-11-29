@@ -54,7 +54,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD)     // for DIY Malls 3.2" 320x240 TFT st7789
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
     #ifdef FEATURE_MCP23017_EXPANDER
-      #define MCP23017_INTA_GPIO 35 // input only
+      #define MCP23017_INTA_GPIO 35 // input only, no pullup on this pin
       #define paddle_left     MCP23017_PIN0 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
       #define paddle_right    MCP23017_PIN1 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
       #ifdef FEATURE_STRAIGHT_KEY

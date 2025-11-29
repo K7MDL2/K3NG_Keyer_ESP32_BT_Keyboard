@@ -196,3 +196,14 @@ sdkconfig.old
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 K3NG_Keyer_ESP32_BT_Keyboard.code-workspace
+
+.gitignore
+
+precompiled_images/NO_DISPLAY/K3NG_Keyer.bin
+precompiled_images/NO_DISPLAY/partition-table.bin
+precompiled_images/NO_DISPLAY/bootloader.bin
+
+precompiled_images/M5STACK_CORE2_LCD/bootloader.bin
+precompiled_images/M5STACK_CORE2_LCD/K3NG_Keyer.bin
+precompiled_images/M5STACK_CORE2_LCD/partition-table.bin
+components/Config/Global_vars.h
