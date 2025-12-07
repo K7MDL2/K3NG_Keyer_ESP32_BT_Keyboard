@@ -39,6 +39,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define paddle_right    33 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
   #define tx_key_line_1   26  // (high = key down/tx on)
   #define sidetone_line    0 //23         // connect a speaker for sidetone
+  #define audio_enable     0 // Only for 3.5" Hoysond Display
   #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
   #define ptt_tx_1         0     //27   PTT ("push to talk") lines
   #define tx_inhibit_pin  13   //9
@@ -55,10 +56,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
     #ifdef FEATURE_MCP23017_EXPANDER
       #define MCP23017_INTA_GPIO 35 // input only, no pullup on this pin
-      #define paddle_left     MCP23017_PIN0 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-      #define paddle_right    MCP23017_PIN1 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_left     MCP23017_PIN0 // expander pin 0
+      #define paddle_right    MCP23017_PIN1 // expander pin 1
       #ifdef FEATURE_STRAIGHT_KEY
-        #define pin_straight_key  MCP23017_PIN2 //TXD0
+        #define pin_straight_key  MCP23017_PIN2 // expander pin 2
       #endif //FEATURE_STRAIGHT_KEY
     #else
       #define paddle_left     3 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
@@ -69,6 +70,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #endif
     #define tx_key_line_1   16 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
     #define sidetone_line   26 // connect a speaker for sidetone
+    #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         4 // PTT ("push to talk") lines   (4 on 3.2" DIY malls st7789 TFT, red LED)
     #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
@@ -79,6 +81,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define tx_key_line_1   16 // aka RX2   (high = key down/tx on)
     #define sidetone_line   17 // aka TX2   connect a passive buzzer for sidetone
+    #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         5 // PTT ("push to talk") lines 
     #define tx_inhibit_pin   0  //13 
@@ -105,6 +108,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define paddle_right    19 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define tx_key_line_1   18 // (high = key down/tx on)
     #define sidetone_line   26 //21 connect a passive buzzer for sidetone
+    #define audio_enable     4  // audio amp enable = LOW for this display (only?)
     #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1        22 // PTT ("push to talk") lines RED LED
     #define tx_inhibit_pin   0  //13 
@@ -113,15 +117,16 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #define pin_straight_key 1 //TXD0
     #endif //FEATURE_STRAIGHT_KEY
 #else // ESP-WROOM-32, 27, 5 33
-  #define bt_keyboard_LED 2 //2  // indicates BT keyboard connection status
-  #define paddle_left 25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-  #define paddle_right 26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-  #define tx_key_line_1 17  // (high = key down/tx on)
-  #define sidetone_line 14 //23         // connect a speaker for sidetone
-  #define potentiometer 36 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-  #define ptt_tx_1 16             // PTT ("push to talk") lines
-  #define tx_inhibit_pin 0
-  #define tx_pause_pin   0
+  #define bt_keyboard_LED   2 //2  // indicates BT keyboard connection status
+  #define paddle_left       25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define paddle_right      26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+  #define tx_key_line_1     17  // (high = key down/tx on)
+  #define sidetone_line     14 //23         // connect a speaker for sidetone
+  #define audio_enable      0 // Only for 3.5" Hoysond Display
+  #define potentiometer     36 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+  #define ptt_tx_1          16             // PTT ("push to talk") lines
+  #define tx_inhibit_pin    0
+  #define tx_pause_pin      0
   #ifdef FEATURE_STRAIGHT_KEY
     #define pin_straight_key 1 //TXD0
   #endif //FEATURE_STRAIGHT_KEY

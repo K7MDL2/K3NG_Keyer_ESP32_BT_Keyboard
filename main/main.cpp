@@ -17421,6 +17421,11 @@ void initialize_pins() {
     }
   #endif //FEATURE_CAPACITIVE_PADDLE_PINS
   
+  if (audio_enable){  // enable audio amp (LOW). DAC pin outputs to audio amp and then out to speaker
+    pinMode (audio_enable, OUTPUT);
+    digitalWrite (audio_enable, audio_enable_active_state);
+  }
+
   if (tx_key_line_1) {
     pinMode (tx_key_line_1, OUTPUT);
     digitalWrite (tx_key_line_1, tx_key_line_inactive_state);
@@ -17446,7 +17451,7 @@ void initialize_pins() {
     digitalWrite (tx_key_line_6, tx_key_line_inactive_state);
   }
     
-  
+
   if (ptt_tx_1) {
     pinMode (ptt_tx_1, OUTPUT);
     digitalWrite (ptt_tx_1, ptt_line_inactive_state);

@@ -307,6 +307,8 @@ GENERIC STM32F103C
   #define bt_keyboard_LED_pin_inactive_state LOW  
 #endif
 
+#define audio_enable_active_state LOW
+#define audio_enable_inactive_state HIGH
 #define sidetone_line_active_state HIGH
 #define sidetone_line_inactive_state LOW
 #define sequencer_pins_active_state HIGH
