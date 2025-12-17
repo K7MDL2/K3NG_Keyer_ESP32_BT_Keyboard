@@ -33,7 +33,7 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 >Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 
-             ********************************  Nov 28, 2025  K7MDL *******************************
+             ********************************  Dec 17, 2025  K7MDL *******************************
 > [!NOTE]
 >As of Nov 17, 2025, the precompiled .bin files have new offset numbers to use when flashing.  The Wiki pages for the 2 flash tools have been updated as well as Flash_Tool_Readme.txt
 
