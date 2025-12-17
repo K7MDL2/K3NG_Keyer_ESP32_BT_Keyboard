@@ -1614,14 +1614,6 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "LiquidCrystal_I2C.h"
 #endif
 
-#if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(FEATURE_M5STACK_CORE2) || defined(FEATURE_TFT_HOSYOND_320x480_LCD) 
-  #define FEATURE_TFT_DISPLAY
-#endif
-
-#if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(FEATURE_M5STACK_CORE2) && !defined(FEATURE_TFT_HOSYOND_320x480_LCD)
-  #define FEATURE_TFT_DISPLAY_NOT
-#endif
-
 #if defined(FEATURE_TFT_DISPLAY)
   #define CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION
   //#define TFT_VIEWPORT
@@ -1712,19 +1704,21 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
 #endif
 
-#ifdef FEATURE_MCP23017_EXPANDER
+#if defined(HARDWARE_ESP32_DEV)
   #include <driver/gpio.h>
   #include <freertos/event_groups.h>
   #include <freertos/task.h>
-  #include "i2cdev.h"
-  #include <mcp23x17.h>
-  #include <Wire.h>
-  #define MCP23X17_ADDR 0x27
-  bool paddle_left_state = true;   // 1 is pulled high, 0 is contact closed
-  bool paddle_right_state = true;
-  bool straight_key_state = true;
-  static EventGroupHandle_t MCP23017_Events = NULL;
-  static mcp23x17_t MCP23017 = { I2C_NUM_0 };
+  volatile bool paddle_left_state  = true;   // 1 is pulled high, 0 is contact closed
+  volatile bool paddle_right_state = true;
+  volatile bool straight_key_state = true;
+  static EventGroupHandle_t Key_Events = NULL;
+  #ifdef FEATURE_MCP23017_EXPANDER
+    #include "i2cdev.h"
+    #include <mcp23x17.h>
+    #include <Wire.h>
+    #define MCP23X17_ADDR 0x27
+    static mcp23x17_t MCP23017 = { I2C_NUM_0 };
+  #endif
 #endif
 
 #if defined(FEATURE_LCD_HD44780)
@@ -2816,7 +2810,7 @@ void service_keypad(){
 
     static byte last_straight_key_state = 0;
 
-    #ifdef FEATURE_MCP23017_EXPANDER
+    #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
       if (straight_key_state == STRAIGHT_KEY_ACTIVE_STATE) {
     #else
       if (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE){
@@ -3895,7 +3889,8 @@ void clear_display_row(byte row_number)
     #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
         lcd.backlight();
     #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
-        #ifdef FEATURE_TFT_DISPLAY_NOT
+
+    #ifndef FEATURE_TFT_DISPLAY
         lcd.noCursor();//sp5iou 20180328
     #endif
   
@@ -16954,7 +16949,7 @@ byte play_memory(byte memory_number) {
         }
         if (keyer_machine_mode != BEACON) {
           #ifdef FEATURE_STRAIGHT_KEY
-            #ifdef FEATURE_MCP23017_EXPANDER
+            #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
               if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (straight_key_state == STRAIGHT_KEY_ACTIVE_STATE)) {   // exit if the paddle or button0 was hit
             #else
               if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE)) {   // exit if the paddle or button0 was hit
@@ -17109,7 +17104,7 @@ void program_memory(int memory_number)
   #endif
 
   #if defined(FEATURE_BUTTONS) && defined(FEATURE_STRAIGHT_KEY)
-    #ifdef FEATURE_MCP23017_EXPANDER
+    #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
       while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
     #else
       while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { mydelay(1);}  // loop until user starts sending or hits the button
@@ -17285,79 +17280,103 @@ int memory_end(byte memory_number) {
 }
 #endif
 
-#ifdef FEATURE_MCP23017_EXPANDER
 //---------------------------------------------------------------------
-// Paddle Interrupt Handler from MCP23017
+// Paddle and Key Interrupt Handlers
 /*-----------------------------------------------------------*/
+
+#if defined(HARDWARE_ESP32_DEV) && !defined(FEATURE_MCP23017_EXPANDER)
+//---------------------------------------------------------------------
+static void IRAM_ATTR left_paddle_intr_handler(void *arg)
+{
+    paddle_left_state = gpio_get_level((gpio_num_t) paddle_left); 
+}
+
+//---------------------------------------------------------------------
+static void IRAM_ATTR right_paddle_intr_handler(void *arg)
+{
+    paddle_right_state = gpio_get_level((gpio_num_t) paddle_right);   
+}
+
+//---------------------------------------------------------------------
+#ifdef FEATURE_STRAIGHT_KEY
+  static void IRAM_ATTR straight_key_intr_handler(void *arg)
+  {
+      straight_key_state = gpio_get_level((gpio_num_t) pin_straight_key);       
+  }
+#endif
+
+//---------------------------------------------------------------------
+void init_ESP32_GPIO_key_pins(void) {        
+    // Setup CPU side GPIO interrupts for paddle pins
+    gpio_install_isr_service(0);
+    gpio_set_direction((gpio_num_t) paddle_left, GPIO_MODE_INPUT);
+    gpio_set_pull_mode((gpio_num_t) paddle_left, GPIO_PULLUP_ONLY);  // no pullup on pin 35
+    gpio_set_intr_type((gpio_num_t) paddle_left, GPIO_INTR_ANYEDGE);
+    gpio_set_direction((gpio_num_t) paddle_right, GPIO_MODE_INPUT);
+    gpio_set_pull_mode((gpio_num_t) paddle_right, GPIO_PULLUP_ONLY);  // no pullup on pin 35
+    gpio_set_intr_type((gpio_num_t) paddle_right, GPIO_INTR_ANYEDGE);
+    gpio_isr_handler_add((gpio_num_t) paddle_left, left_paddle_intr_handler, (void *)(gpio_num_t) paddle_left);
+    gpio_isr_handler_add((gpio_num_t) paddle_right, right_paddle_intr_handler, (void *)(gpio_num_t) paddle_right);
+    #ifdef FEATURE_STRAIGHT_KEY
+      // Setup CPU side GPIO interrupt for straight key 
+      gpio_set_direction((gpio_num_t) pin_straight_key, GPIO_MODE_INPUT);
+      gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);  // no pullup on pin 35
+      gpio_set_intr_type((gpio_num_t) pin_straight_key, GPIO_INTR_ANYEDGE);
+      gpio_isr_handler_add((gpio_num_t) pin_straight_key, straight_key_intr_handler, (void *)(gpio_num_t) pin_straight_key);
+    #endif
+    // Now any pin state change will call the handler.
+}
+#endif
+
+//---------------------------------------------------------------------
+#if defined(FEATURE_MCP23017_EXPANDER) && defined(HARDWARE_ESP32_DEV)
+#define BIT_PADDLE_LEFT	  ( 1 << 0)
+#define BIT_PADDLE_RIGHT	( 1 << 1)    
+#define BIT_STRAIGHT_KEY	( 1 << 2)
 #include "freertos/FreeRTOS.h"
 #include <freertos/event_groups.h>
-
-#define BIT_PADDLE_LEFT	( 1 << paddle_left )
-#define BIT_PADDLE_RIGHT	( 1 << paddle_right )
-#ifdef FEATURE_STRAIGHT_KEY
-  #define BIT_STRAIGHT_KEY	( 1 << pin_straight_key )
-#endif
+//------ For Port Expander Only ---------------------------------------------------------------
 static void IRAM_ATTR paddle_intr_handler(void *arg)
 {
     // On interrupt set bit in event group
     BaseType_t hp_task, xResult;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
-    #ifdef FEATURE_STRAIGHT_KEY
-      if (xEventGroupSetBitsFromISR(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {
-    #else
-      if (xEventGroupSetBitsFromISR(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT, &hp_task) != pdFAIL) {
-    #endif
-        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
-          portYIELD_FROM_ISR(hp_task);
-        #else
-          portYIELD_FROM_ISR();
-        #endif
+    if (xEventGroupSetBitsFromISR(Key_Events,  BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {        
+      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
+        portYIELD_FROM_ISR(hp_task);
+      #else
+        portYIELD_FROM_ISR();
+      #endif
     }
 }
-//---------------------------------------------------------------------
 
-void read_expansion_io_handler(void *pvParameters)
+//-------------------------------------------------------------------
+void read_io_handler(void *pvParameters)
 {
     EventBits_t e_bits;
     uint16_t bits = 0;
     mydelay(100);
     while (1)
     {
-      #ifdef FEATURE_STRAIGHT_KEY  
-        if (xEventGroupWaitBits(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {
-      #else
-        if (xEventGroupWaitBits(MCP23017_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT, pdTRUE, pdFALSE, portMAX_DELAY)) {
-      #endif
-            mcp23x17_port_read(&MCP23017, &bits);  // read all pins
-            //debug_serial_port->print("  Bits = "); debug_serial_port->print(bits, HEX);
-
-            paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
-            //debug_serial_port->print("  Left Paddle  "); debug_serial_port->print(paddle_left_state);
-        
-            paddle_right_state = bits & (1 << paddle_right);  // mask right paddle     
-            //debug_serial_port->print("  Right Paddle = "); debug_serial_port->print(paddle_right_state);
-
+        if (xEventGroupWaitBits(Key_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {
+            mcp23x17_port_read(&MCP23017, &bits);  // read all pins                    
+            paddle_left_state = bits & (1 << paddle_left);  // mask left paddle                                    
+            paddle_right_state = bits & (1 << paddle_right);  // mask right paddle                         
             #ifdef FEATURE_STRAIGHT_KEY
-              straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle     
-              //debug_serial_port->print("  Straight Key = "); debug_serial_port->print(straight_key_state);
+                straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle                             
             #endif
-
-            //debug_serial_port->println("");
-
             bits = 0x00;
         }
         vTaskDelay(1);
-    }
+    } 
 }
-#endif
-//---------------------------------------------------------------------
-//E (606) gpio: gpio_pullup_en(78): GPIO number error (input-only pad has no internal PU)
-#ifdef FEATURE_MCP23017_EXPANDER
+
+//-------------------------------------------------------------------
+
   void init_MCP23017(void) {
     BaseType_t xReturned;
 
-    MCP23017_Events = xEventGroupCreate();
+    Key_Events = xEventGroupCreate();
     // Set the expander port A pins for the paddles to input with pullup
     //Wire1.begin(CONFIG_I2CDEV_DEFAULT_SDA_PIN, CONFIG_I2CDEV_DEFAULT_SCL_PIN, 1000000);   // Touch has 1 instance set in library so we get 2nd
     ESP_ERROR_CHECK(i2cdev_init());  // on 21, 22.  Use bus num 1 since the TP assumes bus 0.
@@ -17379,7 +17398,7 @@ void read_expansion_io_handler(void *pvParameters)
     #endif
 
     // create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.
-    xReturned = xTaskCreate(read_expansion_io_handler, "read_expansion_io_handler", 4096, NULL, 0, NULL);
+    xReturned = xTaskCreate(read_io_handler, "read_io_handler", 4096, NULL, 0, NULL);
 
     // Setup CPU side GPIO interrupt for IntA 
     gpio_set_direction((gpio_num_t) MCP23017_INTA_GPIO, GPIO_MODE_INPUT);
@@ -17387,7 +17406,7 @@ void read_expansion_io_handler(void *pvParameters)
     gpio_set_intr_type((gpio_num_t) MCP23017_INTA_GPIO, GPIO_INTR_ANYEDGE);
     gpio_install_isr_service(0);
     gpio_isr_handler_add((gpio_num_t) MCP23017_INTA_GPIO, paddle_intr_handler, (void *)(gpio_num_t) MCP23017_INTA_GPIO);
-   
+    
     uint16_t val;
     if (ESP_OK == mcp23x17_port_read(&MCP23017, &val)) {
       debug_serial_port->print("Completed MCP23017 Init for Paddle Lines val=");
@@ -17398,11 +17417,14 @@ void read_expansion_io_handler(void *pvParameters)
     // Now any pin state change will call the handler.
   }
 #endif
+//---------------------------------------------------------------------
 
 void initialize_pins() {
 #if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) //sp5iou 20180329, sp5iou 20220129
   #ifdef FEATURE_MCP23017_EXPANDER
     init_MCP23017();
+  #elif defined(HARDWARE_ESP32_DEV)
+    init_ESP32_GPIO_key_pins();
   #else
     pinMode (paddle_left, INPUT_PULLUP);
     pinMode (paddle_right, INPUT_PULLUP);
@@ -17540,7 +17562,7 @@ void initialize_pins() {
     // }
   #endif //FEATURE_PTT_INTERLOCK
 
-  #if defined(FEATURE_STRAIGHT_KEY) && !defined(FEATURE_MCP23017_EXPANDER)
+  #if defined(FEATURE_STRAIGHT_KEY) && !defined(FEATURE_MCP23017_EXPANDER) && !defined(HARDWARE_ESP32_DEV)
     pinMode(pin_straight_key,INPUT);
     if (STRAIGHT_KEY_ACTIVE_STATE == HIGH){
       digitalWrite (pin_straight_key, LOW);
@@ -18557,7 +18579,7 @@ void initialize_display() {
     #if defined (FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_LCD_I2C_FDEBRABANDER)
       lcd.begin();
       lcd.home();
-    #elif defined (FEATURE_TFT_DISPLAY_NOT)
+    #elif !defined (FEATURE_TFT_DISPLAY)
       lcd.begin(LCD_COLUMNS, LCD_ROWS);
       lcd.clear();
     #endif
@@ -19919,7 +19941,7 @@ int paddle_pin_read(int pin_to_read) {
         }                                                     // end switch
     #endif                                                  // OPTION_SAVE_MEMORY_NANOKEYER
     #if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
-        #if defined(FEATURE_MCP23017_EXPANDER)
+        #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
             // !OPTION_INVERT_PADDLE_PIN_LOGIC
             if (pin_to_read == paddle_left) {              
               //debug_serial_port->print("Paddle Left  Val = "); debug_serial_port->println(paddle_left_state);
@@ -19934,7 +19956,7 @@ int paddle_pin_read(int pin_to_read) {
         #endif
     #endif                                                  // !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
   #else                                               // !OPTION_INVERT_PADDLE_PIN_LOGIC
-      #if defined(FEATURE_MCP23017_EXPANDER)
+      #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
             if (pin_to_read == paddle_left) {              
               //debug_serial_port->print("Paddle Left  Val = "); debug_serial_port->println(paddle_left_state);
               return (int) !paddle_left_state;

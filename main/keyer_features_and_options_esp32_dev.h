@@ -67,9 +67,9 @@
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
+#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
-#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
+//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // The Setup file is then automatically selected.  When the TFT_eSPI library is updated, it will overwrite the changes in the User_Setup_Select.h file.
@@ -84,27 +84,31 @@
     //#define CONFIG_DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD  // CONFIG_ is added to name in Project level CMakeLists.txt to control 
                                                         // TFT_eSPI User_Select.h choice of file to match this display
     #define FEATURE_IDEASPARK_LCD                   // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
-    //#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
+    #define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
+    #define FEATURE_TFT_DISPLAY
 #endif
 #if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
     #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
     #define FEATURE_MCP23017_EXPANDER
     #define FEATURE_TOUCH_DISPLAY
-    //#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
+    #define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
+    #define FEATURE_TFT_DISPLAY
 #endif
 #if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
     //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
     #define FEATURE_M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
     //#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
+    #define FEATURE_TFT_DISPLAY
 #endif
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
     //#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
+    #define FEATURE_TFT_DISPLAY
 #endif
 
-// #define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
+//#define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
 //#define FEATURE_LCD_MATHERTEL_PCF8574 // https://github.com/mathertel/LiquidCrystal_PCF8574
 //#define FEATURE_LCD_I2C_FDEBRABANDER //https://github.com/fdebrabander/Arduino-LiquidCrystal-I2C-library
 //#define FEATURE_LCD_HD44780

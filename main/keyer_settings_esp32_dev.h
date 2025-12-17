@@ -29,7 +29,7 @@ GENERIC STM32F103C
 #define initial_pot_wpm_low_value 6 //13     // Potentiometer WPM fully CCW //SP5IOU to narrow range
 #define initial_pot_wpm_high_value 30 //35    // Potentiometer WPM fully CW
 #define wpm_limit_low 5
-#define wpm_limit_high 40
+#define wpm_limit_high 42
 #define potentiometer_change_threshold 0.9 // don't change the keyer speed until pot wpm has changed more than this
 #define send_buffer_size 150
 #define default_length_letterspace 3
@@ -50,7 +50,7 @@ GENERIC STM32F103C
 #ifdef FEATURE_TFT_HOSYOND_320x480_LCD   // for 480px wide display
   #define LCD_COLUMNS 30
   #define LCD_ROWS 5
-#elif FEATURE_TFT_DISPLAY  // all other 320px wideTFT displays
+#elif defined (FEATURE_TFT_DISPLAY)  // all other 320px wideTFT displays
   #define LCD_COLUMNS 20
   #define LCD_ROWS 5
 #else

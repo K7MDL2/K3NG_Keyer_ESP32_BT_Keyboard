@@ -76,10 +76,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
     #define tx_pause_pin     0 //14 
 #elif defined (FEATURE_IDEASPARK_LCD)
-    #define bt_keyboard_LED 13  // indicates BT keyboard connection status  3 on IdeaSpark 1.9" onboard Blue LED
+    #define bt_keyboard_LED 13  // indicates BT keyboard connection status pin ? on IdeaSpark 1.9" onboard Blue LED
     #define paddle_left     25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-    #define tx_key_line_1   16 // aka RX2   (high = key down/tx on)
+    #define tx_key_line_1   16 // 16 aka RX2   (high = key down/tx on)
     #define sidetone_line   17 // aka TX2   connect a passive buzzer for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
@@ -87,7 +87,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define tx_inhibit_pin   0  //13 
     #define tx_pause_pin     0  //14
     #ifdef FEATURE_STRAIGHT_KEY
-      #define pin_straight_key 1 //TXD0
+      #define pin_straight_key 27
     #endif //FEATURE_STRAIGHT_KEY
     #define LCD_H_RES      320
     #define LCD_V_RES      240
