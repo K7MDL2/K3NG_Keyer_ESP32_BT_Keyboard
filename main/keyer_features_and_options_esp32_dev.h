@@ -65,9 +65,9 @@
 // If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
-//#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
+#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
 //#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
 

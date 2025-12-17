@@ -1348,7 +1348,13 @@ Recent Update History
     2025.10.03 //K7MDL 
     Modified slightly SP5IOU ESP32 changes to run on current (2025) ESP32-WROOM-32 dev board.  
     Added BT_Keyboard Class, slightly modified from https://github.com/turgu1/bt-keyboard and converted to an Arduino library
-    Tested on Rii i8+ mini BT keyboard (BLE) and Logitech BT Classic K380 keyboard (in progress)
+    Tested on Rii i8+ mini BT keyboard (BLE) and Logitech BT Classic K380 keyboard
+    Build creates precompiled images.
+
+    2025.12.17 //K7MDL
+    Added TFT displays of various sizes
+    Changed ESP32 to use GPIO interrupts for paddles and key for more accurate high speed chars
+    Added support for MCP23017 port expander using interrupt and single read of all 16 ports for speed
 
   Documentation: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
@@ -1375,7 +1381,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.11.28"
+#define CODE_VERSION "K7MDL-2025.12.17"
 #define eeprom_magic_number 45              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -18682,6 +18688,7 @@ void initialize_display() {
 
 void popup()
 {
+  #ifdef FEATURE_TFT_DISPLAY 
     lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
     lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
     lcd.setTextWrap(true,true);
@@ -18699,6 +18706,7 @@ void popup()
     lcd.resetViewport();
     lcd.setFreeFont(TFT_FONT_MEDIUM);
     display_scroll_print_char('~');
+  #endif
 }
 
  #ifdef FEATURE_TOUCH_DISPLAY
@@ -18710,10 +18718,10 @@ void popup()
 #endif
 
 void create_buttons(){
-  uint16_t parameters[5];
-  lcd.setFreeFont(TFT_FONT_SMALL);
-  //lcd.setLabelDatum(MY_DATUM);
   #ifdef FEATURE_TOUCH_DISPLAY
+    uint16_t parameters[5];
+    lcd.setFreeFont(TFT_FONT_SMALL);
+    //lcd.setLabelDatum(MY_DATUM);
     //lcd.calibrateTouch(0,TFT_BLUE, TFT_GREY,2);
     btn_func.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "FUNC", 2);  // library modified to ignore text size
     btn_1.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 1 ", 2);  // library modified to ignore text size
@@ -18725,8 +18733,8 @@ void create_buttons(){
     btn_2.drawButton(false, " 2 ");
     btn_3.drawButton(false, " 3 ");
     btn_4.drawButton(false, " 4 ");
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
   #endif
-  lcd.setFreeFont(TFT_FONT_MEDIUM);
 }
 
 uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
@@ -18768,7 +18776,6 @@ void check_buttons() {
 //-------------------------------------------------------------------------------------------------------
 #if defined(OPTION_BLINK_HI_ON_PTT) || (defined(OPTION_WINKEY_BLINK_PTT_ON_HOST_OPEN) && defined(FEATURE_WINKEY_EMULATION))
 void blink_ptt_dits_and_dahs(char const * cw_to_send){
-
 
   sending_mode = AUTOMATIC_SENDING;
 
