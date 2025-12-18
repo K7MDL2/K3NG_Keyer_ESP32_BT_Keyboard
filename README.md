@@ -31,13 +31,15 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 >Original K3NG CW Keyer here: https://github.com/k3ng/k3ng_cw_keyer
 > 
 >Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
-
+_____________________________________________
 
              ********************************  Dec 17, 2025  K7MDL *******************************
 > [!NOTE]
->As of Nov 17, 2025, the precompiled .bin files have new offset numbers to use when flashing.  The Wiki pages for the 2 flash tools have been updated as well as Flash_Tool_Readme.txt
+>As of Nov 17, 2025, the precompiled .bin files have new offset numbers to use when flashing.  The Wiki pages for the 2 flash tools have been updated as well as Flash_Tool_Readme.txt.
+> 
+>https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
-The Paddle and Straight Key IO pins used on the MCP23017 Port Expander, and now also the local GPIO pins, are using interrupts for beter performance.  The main program simply looks at a state variable set by the interrupts reducing IO polling time.  Raised the max to 42WPM. The local IO pins can do better than 50.  More testing to come on the max for each configuration. 
+The Paddle and Straight Key IO pins used on the MCP23017 Port Expander, and now also the local GPIO pins, are using interrupts for better performance.  The main program simply looks at a state variable set by the interrupts eliminating IO polling time.  Raised the max WPM rate to 42WPM. The local IO pins can do better than 50WPM.  More testing to come on the max for each configuration. 
 
 Nov 28, 2025 - Enabled touch on 5 buttons on lower unused part of the 3.2" display.  This capacitive touch screen is an ESP32-2432S032C-I clone using a GT911 touch controller. The TFT_eSPI library looks for a SPI touch controller which is used for resistive display versions such as the 3.5" which I have a build for here. It needed to be initialized as I2C bus #1 despite it using pins 21 and 22 because the touch library is using pins 33 and 32 and using I2C bus #0.  When Button #1 is pressed, a blue popup window is presented over the CW text scroll area with some test text in it.  After a few seconds, it goes away and the CW text is redrawn.  This window mechanism will be used for future features like help, menus, grid and callsign input, viewing memory contents, activating memories without a keyboard, etc.  Some of these are what a physical button can do if enabled today in the code, now can be touch.   
 
