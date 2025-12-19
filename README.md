@@ -41,6 +41,8 @@ _____________________________________________
 
 The Paddle and Straight Key IO pins used on the MCP23017 Port Expander, and now also the local GPIO pins, are using interrupts for better performance.  The main program simply looks at a state variable set by the interrupts eliminating IO polling time.  Raised the max WPM rate to 42WPM. The local IO pins can do better than 50WPM.  More testing to come on the max for each configuration. 
 
+             ********************************  Previous Updates *********************************
+             
 Nov 28, 2025 - Enabled touch on 5 buttons on lower unused part of the 3.2" display.  This capacitive touch screen is an ESP32-2432S032C-I clone using a GT911 touch controller. The TFT_eSPI library looks for a SPI touch controller which is used for resistive display versions such as the 3.5" which I have a build for here. It needed to be initialized as I2C bus #1 despite it using pins 21 and 22 because the touch library is using pins 33 and 32 and using I2C bus #0.  When Button #1 is pressed, a blue popup window is presented over the CW text scroll area with some test text in it.  After a few seconds, it goes away and the CW text is redrawn.  This window mechanism will be used for future features like help, menus, grid and callsign input, viewing memory contents, activating memories without a keyboard, etc.  Some of these are what a physical button can do if enabled today in the code, now can be touch.   
 
 <img width="1146" height="610" alt="image" src="https://github.com/user-attachments/assets/b4512298-544b-4bc3-94d5-6bd83fdc7d14" />
@@ -61,8 +63,6 @@ Improved the startup screen sequence and text placement.  Pairing screen is hard
 Nov 10, 2025 - Updated CMakeLists.txt files (project and main) to search for DISPLAY_TYPE type in keyer_features_and_options_esp32_dev.h and include the correct #define and also add the DISPLAY_TYPE as a subfolder under precompiled_image folder.  Now the latest .bin files for each display model are copied every time I do a build for that display model.  See the new Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Select-Display-Type-for-Build
 
 Minor changes to clear out the line before printing a status message on the screen at startup (No BT keyboard, Pairing Code XXXXXX, etc).
-
-             ********************************  Previous Updates *********************************
 
 Nov 10, 2025 - Removed bt_keyboard check and main_loop from tasks.  Created bt_keyboard_read() and bt_keyboard_available() to mirror the keyboard.read() and keyboard.available() functions.  Performance appears to be good with no dropped dits or dahs up to 31WPM on the text i2c LCD.  Limits are set at 30WPM.   I also changes teh sdkconfig to use 240MHz CPU and 80Mhz with QIO for memory (vs the stock 160 and 40 DIO).
 
