@@ -33,6 +33,8 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 >Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 _____________________________________________
 
+This fork on a ESP32-WROOM32 adds BT keyboard (BLE and BT Classic) and a few different type TFT displays including touch buttons in some cases.  Below are the more recent change notes.  See the Wiki Pages for more information about parts suppotted and configuration.
+
              ********************************  Dec 17, 2025  K7MDL *******************************
 > [!NOTE]
 >As of Nov 17, 2025, the precompiled .bin files have new offset numbers to use when flashing.  The Wiki pages for the 2 flash tools have been updated as well as Flash_Tool_Readme.txt.
@@ -41,73 +43,6 @@ _____________________________________________
 
 The Paddle and Straight Key IO pins used on the MCP23017 Port Expander, and now also the local GPIO pins, are using interrupts for better performance.  The main program simply looks at a state variable set by the interrupts eliminating IO polling time.  Raised the max WPM rate to 42WPM. The local IO pins can do better than 50WPM.  More testing to come on the max for each configuration. 
 
-             ********************************  Previous Updates *********************************
-             
-Nov 28, 2025 - Enabled touch on 5 buttons on lower unused part of the 3.2" display.  This capacitive touch screen is an ESP32-2432S032C-I clone using a GT911 touch controller. The TFT_eSPI library looks for a SPI touch controller which is used for resistive display versions such as the 3.5" which I have a build for here. It needed to be initialized as I2C bus #1 despite it using pins 21 and 22 because the touch library is using pins 33 and 32 and using I2C bus #0.  When Button #1 is pressed, a blue popup window is presented over the CW text scroll area with some test text in it.  After a few seconds, it goes away and the CW text is redrawn.  This window mechanism will be used for future features like help, menus, grid and callsign input, viewing memory contents, activating memories without a keyboard, etc.  Some of these are what a physical button can do if enabled today in the code, now can be touch.   
-
-<img width="1146" height="610" alt="image" src="https://github.com/user-attachments/assets/b4512298-544b-4bc3-94d5-6bd83fdc7d14" />
-
-
-Additionally I now can scale the status bar for higher res screens and is now done on the 3.5" 320x480 display.  I also populated the repo here with the complete components content as used in my builds so you do not need to hunt them down. The libraries folder is not used and is a carry over from the original project and some of them may be moved to components when needed to enable certain features in the future like PS2 keyboard.  It will eventually go away.
-
-Nov 24, 2025 - Added support for 16 pin MCP23017 I2C port expansion board.  The larger display boards have very few external IO pins.  The MCP23017 connects via I2C and gives you 16 IO ports.  The program used polling for the paddles. I replaced the polling with an interrupt routine to eliminate time consuming polling over the I2C bus.  Both Paddles and straight key work.   I was able to move the top WPM speed limit up to 40WPM, maybe more.   
-
-Added some code to make display size scaling easier.  The 3.5" display is a 320x480.  It is set up with 30 chars per line, 5 lines, and a larger size status bar and larger font.   Deleted many .h config files for non-esp32 boards as they will never compile under esp-idf.
-
-Nov 17, 2025 - No feature changes but much behind the scenes to setup for easy adaption to future larger or different geometry screen sizes.  Faster CW text scrolling.  Looking into using viewports (aka windows) to place current pop-up messages and eliminate the slow screen redraws.  This also paves the way for future info screens like memory contents, memory editing, and proper graphics scrolling in a window that won't affect the surrounds, can just use text wrap.  This should improve CPU perf a bit and look a lot better.  The Sidetone line is now set to active Low on request (for now).  
-
-There are 4 screen display models in the #defines. The M5Stack does not work yet, still working on it.  The other 3 are all good.  This one display setting (DISPLAY_TYPE) is passed up to the top level (project) CMakeLists.txt and is set ot CONFIG_DISPLAY_MODEL.  That controls the library choice of User_Settings.h for each display type and copying the bin files to the right folder at the end of a compile.
-
-Improved the startup screen sequence and text placement.  Pairing screen is hard to miss now.
-
-Nov 10, 2025 - Updated CMakeLists.txt files (project and main) to search for DISPLAY_TYPE type in keyer_features_and_options_esp32_dev.h and include the correct #define and also add the DISPLAY_TYPE as a subfolder under precompiled_image folder.  Now the latest .bin files for each display model are copied every time I do a build for that display model.  See the new Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Select-Display-Type-for-Build
-
-Minor changes to clear out the line before printing a status message on the screen at startup (No BT keyboard, Pairing Code XXXXXX, etc).
-
-Nov 10, 2025 - Removed bt_keyboard check and main_loop from tasks.  Created bt_keyboard_read() and bt_keyboard_available() to mirror the keyboard.read() and keyboard.available() functions.  Performance appears to be good with no dropped dits or dahs up to 31WPM on the text i2c LCD.  Limits are set at 30WPM.   I also changes teh sdkconfig to use 240MHz CPU and 80Mhz with QIO for memory (vs the stock 160 and 40 DIO).
-
-I forked the TFT_eSPI library so it can be sync'd to the original when needed. This preserves my customized User_Setup_Select.h file which points to custom User_Setup.h files in a folder under /main.  One for the 1.9" TFT, the other for the 3.2" TFT.  https://github.com/K7MDL2/TFT_eSPI
-
-The K380 BT Classic keyboard works great.  The BLE keyboards not as well, still digging into why.  No keyboard works when compiled under Arduino yet.  Both are running arduino_esp32 3.3.3 library.   See the open issues for status.
-
-Nov 7, 2022 - Now the same code will compile under esp-idf (v5.5.1) and Arduino IDE (2.3.6).  Just change main.cpp to main.ino.   As of today, the precompiled file set is for the text LCD i2c display and compiled under esp-idf so all 3 keyboards will work.
-
-See https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/issues/2 for what works and what does not.  Bascially on the Rii i8+ mini keyboard works under Arduino as of today, but does reconnect.  Under esp-idf, all work, the K380s wont reconnect, the K380 and Rii i8+ do.  
-
-Below are the 3 displays that I have setup and tested on ESP32.  For the TFT displays, you mst also edit the TFTR_eSPI library file User_Setup_Select.h to point to one of the 2 TFt setup files located in main/TFT_e_SPI_Custom_Config folder.  These are preconfigured files for each display.
-
-    //#define FEATURE_LCD_LIQUIDCRYSTAL_I2C   // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
-    // *** In Arduino IDE, for these 2 TFT displays, you must edit libraries TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h ***
-    //#define FEATURE_IDEASPARK_LCD             // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus
-    #define FEATURE_TFT7789_3_2inch_240x320_LCD   // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-
-Nov 3, 2025 - With minor code change and reconfigured pin assignments I have a 3.2" st7789 320x240 TFT capcitive touchscreen display running.  I plan to try to get touch going next.  I want to add touch buttons to the lower part of the display.  Upsizing from 1.9" to 3.2" made the same fonts 50% larger, now the same size as the text LCD.   It also magnified the gaps between letters when using a proportional font with fixed spacing.  The stock code counts columns for scrolling the CCW text area.  I switched to a fixed font for the CW text box.  You get 5 lines of 20 characters each.
-
-<img width="1772" height="2475" alt="image" src="https://github.com/user-attachments/assets/70634f97-0844-4e28-b2f2-c513508bc318" />
-
-Nov 2, 2025 - Now have a 1.9" Color TFT display working.  Uses st7789 and is bright and sharp.  I have it configures for 5 lines at 17 characters per line.  I added Wiki page for details on how I configured this in the project.  I took a lot of trial and error. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Color-TFT-Display-Info
-
-<img width="1067" height="601" alt="image" src="https://github.com/user-attachments/assets/2773d19a-17c4-4a90-83e8-cc4be92991ab" />
-
-There is a status bar with BT connection, Pause, TX/TX, Keyer mode, grid square (hard coded for now) and WPM rate. 
-
-<img width="447" height="252" alt="image" src="https://github.com/user-attachments/assets/2ff16fb4-11a8-4e83-a45c-eaaef0f9fdd8" />
-
-Update Oct 30, 2025.  Now have a 4 lne by 20 column LCD working.  Display is connected on pins I2C pins 21 and 22 driving a Hitachi 44780 compatible display.  Uses the LCD class structure so can swap in different libraries for different devices.
-
-Update: Oct 29, 2025:  This is fully functional for the features I have defined.  Tested 3 BT keyboards.  The K380s is a BLE keyboard and currently does not reconnect so it requires you to pair it each connection for now.  All keys for the equivalent PS2 keyboard are assigned.  See Wiki pages.
-
-This requires certain settings.
-
-There are 2 relevant bugs.  
-https://github.com/espressif/esp-idf/issues/15379  - BLE-HID-Device Re-Connection not working with the esp_hid_host (unresolved)
-https://github.com/espressif/esp-idf/issues/12401  - HID Host fails to connect to a BLE keyboard (solved - see details of settings required)
-
-These config values must be changed:
-   
-    #define CONFIG_BT_GATTC_NOTIF_REG_MAX 64  //needed for K380s BLE keyboard 
-    #define CONFIG_BT_SMP_MAX_BONDS 40
-    #define BTA_GATTC_CONN_MAX  64
 
 *************************************************************************
 
