@@ -42,8 +42,10 @@ This fork on a ESP32-WROOM32 adds
  - Status Bar with (future) Grid, call, WPM rate, and sevceral satus icons including T/R status.
  - MCP23017 I2C port expander to add IO to the IO starved TFT display boards.  The Paddles and Straight key are on PA0-2 pins.
  - Using interrupts for all paddle and straight key IO pin, both the port expander and local GPIO pins.
+
+Check out the latest changes on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
  
- See the Wiki Pages for more information about parts suppotted and configuration. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
+See the Wiki Pages for more information about parts supported and configuration. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
 <img width="1146" height="610" alt="image" src="https://github.com/user-attachments/assets/b4512298-544b-4bc3-94d5-6bd83fdc7d14" />
 
