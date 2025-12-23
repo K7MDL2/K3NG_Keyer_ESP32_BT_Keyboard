@@ -1381,7 +1381,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.12.17"
+#define CODE_VERSION "K7MDL-2025.12.22"
 #define eeprom_magic_number 45              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1917,7 +1917,10 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 void mydelay(unsigned long ms);
 void display_scroll_print_char(char charin);
-void popup();
+void popup(bool show);
+void sinewave_interrupt_compute();
+void initialize_sinewave_generator();
+void initialize_tonsin();
 
 // ________________________________
 // 
@@ -15646,12 +15649,12 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
   port_to_use->print(configuration.hz_sidetone,DEC);
   port_to_use->println(F(" hz"));
 
-  // #if defined(FEATURE_SINEWAVE_SIDETONE)
-  //   port_to_use->print(F("Sidetone Volume: "));
-  //   port_to_use->print(map(configuration.sidetone_volume,sidetone_volume_low_limit,sidetone_volume_high_limit,0,100));
-  //   port_to_use->println(F("%"));
-  //   port_to_use->println(configuration.sidetone_volume);
-  // #endif //FEATURE_SINEWAVE_SIDETONE   
+  #if defined(FEATURE_SINEWAVE_SIDETONE)
+     port_to_use->print(F("Sidetone Volume: "));
+     port_to_use->print(map(configuration.sidetone_volume,sidetone_volume_low_limit,sidetone_volume_high_limit,0,100));
+     port_to_use->println(F("%"));
+     port_to_use->println(configuration.sidetone_volume);
+  #endif //FEATURE_SINEWAVE_SIDETONE   
 
   #ifdef FEATURE_SIDETONE_SWITCH
     port_to_use->print(F("Sidetone Switch: "));
@@ -18213,9 +18216,9 @@ void initialize_eeprom(){
       EEPROM.format();//sp5iou 20180328 to reinitialize / format EEPROM
    #endif
    write_settings_to_eeprom(1);
-  // #if defined(FEATURE_SINEWAVE_SIDETONE)
-  //   initialize_tonsin();
-  // #endif 
+  #if defined(FEATURE_SINEWAVE_SIDETONE)
+     initialize_tonsin();
+  #endif 
   beep_boop();
   beep_boop();
   beep_boop();    
@@ -18686,49 +18689,90 @@ void initialize_display() {
   }
 }
 
-void popup()
-{
-  #ifdef FEATURE_TFT_DISPLAY 
-    lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
-    lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
-    lcd.setTextWrap(true,true);
-    lcd.setCursor(10,20);
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    lcd.print("Before clearing frame and turning color");
-    mydelay(3000);
-    //lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
-    lcd.frameViewport(TFT_BLUE, 3);
-    //lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    lcd.setCursor(10,70);
-    lcd.print("1234567890123456789012345678901234567890");
-    mydelay(300);
-    lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
-    lcd.resetViewport();
-    lcd.setFreeFont(TFT_FONT_MEDIUM);
-    display_scroll_print_char('~');
-  #endif
-}
+#ifdef FEATURE_TOUCH_DISPLAY
+//---------------------------------------------------------------------
+// Buttons and Popup Window for Touch Displays
+//---------------------------------------------------------------------
+
+  // row 1 buttons which is calculated as button_id + (button_row*10)
+  #define BUTTON_F1 0
+  #define BUTTON_1  1
+  #define BUTTON_2  2
+  #define BUTTON_3  3
+  #define BUTTON_4  4
+  #define CW_BOX1   5
+  // row 2 buttons which is calculated as button_id + (button_row*10)
+  #define BUTTON_F2 10
+  #define BUTTON_5  11
+  #define BUTTON_6  12
+  #define BUTTON_7  13
+  #define BUTTON_8  14
+  #define CW_BOX2   15
+
+  #define NUM_BUTTON_ROWS  2; // number of rows of buttons
+  char popup_text[160] = {}; // Text to display in popup
+  bool popup_active = false;
+  uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
+  bool button_active = false;
+#endif
 
  #ifdef FEATURE_TOUCH_DISPLAY
-  TFT_eSPI_Button btn_func;             // Button instance
+  TFT_eSPI_Button btn_f1;             // Button instance
   TFT_eSPI_Button btn_1;
   TFT_eSPI_Button btn_2;
   TFT_eSPI_Button btn_3;
   TFT_eSPI_Button btn_4;
+  TFT_eSPI_Button btn_CW_box;
+  TFT_eSPI_Button* btn[] = {&btn_f1, &btn_1, &btn_2, &btn_3, &btn_4, &btn_CW_box};
+  uint8_t buttonCount = sizeof(btn) / sizeof(btn[0]);
 #endif
 
-void create_buttons(){
+void popup_toggle() {  // toggle popup on and off
   #ifdef FEATURE_TOUCH_DISPLAY
-    uint16_t parameters[5];
+    if (!popup_active)
+      popup(true);
+    else 
+      popup(false);
+  #endif
+}
+
+void popup(bool show)
+{
+  #ifdef FEATURE_TOUCH_DISPLAY 
+    if (!show && popup_active) {  // remove popup window
+      lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+      lcd.resetViewport();
+      lcd.setFreeFont(TFT_FONT_MEDIUM);
+      display_scroll_print_char('~');
+      popup_active = false;
+      button_active = false;
+      debug_serial_port->println("popup off");
+      //for (uint8_t b = 0; b < buttonCount; b++) {
+      btn_f1.press(false);
+      //}
+      return;
+    }
+    // draw the popup window and post the text 
+    debug_serial_port->println("popup on");
+    lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+    popup_active = true;
+    lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+    lcd.setTextWrap(true,true);
+    lcd.setCursor(10,20);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.print(popup_text);
+    //lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+    lcd.frameViewport(TFT_GREEN, 3);
+    //lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.setCursor(10,70);
+    //lcd.print("1234567890123456789012345678901234567890");
+  #endif
+}
+
+void draw_buttons_row_1() {
+  #ifdef FEATURE_TOUCH_DISPLAY
     lcd.setFreeFont(TFT_FONT_SMALL);
-    //lcd.setLabelDatum(MY_DATUM);
-    //lcd.calibrateTouch(0,TFT_BLUE, TFT_GREY,2);
-    btn_func.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "FUNC", 2);  // library modified to ignore text size
-    btn_1.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 1 ", 2);  // library modified to ignore text size
-    btn_2.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+128, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 2 ", 2);  // library modified to ignore text size
-    btn_3.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 3 ", 2);  // library modified to ignore text size
-    btn_4.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 4 ", 2);  // library modified to ignore text size
-    btn_func.drawButton(false, "FUNC");
+    btn_f1.drawButton(false, "F1");
     btn_1.drawButton(false, " 1 ");
     btn_2.drawButton(false, " 2 ");
     btn_3.drawButton(false, " 3 ");
@@ -18737,39 +18781,204 @@ void create_buttons(){
   #endif
 }
 
-uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
-void check_buttons() {
-  // Check for touch
+void draw_buttons_row_2() {
   #ifdef FEATURE_TOUCH_DISPLAY
-    tp.read();
-    if (tp.isTouched){
-        t_x = tp.points[0].x;
-        t_y = tp.points[0].y;
-      if (btn_func.contains(t_x, t_y)) {
-          debug_serial_port->println("Got touch event FUNC");
-          //popup(); 
-        }
-      if (btn_1.contains(t_x, t_y)) { 
-          debug_serial_port->println("Got touch event 1");
-          popup(); 
-        }
-      if (btn_2.contains(t_x, t_y)) { 
-          debug_serial_port->println("Got touch event 2");
-          //popup();
-        }
-      if (btn_3.contains(t_x, t_y)) { 
-          debug_serial_port->println("Got touch event 3");
-          //popup();
-        }
-      if (btn_4.contains(t_x, t_y)) { 
-          debug_serial_port->println("Got touch event 4");
-          //popup();
-        }
-      //lcd.setFreeFont(TFT_FONT_SMALL);
-      //btn_func.drawButton(false,"FUNC");
-      //lcd.setFreeFont(TFT_FONT_MEDIUM);
-      //lcd.setTextDatum(MY_DATUM);
+    lcd.setFreeFont(TFT_FONT_SMALL);
+    btn_f1.drawButton(false, "F2");
+    btn_1.drawButton(false, " 5 ");
+    btn_2.drawButton(false, " 6 ");
+    btn_3.drawButton(false, " 7 ");
+    btn_4.drawButton(false, " 8 ");  
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
+  #endif 
+}
+
+void create_buttons() {
+  #ifdef FEATURE_TOUCH_DISPLAY
+    uint16_t parameters[5];
+    lcd.setFreeFont(TFT_FONT_SMALL);
+    //lcd.setLabelDatum(MY_DATUM);
+    //lcd.calibrateTouch(0,TFT_BLUE, TFT_GREY,2);
+    btn_f1.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "F1", 2);  // library modified to ignore text size
+    btn_1.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64,  BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 1 ", 2);  // library modified to ignore text size
+    btn_2.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+128, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 2 ", 2);  // library modified to ignore text size
+    btn_3.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 3 ", 2);  // library modified to ignore text size
+    btn_4.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 4 ", 2);  // library modified to ignore text size
+    btn_CW_box.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    draw_buttons_row_1();
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
+  #endif
+}
+
+// Processes the button press.
+// Pressing the FUNC button increments the button row counter
+// The button ID is set to the button number plus the row number multiplied by 10.
+// The button row counter is reset to 0 if it exceeds the number of button rows.
+void process_buttons(uint8_t button_ID) {
+  // Process button presses
+  #ifdef FEATURE_TOUCH_DISPLAY
+    static int last_button = -1;  // used at end to detect if a valid button was just pressed.
+    static uint8_t button_row = 0;  // default to row 1
+    int button;
+
+    //debug_serial_port->print(F("On Entry: Button ID = "));debug_serial_port->print(button_ID);
+    //debug_serial_port->print(F("  Popup Active = "));debug_serial_port->print(popup_active);
+    //debug_serial_port->print(F("  Button Active = "));debug_serial_port->println(button_active);
+
+    // F-Key (always button_ID == 0) cycles through rows of action buttons
+    if (button_ID == BUTTON_F1) {
+      if (button_row == 0) {
+        button_row = 1; // switch to row 2 if button_row = 0
+        draw_buttons_row_2();
+        //debug_serial_port->println("Switch to Row 2");
+      } else {
+        button_row = 0;
+        draw_buttons_row_1();
+        //debug_serial_port->println("Switch to Row 1");
+      }
+      btn_f1.press(false);
+      button_active = false;
+      mydelay(600);
+      return;
     }
+
+    // process the action buttons in each row
+    button = button_ID + (button_row * 10);
+    
+    if (button != last_button || button == CW_BOX1 || button == CW_BOX2) {      
+      switch (button) {  
+        case BUTTON_1:
+          debug_serial_port->println(F("Button 1 pressed"));
+          // Process button 2 press
+          strcpy(popup_text, "Button 1 pressed");
+          popup_toggle();
+          break;
+        case BUTTON_2:
+          debug_serial_port->println(F("Button 2 pressed"));
+          // Process button 2 press
+          strcpy(popup_text, "Button 2 pressed");
+          popup_toggle();
+          break;
+        case BUTTON_3:
+          debug_serial_port->println(F("Button 3 pressed"));
+          // Process button 3 press
+          strcpy(popup_text, "Button 3 pressed");
+          popup_toggle();
+          break;
+        case BUTTON_4:
+          debug_serial_port->println(F("Button 4 pressed"));
+          // Process button 4 press
+          strcpy(popup_text, "Button 4 pressed");
+          popup_toggle();          
+          break;
+        /// Row 2 buttons
+        case BUTTON_5:
+          debug_serial_port->println(F("Button 5 pressed"));
+          // Process button 5 press
+          strcpy(popup_text, "Button 5 pressed");
+          popup_toggle();
+          break;
+        case BUTTON_6:
+          debug_serial_port->println(F("Button 6 pressed"));
+          // Process button 6 press
+          strcpy(popup_text, "Button 6 pressed");
+          popup_toggle();
+          break;
+        case BUTTON_7:
+          debug_serial_port->println(F("Button 7 pressed"));
+          // Process button 7 press
+          strcpy(popup_text, "Button 7 pressed");
+          popup_toggle();
+          break;
+        case BUTTON_8:
+          debug_serial_port->println(F("Button 8 pressed"));
+          // Process button 8 press
+          strcpy(popup_text, "Button 8 pressed");
+          popup_toggle();
+          break;
+        case CW_BOX1:
+        case CW_BOX2:
+          debug_serial_port->println(F("CW Box Touched"));
+          // Process CW Box area press
+          if (popup_active) popup(false);
+          button_active = false;
+          break;
+        default: 
+          if (popup_active) popup(false);  // close popup if it is open
+          button_active = false;
+          break;
+      }      
+      last_button = button;  // update last button ID
+    }
+  #endif
+}
+
+// Detects if a button is pressed and assign a button ID to it.
+void check_touch_buttons() {
+  // Check for touch action, determine if they are for a configured button, or something else
+  #ifdef FEATURE_TOUCH_DISPLAY
+    uint8_t button_ID = 255;  // default to no button pressed
+    static uint32_t scanTime = millis();
+    static uint32_t dwellTime = millis();
+
+    // Scan buttons every 50ms at most
+    if (millis() - scanTime >= 50) {
+      // Pressed will be set true if there is a valid touch on the screen
+      tp.read();
+      bool pressed = tp.isTouched;
+      scanTime = millis();
+      if (pressed) {
+        button_ID = 255;
+        t_x = tp.points[0].x;
+        t_y = tp.points[0].y;               
+        for (uint8_t b = 0; b < buttonCount; b++) {
+          //debug_serial_port->print("b = "); debug_serial_port->println(b);
+          if (btn[b]->contains(t_x, t_y)) {   
+            button_ID = b;
+            //debug_serial_port->print("Testing Button "); debug_serial_port->println(b);
+            if (!button_active || b == 5) {   // lock out until acted on and timer expires
+              //debug_serial_port->print("In button loop"); debug_serial_port->println(b);
+
+              #ifndef DEBOUNCE
+              int delay_time = 30;
+              int loop = 0;
+              dwellTime = millis(); // start debounce timer
+              while (millis() - dwellTime <= 60) {   // debounce                
+                mydelay(delay_time);                
+                loop++;
+                //debug_serial_port->print("** Debounce loop time = "); debug_serial_port->println(loop*delay_time);
+                tp.read();
+                if (tp.isTouched) {
+                  t_x = tp.points[0].x;
+                  t_y = tp.points[0].y;
+                  if (!btn[b]->contains(t_x, t_y)) {  // touch on this btn has stopped, set press to false
+                    btn[b]->press(false);
+                    //debug_serial_port->print("** Debounce Exit, Right Key, but not held long enough: time = "); debug_serial_port->println(loop*delay_time);
+                    break;  // had touch at sample time but not now
+                  }
+                   // so far so good
+                  btn[b]->press(true);
+                  //debug_serial_port->print("** Debounce - Touch Pressed on Button ID = "); debug_serial_port->println(b);                                          
+                } else {
+                  //debug_serial_port->println("** Debounce Exit - Lost touch before timer ended");
+                  btn[b]->press(false);
+                  break;  // lost touch before timer ended
+                }
+              }  // end while loop for debounce
+              //debug_serial_port->print("** Debounce End timer = "); debug_serial_port->println(loop*delay_time);
+              #endif
+              
+              btn[b]->press(true);
+              button_ID = b;
+              button_active = true;     // set active flag if any valid button triggered on
+              process_buttons(button_ID);  // process any touch item
+              return;
+            }
+          } 
+        } // check configured buttons
+        debug_serial_port->print("Non-Button or already active button pressed -- ID = "); debug_serial_port->println(button_ID);
+      } // end if (pressed)
+    } // end of scan period
   #endif
 }
 
@@ -22738,7 +22947,7 @@ float freq = 600;  // frquency of tone in Hz
 float omega = 2*pi*1;  // part of sine wave conversion factor
 const float A = 490;  // amplitude
 // next line initializes oscillation with amplitude A
-float a[]={0.0, A*sin(omega*T/1000000.0),0.0}; 
+float a[]={(float) 0.0, ((float) A) * (float) (sin(omega*T/1000000.0)), (float) 0.0}; 
 // c1 is the difference equation coefficient
 const float c1 = (8.0 - 2.0*pow(omega*T/1000000.0,2))/(4.0+pow(omega*T/1000000.0,2));
 const int resolution = 8;
@@ -22746,7 +22955,7 @@ const int resolution = 8;
 //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
 
 void compute_sinetone(int hz, int volume){ //dl2dbg 
-  float omega = omega*hz;
+  omega = omega*hz;
 
   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
     Timer1.detachInterrupt();
@@ -22790,8 +22999,8 @@ void sinewave_interrupt_compute(){ //dl2dbg
 
 void initialize_tonsin(){ //dl2dbg
 
-  //configuration.sidetone_volume = sidetone_volume_low_limit + ((sidetone_volume_high_limit - sidetone_volume_low_limit) / 2);
-  //compute_sinetone(configuration.hz_sidetone,configuration.sidetone_volume);
+  configuration.sidetone_volume = sidetone_volume_low_limit + ((sidetone_volume_high_limit - sidetone_volume_low_limit) / 2);
+  compute_sinetone(configuration.hz_sidetone,configuration.sidetone_volume);
   ledcAttach(sidetone_line, configuration.hz_sidetone, 255);
  
   #if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
@@ -23447,7 +23656,7 @@ void update_time(){
                                 {   
                                     switch (ch) 
                                     {
-                                        case 0x04 : ch = 0; popup(); break;
+                                        //case 0x04 : ch = 0; popup(); break;
                                         case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
                                         case 0x29 : ch = PS2_ESC; 
                                                     queueflush();
@@ -23498,10 +23707,10 @@ void update_time(){
                                     //debug_serial_port->print('>');
                                     
                                     switch (ch) {
-                                        case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
+                                        case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters (add 93)
                                                     ch = uppercase(ch);
                                                     break;
-                                        case 0x1e ... 0x26 : ch += 0x13;  // numbers 1-9
+                                        case 0x1e ... 0x26 : ch += 0x13;  // numbers 1-9 (add 19)
                                                     if (!isdigit(ch)) ch = 0;
                                                     break;
                                         case 0x27 : ch += 0x09;  // number 0
@@ -23523,7 +23732,7 @@ void update_time(){
                                         case 0x37 : ch = '.'; break;    // '.'  key
                                         case 0x38 : ch = '/'; break;    // '/' cursor key
                                         case 0x39 : ch = 0; break;   // CAP LOCK toggle
-                                        case 0x3A ... 0x45: ch += 72; break; // F1-F12 keys
+                                        case 0x3A ... 0x45: ch += 72; break; // F1-F12 keys (add 0x48)
                                         case 0x49 : ch = PS2_INSERT; break; // End key
                                         case 0x4A : ch = PS2_HOME; break; // Home key
                                         case 0x4C : ch = PS2_DELETE; break; // End key
@@ -23534,7 +23743,7 @@ void update_time(){
                                         case 0x50 : ch = PS2_LEFTARROW; break;   // left cursor key
                                         case 0x51 : ch = PS2_DOWNARROW; break;   // down cursor key
                                         case 0x52 : ch = PS2_UPARROW; break;   // up cursor key
-                                        //case 0x53 : ch = BT_SCROLL; break;   // up cursor key
+                                        //case 0x53 : ch = BT_SCROLL; break;   // No Scroll on BT keyboards so far
                                         default   : break; //debug_serial_port->print(ch);   // filter out key up events
                                     }  // end switch ch
                                 } 
@@ -24139,8 +24348,7 @@ void main_loop(void * pvParameters )
           service_send_buffer(PRINTCHAR);
           check_ptt_tail();
 
-check_buttons();
-
+          check_touch_buttons();
 
           #ifdef FEATURE_POTENTIOMETER
               check_potentiometer();

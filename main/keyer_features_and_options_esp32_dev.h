@@ -16,7 +16,6 @@
 #define FEATURE_BEACON_SETTING        // Go into beacon mode at boot up if EEPROM setting is enabled (\_ CLI Command)
 #define FEATURE_TRAINING_COMMAND_LINE_INTERFACE
 ////#define FEATURE_POTENTIOMETER         // do not enable unless you have a potentiometer connected, otherwise noise will falsely trigger wpm changes
-//#define FEATURE_SINEWAVE_SIDETONE
 // #define FEATURE_SIDETONE_SWITCH   // adds switch control for the sidetone output. requires an external toggle switch (assigned to an arduino pin - see keyer_pin_settings.h). 
 //#define FEATURE_SIDETONE_NEWTONE      // Use the NewTone library, ~1k smaller code size than the standard tone library. Uses timer1 (pins 9 or 10)  https://bitbucket.org/teckel12/arduino-new-tone/wiki/Home
 #define FEATURE_SERIAL_HELP
@@ -65,9 +64,9 @@
 // If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
-#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
+//#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
+#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
 //#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
 
@@ -94,6 +93,8 @@
     #define FEATURE_TOUCH_DISPLAY
     #define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
     #define FEATURE_TFT_DISPLAY
+    //#define FEATURE_SINEWAVE_SIDETONE
+    //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
 #endif
 #if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
     //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
