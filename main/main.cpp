@@ -18931,43 +18931,27 @@ void check_touch_buttons() {
         button_ID = 255;
         t_x = tp.points[0].x;
         t_y = tp.points[0].y;               
-        for (uint8_t b = 0; b < buttonCount; b++) {
-          //debug_serial_port->print("b = "); debug_serial_port->println(b);
+        for (uint8_t b = 0; b < buttonCount; b++) {          
           if (btn[b]->contains(t_x, t_y)) {   
-            button_ID = b;
-            //debug_serial_port->print("Testing Button "); debug_serial_port->println(b);
-            if (!button_active || b == 5) {   // lock out until acted on and timer expires
-              //debug_serial_port->print("In button loop"); debug_serial_port->println(b);
-
-              #ifndef DEBOUNCE
-              int delay_time = 30;
-              int loop = 0;
+            button_ID = b;            
+            if (!button_active || b == CW_BOX1) {   // skip if button still active.  CW_BOX touch clears the popup.
+              #ifndef NO_DEBOUNCE
+              int delay_time = 30;              
               dwellTime = millis(); // start debounce timer
               while (millis() - dwellTime <= 60) {   // debounce                
-                mydelay(delay_time);                
-                loop++;
-                //debug_serial_port->print("** Debounce loop time = "); debug_serial_port->println(loop*delay_time);
-                tp.read();
+                mydelay(delay_time);                                
+                tp.read();  // sample the touch button a few times
                 if (tp.isTouched) {
                   t_x = tp.points[0].x;
                   t_y = tp.points[0].y;
-                  if (!btn[b]->contains(t_x, t_y)) {  // touch on this btn has stopped, set press to false
-                    btn[b]->press(false);
-                    //debug_serial_port->print("** Debounce Exit, Right Key, but not held long enough: time = "); debug_serial_port->println(loop*delay_time);
-                    break;  // had touch at sample time but not now
-                  }
-                   // so far so good
-                  btn[b]->press(true);
-                  //debug_serial_port->print("** Debounce - Touch Pressed on Button ID = "); debug_serial_port->println(b);                                          
-                } else {
-                  //debug_serial_port->println("** Debounce Exit - Lost touch before timer ended");
-                  btn[b]->press(false);
-                  break;  // lost touch before timer ended
+                  if (!btn[b]->contains(t_x, t_y)) // touch on this btn has stopped                    
+                    return;// had touch at sample time but not now
+                } else {                  
+                  return;   // lost touch before timer ended                  
                 }
               }  // end while loop for debounce
-              //debug_serial_port->print("** Debounce End timer = "); debug_serial_port->println(loop*delay_time);
               #endif
-              
+              // Debounce timer completed OK
               btn[b]->press(true);
               button_ID = b;
               button_active = true;     // set active flag if any valid button triggered on
