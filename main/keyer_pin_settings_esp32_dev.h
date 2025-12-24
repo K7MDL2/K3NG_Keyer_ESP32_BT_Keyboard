@@ -56,10 +56,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
     #ifdef FEATURE_MCP23017_EXPANDER
       #define MCP23017_INTA_GPIO 35 // input only, no pullup on this pin
-      #define paddle_left     MCP23017_PIN0 // expander pin 0
-      #define paddle_right    MCP23017_PIN1 // expander pin 1
+      #define paddle_left     MCP23017_PIN0 // expander pin PA0
+      #define paddle_right    MCP23017_PIN1 // expander pin PA1
       #ifdef FEATURE_STRAIGHT_KEY
-        #define pin_straight_key  MCP23017_PIN2 // expander pin 2
+        #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY
     #else
       #define paddle_left     3 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201

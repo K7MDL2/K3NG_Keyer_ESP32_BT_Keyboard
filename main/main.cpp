@@ -672,7 +672,7 @@ Recent Update History
         Updated descriptions of CLI Command/Memory Macro functions in help display (some missing serial number lack increment description where present in code)
         Fixed issue where the TX ON/TX Off LCD display state in Command Mode could get out of sync with the actual key_tx state
         Fixed serial numbers not displaying in LCD and CLI when playing back from Macro or CLI command (please check conditional compilations)
-        Fixed capialization in HELP display and Status output to be consistent
+        Fixed capitalization in HELP display and Status output to be consistent
         Changed "$" at end of non-empty memory contents in CLI status display to "_" to help determine if a trailing space is present.
 
     2.2.2017020702
@@ -1351,10 +1351,12 @@ Recent Update History
     Tested on Rii i8+ mini BT keyboard (BLE) and Logitech BT Classic K380 keyboard
     Build creates precompiled images.
 
-    2025.12.17 //K7MDL
-    Added TFT displays of various sizes
+    2025.12.23 //K7MDL
+    Added TFT displays of various sizes including optional rows of Touch buttons with GT911 touch controller
     Changed ESP32 to use GPIO interrupts for paddles and key for more accurate high speed chars
     Added support for MCP23017 port expander using interrupt and single read of all 16 ports for speed
+    Button 2 cycles through all 10 CW memories with each tap and displays teh txt in each memory.
+    All other buttons only have test text, no roles are assigned yet.
 
   Documentation: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
@@ -1381,7 +1383,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.12.22"
+#define CODE_VERSION "K7MDL-2025.12.24"
 #define eeprom_magic_number 45              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -3231,12 +3233,6 @@ void service_keypad(){
   return(decode_character);
 
   #endif //FEATURE_STRAIGHT_KEY_DECODE
-
-
-  
-
-
-
 
   }
 #endif //FEATURE_STRAIGHT_KEY
@@ -6550,8 +6546,6 @@ void tx_and_sidetone_key (int state)
                 #else
                     tone(sidetone_line,configuration.hz_sidetone,0);
                 #endif                                            // generate a tone on the speaker pin
-            #else  
-                tone(sidetone_line, configuration.hz_sidetone,0);
             #endif
         #else
           if (sidetone_line) {
@@ -6573,21 +6567,20 @@ void tx_and_sidetone_key (int state)
         }
         if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
           #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-          #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-                #ifdef FEATURE_M5STACK_CORE2
-                    if (M5.Speaker.isPlaying(0))
-                    {
-                        M5.Speaker.stop();
-                    }
-                #else
-                    noTone(sidetone_line);
-                #endif
-          #else
-            noTone(sidetone_line);
-          #endif
+            #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
+              #ifdef FEATURE_M5STACK_CORE2
+                  if (M5.Speaker.isPlaying(0))
+                  {
+                      M5.Speaker.stop();
+                  }
+              #else
+                  noTone(sidetone_line);
+              #endif
+            #else
             if (sidetone_line) {
               digitalWrite(sidetone_line, sidetone_line_inactive_state);
             }
+            #endif
           #endif
         }
         key_state = 0;
@@ -6635,21 +6628,18 @@ void tx_and_sidetone_key (int state)
         }
         if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
           #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-          #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-            noTone(sidetone_line);
-          #else
-            noTone(sidetone_line);
-          #endif
-          #else
-            if (sidetone_line) {
-              digitalWrite(sidetone_line, sidetone_line_inactive_state);
-            }
+            #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
+              noTone(sidetone_line);
+            #else
+              if (sidetone_line) {
+                digitalWrite(sidetone_line, sidetone_line_inactive_state);
+              }
+            #endif
           #endif
         }
         key_state = 0;
       }
     }
-
   #endif //FEATURE_PTT_INTERLOCK
 
   #if defined(FEATURE_INTERNET_LINK)
@@ -8107,14 +8097,14 @@ void command_progressive_5_char_echo_practice() {
               unsigned int NEWtone               =  400;                                  // the initial tone freuency for the tone sequence
               unsigned int TONEduration          =   50;                                  // define the duration of each tone element in the tone sequence to drive a speaker
               for (int k=0; k<6; k++) {
-#if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
- tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
-#else  
-                                                                // a loop to generate some increasing tones
-                tone(sidetone_line,NEWtone);                                              // generate a tone on the speaker pin
-                mydelay(TONEduration);                                                      // hold the tone for the specified delay period
-                noTone(sidetone_line); 
-#endif                                                                   // turn off the tone
+                #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
+                  tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
+                #else  
+                // a loop to generate some increasing tones
+                  tone(sidetone_line,NEWtone);                                              // generate a tone on the speaker pin
+                  mydelay(TONEduration);                                                      // hold the tone for the specified delay period
+                  noTone(sidetone_line); 
+                #endif                                                                   // turn off the tone
                 NEWtone = NEWtone*1.25;                                                                  // calculate a new value for the tone frequency
               }                                                                           // end for
               send_char(' ',0);
@@ -8484,9 +8474,9 @@ void command_sidetone_freq_adj() {
     mydelay(1);
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
         #ifdef FEATURE_M5STACK_CORE2
-            M5.Speaker.tone(700, configuration.hz_sidetone);
+          M5.Speaker.tone(700, configuration.hz_sidetone);
         #else
-              tone(sidetone_line,configuration.hz_sidetone,100);                                              // generate a tone on the speaker pin
+          tone(sidetone_line,configuration.hz_sidetone,100);                                              // generate a tone on the speaker pin
         #endif
     #else  
         tone(sidetone_line, configuration.hz_sidetone, 0);
@@ -9069,13 +9059,11 @@ void beep()
     //   noTone(sidetone_line);
     // #else
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-        #ifdef FEATURE_M5STACK_CORE2a
-            M5.Speaker.tone(hz_high_beep, 200);
-        #else
-            tone(sidetone_line,hz_high_beep,200);                                              // generate a tone on the speaker pin
-        #endif
-    #else  
-      tone(sidetone_line, hz_high_beep, 200);
+      #ifdef FEATURE_M5STACK_CORE2a
+        M5.Speaker.tone(hz_high_beep, 200);
+      #else  
+        tone(sidetone_line, hz_high_beep, 200);
+      #endif
     #endif
   #else
     if (sidetone_line) {
@@ -18568,6 +18556,16 @@ void mydelay(unsigned long ms)
   TAMC_GT911 tp = TAMC_GT911(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, TOUCH_WIDTH, TOUCH_HEIGHT);
 #endif
 
+// Text associated with touch buttons
+// Text content sized to fit in teh window.  Later desire to make scrllable with button and/or touch gesture
+const char btn1_text[] = {"This is test text for Button #1"};
+const char btn3_text[] = {"This is yet longer for text wrap test text for Button #3"};
+const char btn4_text[] = {"This is test text for Button #4"};
+const char btn5_text[] = {"This is longer test text for Button #5"};
+const char btn6_text[] = {"This is even longer test text for Button #6"};
+const char btn7_text[] = {"This is for Button #7"};
+const char btn8_text[] = {"This is test text for Button #8"};
+
 void initialize_display() {
 
   #ifdef FEATURE_DISPLAY    
@@ -18710,7 +18708,7 @@ void initialize_display() {
   #define CW_BOX2   15
 
   #define NUM_BUTTON_ROWS  2; // number of rows of buttons
-  char popup_text[160] = {}; // Text to display in popup
+  char popup_text[(LCD_COLUMNS*LCD_ROWS)+20] = {}; // Text to display in popup
   bool popup_active = false;
   uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
   bool button_active = false;
@@ -18726,6 +18724,25 @@ void initialize_display() {
   TFT_eSPI_Button* btn[] = {&btn_f1, &btn_1, &btn_2, &btn_3, &btn_4, &btn_CW_box};
   uint8_t buttonCount = sizeof(btn) / sizeof(btn[0]);
 #endif
+
+int print_memory(byte memory_number, char *mem_string) {
+  #ifdef FEATURE_TOUCH_DISPLAY    
+    int i = 0;
+    for (int y = (memory_start(memory_number)); (y < memory_end(memory_number)+1); y++) {
+      mem_string[i] = (char) EEPROM.read(y);  // read byte    
+      if (mem_string[i] == 255 || i > (sizeof(popup_text)-20)) {  // 255 is end of string in EEPROM, return to caller    
+        if (i == 0) { // if first byte == 255 then memory is blank
+          strcpy(mem_string, "Memory Empty\0");
+          return strlen(mem_string);
+        }
+        mem_string[i] = '\0';  // not blank, return string
+        return strlen(mem_string);
+      }
+      i++;
+    }
+    return 0;
+  #endif
+}
 
 void popup_toggle() {  // toggle popup on and off
   #ifdef FEATURE_TOUCH_DISPLAY
@@ -18746,14 +18763,12 @@ void popup(bool show)
       display_scroll_print_char('~');
       popup_active = false;
       button_active = false;
-      debug_serial_port->println("popup off");
-      //for (uint8_t b = 0; b < buttonCount; b++) {
+      //debug_serial_port->println("popup off");
       btn_f1.press(false);
-      //}
       return;
     }
     // draw the popup window and post the text 
-    debug_serial_port->println("popup on");
+    //debug_serial_port->println("popup on");
     lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
     popup_active = true;
     lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
@@ -18762,7 +18777,7 @@ void popup(bool show)
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     lcd.print(popup_text);
     //lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
-    lcd.frameViewport(TFT_GREEN, 3);
+    //lcd.frameViewport(TFT_GREEN, 3);
     //lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     lcd.setCursor(10,70);
     //lcd.print("1234567890123456789012345678901234567890");
@@ -18774,7 +18789,7 @@ void draw_buttons_row_1() {
     lcd.setFreeFont(TFT_FONT_SMALL);
     btn_f1.drawButton(false, "F1");
     btn_1.drawButton(false, " 1 ");
-    btn_2.drawButton(false, " 2 ");
+    btn_2.drawButton(false, "MEM");
     btn_3.drawButton(false, " 3 ");
     btn_4.drawButton(false, " 4 ");
     lcd.setFreeFont(TFT_FONT_MEDIUM);
@@ -18795,7 +18810,7 @@ void draw_buttons_row_2() {
 
 void create_buttons() {
   #ifdef FEATURE_TOUCH_DISPLAY
-    uint16_t parameters[5];
+    //uint16_t parameters[5];
     lcd.setFreeFont(TFT_FONT_SMALL);
     //lcd.setLabelDatum(MY_DATUM);
     //lcd.calibrateTouch(0,TFT_BLUE, TFT_GREY,2);
@@ -18819,11 +18834,10 @@ void process_buttons(uint8_t button_ID) {
   #ifdef FEATURE_TOUCH_DISPLAY
     static int last_button = -1;  // used at end to detect if a valid button was just pressed.
     static uint8_t button_row = 0;  // default to row 1
-    int button;
-
-    //debug_serial_port->print(F("On Entry: Button ID = "));debug_serial_port->print(button_ID);
-    //debug_serial_port->print(F("  Popup Active = "));debug_serial_port->print(popup_active);
-    //debug_serial_port->print(F("  Button Active = "));debug_serial_port->println(button_active);
+    int button, length;
+    bool mem_flag = false;
+    char mem_string[LCD_COLUMNS*LCD_ROWS] = {};
+    static byte mem_number = 0;
 
     // F-Key (always button_ID == 0) cycles through rows of action buttons
     if (button_ID == BUTTON_F1) {
@@ -18845,71 +18859,70 @@ void process_buttons(uint8_t button_ID) {
     // process the action buttons in each row
     button = button_ID + (button_row * 10);
     
-    if (button != last_button || button == CW_BOX1 || button == CW_BOX2) {      
+    //if (button != last_button || button == CW_BOX1 || button == CW_BOX2) {      
       switch (button) {  
         case BUTTON_1:
-          debug_serial_port->println(F("Button 1 pressed"));
-          // Process button 2 press
-          strcpy(popup_text, "Button 1 pressed");
+          //debug_serial_port->println(F("Button 1 pressed"));
+          strcpy(popup_text, btn1_text);
           popup_toggle();
           break;
-        case BUTTON_2:
-          debug_serial_port->println(F("Button 2 pressed"));
-          // Process button 2 press
-          strcpy(popup_text, "Button 2 pressed");
-          popup_toggle();
-          break;
+        case BUTTON_2: // This will cycle the memory # each time it is pressed.    
+          button_active = false;    
+          last_button = 253;      // allow repeat            
+          if (mem_number < 10) {// cycle through the 10 memories
+            length = print_memory(mem_number, mem_string);  // Get memory string
+            sprintf(popup_text, "Memory %d:%s", mem_number+1, mem_string);
+            //debug_serial_port->print(F("Button 2: "));debug_serial_port->println(popup_text);             
+            popup(true);            // post up the popup_text string in window
+            mem_number++;           // next memory if buton pressed again      
+          }
+          else {  // remove window
+            mem_number = 0;
+            popup(false);                       
+          }          
+          return;
         case BUTTON_3:
-          debug_serial_port->println(F("Button 3 pressed"));
-          // Process button 3 press
-          strcpy(popup_text, "Button 3 pressed");
+          //debug_serial_port->println(F("Button 3 pressed"));
+          strcpy(popup_text, btn3_text);
           popup_toggle();
           break;
         case BUTTON_4:
-          debug_serial_port->println(F("Button 4 pressed"));
-          // Process button 4 press
-          strcpy(popup_text, "Button 4 pressed");
+          //debug_serial_port->println(F("Button 4 pressed"));
+          strcpy(popup_text, btn4_text);
           popup_toggle();          
           break;
         /// Row 2 buttons
         case BUTTON_5:
-          debug_serial_port->println(F("Button 5 pressed"));
-          // Process button 5 press
-          strcpy(popup_text, "Button 5 pressed");
+          //debug_serial_port->println(F("Button 5 pressed"));
+          strcpy(popup_text, btn5_text);
           popup_toggle();
           break;
         case BUTTON_6:
-          debug_serial_port->println(F("Button 6 pressed"));
-          // Process button 6 press
-          strcpy(popup_text, "Button 6 pressed");
+          //debug_serial_port->println(F("Button 6 pressed"));
+          strcpy(popup_text, btn6_text);
           popup_toggle();
           break;
         case BUTTON_7:
-          debug_serial_port->println(F("Button 7 pressed"));
-          // Process button 7 press
-          strcpy(popup_text, "Button 7 pressed");
+          //debug_serial_port->println(F("Button 7 pressed"));
+          strcpy(popup_text, btn7_text);
           popup_toggle();
           break;
         case BUTTON_8:
-          debug_serial_port->println(F("Button 8 pressed"));
-          // Process button 8 press
-          strcpy(popup_text, "Button 8 pressed");
+          //debug_serial_port->println(F("Button 8 pressed"));
+          strcpy(popup_text, btn8_text);
           popup_toggle();
           break;
         case CW_BOX1:
         case CW_BOX2:
-          debug_serial_port->println(F("CW Box Touched"));
-          // Process CW Box area press
+        default: 
+          //debug_serial_port->println(F("Button: CW Box or Default"));
           if (popup_active) popup(false);
           button_active = false;
-          break;
-        default: 
-          if (popup_active) popup(false);  // close popup if it is open
-          button_active = false;
+          mem_number = 0;
           break;
       }      
-      last_button = button;  // update last button ID
-    }
+      //last_button = button;  // update last button ID      
+    //}
   #endif
 }
 
@@ -18933,8 +18946,8 @@ void check_touch_buttons() {
         t_y = tp.points[0].y;               
         for (uint8_t b = 0; b < buttonCount; b++) {          
           if (btn[b]->contains(t_x, t_y)) {   
-            button_ID = b;            
-            if (!button_active || b == CW_BOX1) {   // skip if button still active.  CW_BOX touch clears the popup.
+            button_ID = b;          
+            if (!button_active || b == CW_BOX1) {   // skip if button still active.  CW_BOX touch clears the popup.                     
               #ifndef NO_DEBOUNCE
               int delay_time = 30;              
               dwellTime = millis(); // start debounce timer
@@ -18960,7 +18973,7 @@ void check_touch_buttons() {
             }
           } 
         } // check configured buttons
-        debug_serial_port->print("Non-Button or already active button pressed -- ID = "); debug_serial_port->println(button_ID);
+        //debug_serial_port->print("Non-Button or already active button pressed -- ID = "); debug_serial_port->println(button_ID);
       } // end if (pressed)
     } // end of scan period
   #endif
@@ -23640,7 +23653,8 @@ void update_time(){
                                 {   
                                     switch (ch) 
                                     {
-                                        //case 0x04 : ch = 0; popup(); break;
+                                        //case 0x04 : ch = 0; tone(sidetone_line,configuration.hz_sidetone,0); break; // Alt-b
+                                        //case 0x05 : ch = 0; noTone(sidetone_line); break;  // Alt-b                                        
                                         case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
                                         case 0x29 : ch = PS2_ESC; 
                                                     queueflush();
@@ -23782,7 +23796,7 @@ void update_time(){
                                         
                                         if (ch == '\\'){
                                             debug_serial_port->println(F("Command Line Key Pressed.  To exit press ESC key"));
-                                            CMD_KEY = true;  // command line inerface will need to set this to false to allow CW to resume
+                                            CMD_KEY = true;  // command line interface will need to set this to false to allow CW to resume
                                         }
                                         else {
                                             debug_serial_port->print(ch, DEC);   
