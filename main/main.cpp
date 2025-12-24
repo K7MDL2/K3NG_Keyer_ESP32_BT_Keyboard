@@ -18712,6 +18712,7 @@ void initialize_display() {
   bool popup_active = false;
   uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
   bool button_active = false;
+  uint8_t repeat_key_ID = false;
 #endif
 
  #ifdef FEATURE_TOUCH_DISPLAY
@@ -18756,13 +18757,12 @@ void popup_toggle() {  // toggle popup on and off
 void popup(bool show)
 {
   #ifdef FEATURE_TOUCH_DISPLAY 
-    if (!show && popup_active) {  // remove popup window
+    if (!show && popup_active) {  // remove popup window unless it is a repeat key
       lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
       lcd.resetViewport();
       lcd.setFreeFont(TFT_FONT_MEDIUM);
       display_scroll_print_char('~');
       popup_active = false;
-      button_active = false;
       //debug_serial_port->println("popup off");
       btn_f1.press(false);
       return;
@@ -18835,9 +18835,11 @@ void process_buttons(uint8_t button_ID) {
     static int last_button = -1;  // used at end to detect if a valid button was just pressed.
     static uint8_t button_row = 0;  // default to row 1
     int button, length;
-    bool mem_flag = false;
     char mem_string[LCD_COLUMNS*LCD_ROWS] = {};
     static byte mem_number = 0;
+    
+    // set to true if only want to process this button (along with CW_BOX to reset this)  
+    static bool repeat_key = false;  // also set the repeat_key_ID to specify which key is repeating
 
     // F-Key (always button_ID == 0) cycles through rows of action buttons
     if (button_ID == BUTTON_F1) {
@@ -18859,6 +18861,7 @@ void process_buttons(uint8_t button_ID) {
     // process the action buttons in each row
     button = button_ID + (button_row * 10);
     
+    if ((repeat_key && button == repeat_key_ID)|| !repeat_key || button == CW_BOX1 || button == CW_BOX2) {  // filter keys if repeat on
     //if (button != last_button || button == CW_BOX1 || button == CW_BOX2) {      
       switch (button) {  
         case BUTTON_1:
@@ -18866,19 +18869,21 @@ void process_buttons(uint8_t button_ID) {
           strcpy(popup_text, btn1_text);
           popup_toggle();
           break;
-        case BUTTON_2: // This will cycle the memory # each time it is pressed.    
-          button_active = false;    
-          last_button = 253;      // allow repeat            
+        case BUTTON_2: // This will cycle the memory # each time it is pressed.           
           if (mem_number < 10) {// cycle through the 10 memories
             length = print_memory(mem_number, mem_string);  // Get memory string
-            sprintf(popup_text, "Memory %d:%s", mem_number+1, mem_string);
+            sprintf(popup_text, "Memory %d:%s", (int)mem_number+1, mem_string);
             //debug_serial_port->print(F("Button 2: "));debug_serial_port->println(popup_text);             
             popup(true);            // post up the popup_text string in window
-            mem_number++;           // next memory if buton pressed again      
+            mem_number++;           // next memory if buton pressed again  
+            button_active = false;   
+            repeat_key_ID = button;  
+            repeat_key = true;
           }
-          else {  // remove window
-            mem_number = 0;
-            popup(false);                       
+          else {  // stop repeat.  Use CW_BOX to remove window like all other keys.     
+            button_active = true;   // block buttons, use CW_BOX touch to cancel             
+            repeat_key_ID = 255;
+            repeat_key = false;
           }          
           return;
         case BUTTON_3:
@@ -18891,7 +18896,8 @@ void process_buttons(uint8_t button_ID) {
           strcpy(popup_text, btn4_text);
           popup_toggle();          
           break;
-        /// Row 2 buttons
+
+        /// Row 2 buttons ///
         case BUTTON_5:
           //debug_serial_port->println(F("Button 5 pressed"));
           strcpy(popup_text, btn5_text);
@@ -18919,10 +18925,12 @@ void process_buttons(uint8_t button_ID) {
           if (popup_active) popup(false);
           button_active = false;
           mem_number = 0;
+          repeat_key_ID = 255;
+          repeat_key = false;
           break;
       }      
       //last_button = button;  // update last button ID      
-    //}
+    }
   #endif
 }
 
