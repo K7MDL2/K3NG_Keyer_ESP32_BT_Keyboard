@@ -1923,9 +1923,17 @@ void popup(bool show);
 void sinewave_interrupt_compute();
 void initialize_sinewave_generator();
 void initialize_tonsin();
-bool check_touch_buttons();
-void process_buttons(uint8_t button_ID);
-int touch_button_available();
+
+#ifdef FEATURE_TOUCH_DISPLAY
+  void process_buttons(uint8_t button_ID);
+  int touch_button_available();
+  //#define USE_TOUCH_TASK
+  #ifdef USE_TOUCH_TASK
+    void check_touch_buttons(void * pvParameters);
+  #else
+    void check_touch_buttons(void);
+  #endif
+#endif
 
 // ________________________________
 // 
@@ -1970,6 +1978,7 @@ bool BT_Keyboard_Lost = false;
 bool Keyboard_Disconnected_signal = false;
 bool Keyboard_Connected_signal = false;
 void BT_Keyboard_Status(void);
+
 //#define USE_BT_TASK // for BT check in a task
 #ifdef USE_BT_TASK
   void check_bt_keyboard(void * pvParameters);
@@ -3526,6 +3535,7 @@ void check_backlight() {
 #ifdef FEATURE_DISPLAY
 
 void lcd_scroll_box_clear() {
+    mydelay(1);
     #ifdef FEATURE_TFT_DISPLAY
       //if (TFT_VIEWPORT_EXISTS) {
       //    debug_serial_port->println("Close Viewport");
@@ -3546,29 +3556,35 @@ void lcd_scroll_box_clear() {
 
 #ifdef FEATURE_BT_KEYBOARD
 char bt_keyboard_read() {
-        #ifndef USE_BT_TASK
-          check_bt_keyboard();
-        #endif
-        return queuepop();
+  #ifndef USE_BT_TASK
+    check_bt_keyboard();
+  #endif
+  return queuepop();
 }
 
 int bt_keyboard_available() {
-        #ifndef USE_BT_TASK
-          check_bt_keyboard();
-        #endif
-        return queue_available();
+  #ifndef USE_BT_TASK
+    check_bt_keyboard();
+  #endif
+  return queue_available();
 }
 #endif // FEATURE_BT_KEYBOARD
 
+#if defined(FEATURE_TOUCH_DISPLAY)
 int touch_key_read() {  // if touch_button_available then ther eis a non-zero touch key value set in keyboard_button
-  check_touch_buttons();     
+  #ifndef USE_TOUCH_TASK
+    check_touch_buttons();    
+  #endif 
   return queuepop();
 }
 
 int touch_button_available() {
-  check_touch_buttons();
+  #ifndef USE_TOUCH_TASK
+    check_touch_buttons();
+  #endif
   return queue_available();
 }
+#endif
 
 #ifdef FEATURE_TFT_DISPLAY
 void update_icons(void) {
@@ -3589,12 +3605,10 @@ void update_icons(void) {
       strncpy(last_GridSq, GridSq, 6);  // write grid square
     }
 
-
 //    GRID_ANCHOR (SCREEN_WIDTH/4)
 //    #define WPM_ANCHOR (SCREEN_WIDTH/2)
 //    #define ICON_ANCHOR (479-5-(5*COLUMN_WIDTH))
 //    #define ICON_WIDTH COLUMN_WIDTH
-
 
     char WPM[7] = "\0";
     static int last_WPM = 0;
@@ -3729,6 +3743,8 @@ void service_display() {
   #ifdef FEATURE_TFT_DISPLAY
     update_icons();
   #endif
+
+  mydelay(1);
 
   if (screen_refresh_status == SCREEN_REFRESH_INIT) {   // active at beginning of an event like pause
     #ifdef FEATURE_TFT_DISPLAY
@@ -16519,6 +16535,12 @@ byte play_memory(byte memory_number) {
         check_rotary_encoder();
       #endif //FEATURE_ROTARY_ENCODER      
       
+      #ifdef FEATURE_TOUCH_DISPLAY
+        #ifndef USE_TOUCH_TASK
+          check_touch_buttons();
+        #endif
+      #endif
+
       #ifdef FEATURE_BT_KEYBOARD
         #ifndef USE_BT_TASK
           check_bt_keyboard();
@@ -16538,8 +16560,6 @@ byte play_memory(byte memory_number) {
     #if defined(FEATURE_SERIAL)
       check_serial();
     #endif
-
-
 
     if ((play_memory_prempt == 0) && (pause_sending_buffer == 0)) {
 
@@ -18580,7 +18600,6 @@ void mydelay(unsigned long ms)
 
 // Text associated with touch buttons
 // Text content sized to fit in teh window.  Later desire to make scrllable with button and/or touch gesture
-const char btn5_text[] = {"This is longer test text for Button #5"};
 const char btn6_text[] = {"This is even longer test text for Button #6"};
 const char btn7_text[] = {"This is for Button #7"};
 const char btn8_text[] = {"This is test text for Button #8"};
@@ -18819,7 +18838,7 @@ void draw_buttons_row_2() {
   #ifdef FEATURE_TOUCH_DISPLAY
     lcd.setFreeFont(TFT_FONT_SMALL);
     btn_f1.drawButton(false, "F2");
-    btn_1.drawButton(false, " 5 ");
+    btn_1.drawButton(false, "WAIT");
     btn_2.drawButton(false, " 6 ");
     btn_3.drawButton(false, " 7 ");
     btn_4.drawButton(false, " 8 ");  
@@ -18834,10 +18853,10 @@ void create_buttons() {
     //lcd.setLabelDatum(MY_DATUM);
     //lcd.calibrateTouch(0,TFT_BLUE, TFT_GREY,2);
     btn_f1.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "F1", 2);  // library modified to ignore text size
-    btn_1.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64,  BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 1 ", 2);  // library modified to ignore text size
-    btn_2.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+128, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 2 ", 2);  // library modified to ignore text size
-    btn_3.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 3 ", 2);  // library modified to ignore text size
-    btn_4.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, " 4 ", 2);  // library modified to ignore text size
+    btn_1.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64,  BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "M1-R", 2);  // library modified to ignore text size
+    btn_2.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+128, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "MEM", 2);  // library modified to ignore text size
+    btn_3.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "W-U", 2);  // library modified to ignore text size
+    btn_4.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "W-D", 2);  // library modified to ignore text size
     btn_CW_box.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
     draw_buttons_row_1();
     lcd.setFreeFont(TFT_FONT_MEDIUM);
@@ -18857,24 +18876,25 @@ void process_buttons(uint8_t button_ID) {
     static byte mem_number = 0;
     static int BtnX_active = 0;
     static int last_button = 0;
+    static uint32_t scanTime = millis();
 
     // set to true if only want to process this button (along with CW_BOX to reset this)  
     static bool repeat_key = false;  // also set the repeat_key_ID to specify which key is repeating
 
+    mydelay(1);
     // F-Key (always button_ID == 0) cycles through rows of action buttons
     if (button_ID == BUTTON_F1) {
       if (button_row == 0) {
         button_row = 1; // switch to row 2 if button_row = 0
         draw_buttons_row_2();
-        //debug_serial_port->println("Switch to Row 2");
+        debug_serial_port->println("Switch to Row 2");
       } else {
         button_row = 0;
         draw_buttons_row_1();
-        //debug_serial_port->println("Switch to Row 1");
+        debug_serial_port->println("Switch to Row 1");
       }
       btn_f1.press(false);
       button_active = false;
-      mydelay(600);
       return;
     }
 
@@ -18907,6 +18927,7 @@ void process_buttons(uint8_t button_ID) {
             button_active = true;   // block buttons, use CW_BOX touch to cancel             
             repeat_key_ID = 255;
             repeat_key = false;
+            mem_number = 0;
           }          
           break;
         case BUTTON_3:
@@ -18919,9 +18940,23 @@ void process_buttons(uint8_t button_ID) {
           break;
 
         /// Row 2 buttons ///
-        case BUTTON_5:
-          strcpy(popup_text, btn5_text);
-          popup_toggle();
+        case BUTTON_5: // btn1 with button == 1
+          // add some delay to prevent fast repeat
+          button_active = false;    // re-enable buttons    
+          queueadd(PS2_TAB);
+          if (BtnX_active == 0) {          
+            debug_serial_port->println("PAUSE");
+            repeat_key_ID = button;  
+            repeat_key = true; 
+            BtnX_active = button;
+            btn_1.drawButton(true, "RES");  // set background color to show it is active               
+          } else {
+            debug_serial_port->println("RESUME");            
+            repeat_key_ID = 255;  
+            repeat_key = false; 
+            BtnX_active = 0;
+            btn_1.drawButton(false, "WAIT");  // set background color to show it is active
+          }                                  
           break;
         case BUTTON_6:
           strcpy(popup_text, btn6_text);
@@ -18942,7 +18977,6 @@ void process_buttons(uint8_t button_ID) {
           if (popup_active)
             popup(false);
           button_active = false; // re-enable buttons
-          mem_number = 0;
           repeat_key_ID = 255;
           repeat_key = false;
           keyboard_button = 0;
@@ -18950,8 +18984,8 @@ void process_buttons(uint8_t button_ID) {
           if (button_row == 0) draw_buttons_row_1();
           if (button_row == 1) draw_buttons_row_2();
           
-          if (BtnX_active) {           
-            BtnX_active = 0;
+          if (BtnX_active || ptt_line_activated) {           
+            BtnX_active = 0;            
             queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer       
           }
           break;
@@ -18962,58 +18996,83 @@ void process_buttons(uint8_t button_ID) {
 }
 
 // Detects if a button is pressed and assign a button ID to it.
-bool check_touch_buttons() {
-  // Check for touch action, determine if they are for a configured button, or something else
-  #ifdef FEATURE_TOUCH_DISPLAY
-    uint8_t button_ID = 255;  // default to no button pressed
-    static uint32_t scanTime = millis();
-    static uint32_t dwellTime = millis();
+#if defined(FEATURE_TOUCH_DISPLAY)
 
-    // Scan buttons every 50ms at most
-    if (millis() - scanTime >= 50) {
-      // Pressed will be set true if there is a valid touch on the screen
-      tp.read();
-      bool pressed = tp.isTouched;
-      scanTime = millis();
-      if (pressed) {
-        button_ID = 255;
-        t_x = tp.points[0].x;
-        t_y = tp.points[0].y;               
-        for (uint8_t b = 0; b < buttonCount; b++) {          
-          if (btn[b]->contains(t_x, t_y)) {   
-            button_ID = b;          
-            if (!button_active || b == CW_BOX1) {   // skip if button still active.  CW_BOX touch clears the popup.                     
-              #ifndef NO_DEBOUNCE
-              int delay_time = 30;              
-              dwellTime = millis(); // start debounce timer
-              while (millis() - dwellTime <= 60) {   // debounce                
-                mydelay(delay_time);                                
-                tp.read();  // sample the touch button a few times
-                if (tp.isTouched) {
-                  t_x = tp.points[0].x;
-                  t_y = tp.points[0].y;
-                  if (!btn[b]->contains(t_x, t_y)) // touch on this btn has stopped                    
-                    return 0;// had touch at sample time but not now
-                } else {                  
-                  return 0;   // lost touch before timer ended                  
+  #ifndef USE_TOUCH_TASK
+    void check_touch_buttons(void) {
+  #else
+    void check_touch_buttons(void * pvParameters) {
+
+      /* The parameter value is expected to be 1 as 1 is passed in the
+      pvParameters value in the call to xTaskCreate() below. */
+
+      configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
+
+      while (1)
+      {
+        mydelay(10);
+     #endif
+        // Check for touch action, determine if they are for a configured button, or something else      
+        uint8_t button_ID = 255;  // default to no button pressed
+        static uint32_t scanTime = millis();
+        static uint32_t dwellTime = millis();
+        static uint32_t tapTime = millis();
+
+        // Scan buttons every 50ms at most
+        if (millis() - scanTime >= 50) {  // check every 50ms for any activity
+          // Pressed will be set true if there is a valid touch on the screen
+          tp.read();
+          bool pressed = tp.isTouched;
+          scanTime = millis();
+          if (pressed) {
+            tapTime = millis();  // start press timer
+            //while (millis() - tapTime < 500) {   // min time to wait after a key was pressed before reading again
+              mydelay(100);
+            //}            
+            button_ID = 255;
+            t_x = tp.points[0].x;
+            t_y = tp.points[0].y;               
+            for (uint8_t b = 0; b < buttonCount; b++) {          
+              if (btn[b]->contains(t_x, t_y)) {
+                button_ID = b;          
+                if (!button_active || b == CW_BOX1) {   // skip if button still active.  CW_BOX touch clears the popup.                     
+                  #ifndef NO_DEBOUNCE
+                  int delay_time = 30;              
+                  dwellTime = millis(); // start debounce timer
+                  while (millis() - dwellTime <= 60) {   // debounce                                                                 
+                    mydelay(delay_time);                                
+                    tp.read();  // sample the touch button a few times
+                    if (tp.isTouched) {
+                      t_x = tp.points[0].x;
+                      t_y = tp.points[0].y;
+                      if (!btn[b]->contains(t_x, t_y)) // touch on this btn has stopped                    
+                        return;// had touch at sample time but not now
+                    } else {                  
+                      return;   // lost touch before timer ended                  
+                    }
+                  }  // end while loop for debounce
+                  #endif
+                  // Debounce timer completed OK
+                  btn[b]->press(true);
+                  button_ID = b;
+                  button_active = true;     // set active flag if any valid button triggered on
+                  process_buttons(button_ID);  // process any touch item
+                  break;
+                  //return;
                 }
-              }  // end while loop for debounce
-              #endif
-              // Debounce timer completed OK
-              btn[b]->press(true);
-              button_ID = b;
-              button_active = true;     // set active flag if any valid button triggered on
-              process_buttons(button_ID);  // process any touch item
-              return 1;
-            }
-          } 
-        } // check configured buttons
-        //debug_serial_port->print("Non-Button or already active button pressed -- ID = "); debug_serial_port->println(button_ID);
-      } // end if (pressed)
-    } // end of scan period
-    return 0;
-  #endif
-}
+              } 
+            } // check configured buttons
+            //debug_serial_port->print("Non-Button or already active button pressed -- ID = "); debug_serial_port->println(button_ID);
+          } // end if (pressed)
+        } // end of scan period
+      //}
+      #ifdef USE_TOUCH_TASK
+      } // end of while loop for task mode 
+      debug_serial_port->println("Error: Exited Check Buttons Task Loop");
+      #endif   
+    }
+#endif
+
 
 //-------------------------------------------------------------------------------------------------------
 #if defined(OPTION_BLINK_HI_ON_PTT) || (defined(OPTION_WINKEY_BLINK_PTT_ON_HOST_OPEN) && defined(FEATURE_WINKEY_EMULATION))
@@ -24394,7 +24453,11 @@ void main_loop(void * pvParameters )
                 M5.update();
           #endif
   
-          check_touch_buttons();
+          #if defined(FEATURE_TOUCH_DISPLAY)
+            #ifndef USE_TOUCH_TASK
+              check_touch_buttons();
+            #endif
+          #endif
 
           #ifdef FEATURE_BT_KEYBOARD
               BT_Keyboard_Status();
@@ -24514,12 +24577,24 @@ void loop()
     BaseType_t xReturned;
     TaskHandle_t xHandle_MAIN = NULL;
     TaskHandle_t xHandle_BT = NULL;
+    TaskHandle_t xHandle_TOUCH = NULL;
 
     //initArduino();  // Initialize the Arduino environment
 
     // this is where the magic happens
     
     //setup(); // call setup for here when not in Arduino statup mode
+    
+    #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
+        xReturned = xTaskCreate(
+                    check_touch_buttons,      /* Function that implements the task. */
+                    "Check_Touch_Buttons",          /* Text name for the task. */
+                    2000,      /* Stack size in words, not bytes. */
+                    ( void * ) 1,    /* Parameter passed into the task. */
+                    7,/* Priority at which the task is created. */
+                    &xHandle_TOUCH );
+    #endif
+
 
     #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
         xReturned = xTaskCreate(
@@ -24540,7 +24615,7 @@ void loop()
                 0,/* Priority at which the task is created. */
                 &xHandle_MAIN );
     #endif
-    
+
     while (1)
     {
       mydelay(1);
