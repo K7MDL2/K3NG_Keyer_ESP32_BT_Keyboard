@@ -18886,12 +18886,14 @@ void process_buttons(uint8_t button_ID) {
       switch (button) {  
         case BUTTON_1:           
           button_active = false;    // re-enable buttons 
+          btn_1.drawButton(true, "M1-R");  // set background color to show it is active
           BtnX_active = button;          
           queueadd(PS2_F1_ALT);   // add char to the queue  
           break;
         case BUTTON_2: // This will cycle the memory # each time it is pressed.           
           if (BtnX_active != 0)  // another keyboard queue key is active until canceled
             break;
+          btn_2.drawButton(true, "MEM");  // set background color to show it is active
           if (mem_number < 10) {// cycle through the 10 memories
             length = print_memory(mem_number, mem_string);  // Get memory string
             sprintf(popup_text, "Memory %d:%s", (int)mem_number+1, mem_string);           
@@ -18944,6 +18946,10 @@ void process_buttons(uint8_t button_ID) {
           repeat_key_ID = 255;
           repeat_key = false;
           keyboard_button = 0;
+
+          if (button_row == 0) draw_buttons_row_1();
+          if (button_row == 1) draw_buttons_row_2();
+          
           if (BtnX_active) {           
             BtnX_active = 0;
             queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer       
