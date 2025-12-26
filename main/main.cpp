@@ -1383,7 +1383,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.12.24"
+#define CODE_VERSION "K7MDL-2025.12.26"
 #define eeprom_magic_number 45              // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1923,6 +1923,9 @@ void popup(bool show);
 void sinewave_interrupt_compute();
 void initialize_sinewave_generator();
 void initialize_tonsin();
+bool check_touch_buttons();
+void process_buttons(uint8_t button_ID);
+int touch_button_available();
 
 // ________________________________
 // 
@@ -2011,6 +2014,7 @@ byte zero = 0;
 byte iambic_flag = 0;
 unsigned long last_config_write = 0;
 uint16_t memory_area_end = 0;
+int keyboard_button = 0;  // used at end to detect if a valid button was just pressed.
 
 #ifdef FEATURE_SLEEP
   unsigned long last_activity_time = 0;
@@ -3543,19 +3547,28 @@ void lcd_scroll_box_clear() {
 #ifdef FEATURE_BT_KEYBOARD
 char bt_keyboard_read() {
         #ifndef USE_BT_TASK
-        check_bt_keyboard();
+          check_bt_keyboard();
         #endif
         return queuepop();
 }
 
 int bt_keyboard_available() {
         #ifndef USE_BT_TASK
-        check_bt_keyboard();
+          check_bt_keyboard();
         #endif
         return queue_available();
 }
 #endif // FEATURE_BT_KEYBOARD
 
+int touch_key_read() {  // if touch_button_available then ther eis a non-zero touch key value set in keyboard_button
+  check_touch_buttons();     
+  return queuepop();
+}
+
+int touch_button_available() {
+  check_touch_buttons();
+  return queue_available();
+}
 
 #ifdef FEATURE_TFT_DISPLAY
 void update_icons(void) {
@@ -3981,6 +3994,7 @@ void check_memory_repeat() {
   if ((repeat_memory < number_of_memories) && ((millis() - last_memory_repeat_time) > configuration.memory_repeat_time)) {
     add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
     add_to_send_buffer(repeat_memory);
+    add_to_send_buffer(' ');  // add display space between messages to clean up presentation.
     last_memory_repeat_time = millis();
     #ifdef DEBUG_MEMORIES
     debug_serial_port->print(F("check_memory_repeat: added repeat_memory to send buffer\n\r"));
@@ -4055,19 +4069,25 @@ void check_ps2_keyboard()
 
     #ifdef FEATURE_MEMORIES
 
-        #if defined (FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD)
+        #if defined (FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 
-            #ifdef FEATURE_BT_KEYBOARD
+            #if defined(FEATURE_BT_KEYBOARD)
 
-                while ((bt_keyboard_available()) && (play_memory_prempt == 0)) 
+                while ((bt_keyboard_available() || touch_button_available()) && (play_memory_prempt == 0)) 
                 {  
                     // use BT keyboard char stream  
-                    keystroke = bt_keyboard_read();
+                    if (bt_keyboard_available())
+                      keystroke = bt_keyboard_read();
+                    if (touch_button_available())
+                      keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes
             #else  // Do PS2 keyboard
-                while ((keyboard.available()) && (play_memory_prempt == 0)) 
+                while ((keyboard.available() || touch_button_available()) && (play_memory_prempt == 0)) 
                 {      
-                    // read the next key
-                    keystroke = keyboard.read();
+                    // read the next key                    
+                    if (bt_keyboard_available())
+                      keystroke = keyboard.read();
+                    if (touch_button_available())
+                      keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes
             #endif
                     #if defined(DEBUG_PS2_KEYBOARD) || defined(DEBUG_BT_KEYBOARD)
                         debug_serial_port->print(F("check_ps2_keyboard: keystroke: "));
@@ -4861,7 +4881,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
       #endif
       #ifdef FEATURE_BT_KEYBOARD
         keystroke = bt_keyboard_read();
-      #endif
+      #endif      
       //debug_serial_port->println(F("[0x"));
       //debug_serial_port->println(keystroke, HEX);
       //debug_serial_port->println(']');
@@ -16504,9 +16524,9 @@ byte play_memory(byte memory_number) {
           check_bt_keyboard();
         #endif
       #endif
-      #if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD)
+      #if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
         check_ps2_keyboard();  // Processes either PS2 or BT events
-      #endif
+      #endif            
 
       check_button0();
 
@@ -18476,12 +18496,14 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
     queueflush();
 }
 
-#if defined(FEATURE_BT_KEYBOARD)
+#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 ////////////////////////////////////////////////////////////////////////
 //
 // Here is a queue to store the characters that I've typed.
 // To simplify the code, it can store a maximum of QUEUESIZE-1 characters
 // before it fills up.  What is a byte wasted between friends?
+//
+//  This queue is shared between the BT keyboard and seelct Touch buttons
 //
 ////////////////////////////////////////////////////////////////////////
 
@@ -18558,9 +18580,6 @@ void mydelay(unsigned long ms)
 
 // Text associated with touch buttons
 // Text content sized to fit in teh window.  Later desire to make scrllable with button and/or touch gesture
-const char btn1_text[] = {"This is test text for Button #1"};
-const char btn3_text[] = {"This is yet longer for text wrap test text for Button #3"};
-const char btn4_text[] = {"This is test text for Button #4"};
 const char btn5_text[] = {"This is longer test text for Button #5"};
 const char btn6_text[] = {"This is even longer test text for Button #6"};
 const char btn7_text[] = {"This is for Button #7"};
@@ -18788,10 +18807,10 @@ void draw_buttons_row_1() {
   #ifdef FEATURE_TOUCH_DISPLAY
     lcd.setFreeFont(TFT_FONT_SMALL);
     btn_f1.drawButton(false, "F1");
-    btn_1.drawButton(false, " 1 ");
+    btn_1.drawButton(false, "M1-R ");
     btn_2.drawButton(false, "MEM");
-    btn_3.drawButton(false, " 3 ");
-    btn_4.drawButton(false, " 4 ");
+    btn_3.drawButton(false, "W-U ");
+    btn_4.drawButton(false, "W-D ");
     lcd.setFreeFont(TFT_FONT_MEDIUM);
   #endif
 }
@@ -18832,12 +18851,13 @@ void create_buttons() {
 void process_buttons(uint8_t button_ID) {
   // Process button presses
   #ifdef FEATURE_TOUCH_DISPLAY
-    static int last_button = -1;  // used at end to detect if a valid button was just pressed.
     static uint8_t button_row = 0;  // default to row 1
     int button, length;
     char mem_string[LCD_COLUMNS*LCD_ROWS] = {};
     static byte mem_number = 0;
-    
+    static int BtnX_active = 0;
+    static int last_button = 0;
+
     // set to true if only want to process this button (along with CW_BOX to reset this)  
     static bool repeat_key = false;  // also set the repeat_key_ID to specify which key is repeating
 
@@ -18864,19 +18884,20 @@ void process_buttons(uint8_t button_ID) {
     if ((repeat_key && button == repeat_key_ID)|| !repeat_key || button == CW_BOX1 || button == CW_BOX2) {  // filter keys if repeat on
     //if (button != last_button || button == CW_BOX1 || button == CW_BOX2) {      
       switch (button) {  
-        case BUTTON_1:
-          //debug_serial_port->println(F("Button 1 pressed"));
-          strcpy(popup_text, btn1_text);
-          popup_toggle();
+        case BUTTON_1:           
+          button_active = false;    // re-enable buttons 
+          BtnX_active = button;          
+          queueadd(PS2_F1_ALT);   // add char to the queue  
           break;
         case BUTTON_2: // This will cycle the memory # each time it is pressed.           
+          if (BtnX_active != 0)  // another keyboard queue key is active until canceled
+            break;
           if (mem_number < 10) {// cycle through the 10 memories
             length = print_memory(mem_number, mem_string);  // Get memory string
-            sprintf(popup_text, "Memory %d:%s", (int)mem_number+1, mem_string);
-            //debug_serial_port->print(F("Button 2: "));debug_serial_port->println(popup_text);             
+            sprintf(popup_text, "Memory %d:%s", (int)mem_number+1, mem_string);           
             popup(true);            // post up the popup_text string in window
             mem_number++;           // next memory if buton pressed again  
-            button_active = false;   
+            button_active = false;  // re-enable buttons
             repeat_key_ID = button;  
             repeat_key = true;
           }
@@ -18885,57 +18906,57 @@ void process_buttons(uint8_t button_ID) {
             repeat_key_ID = 255;
             repeat_key = false;
           }          
-          return;
+          break;
         case BUTTON_3:
-          //debug_serial_port->println(F("Button 3 pressed"));
-          strcpy(popup_text, btn3_text);
-          popup_toggle();
+          button_active = false; // re-enable buttons
+          queueadd(PS2_UPARROW);   // add char to the queue                    
           break;
         case BUTTON_4:
-          //debug_serial_port->println(F("Button 4 pressed"));
-          strcpy(popup_text, btn4_text);
-          popup_toggle();          
+          button_active = false; // re-enable buttons
+          queueadd(PS2_DOWNARROW);   // add char to the queue                   
           break;
 
         /// Row 2 buttons ///
         case BUTTON_5:
-          //debug_serial_port->println(F("Button 5 pressed"));
           strcpy(popup_text, btn5_text);
           popup_toggle();
           break;
         case BUTTON_6:
-          //debug_serial_port->println(F("Button 6 pressed"));
           strcpy(popup_text, btn6_text);
           popup_toggle();
           break;
         case BUTTON_7:
-          //debug_serial_port->println(F("Button 7 pressed"));
           strcpy(popup_text, btn7_text);
           popup_toggle();
           break;
         case BUTTON_8:
-          //debug_serial_port->println(F("Button 8 pressed"));
           strcpy(popup_text, btn8_text);
           popup_toggle();
           break;
         case CW_BOX1:
         case CW_BOX2:
         default: 
-          //debug_serial_port->println(F("Button: CW Box or Default"));
-          if (popup_active) popup(false);
-          button_active = false;
+          debug_serial_port->println(F("Button: CW Box or Default"));
+          if (popup_active)
+            popup(false);
+          button_active = false; // re-enable buttons
           mem_number = 0;
           repeat_key_ID = 255;
           repeat_key = false;
+          keyboard_button = 0;
+          if (BtnX_active) {           
+            BtnX_active = 0;
+            queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer       
+          }
           break;
       }      
-      //last_button = button;  // update last button ID      
+      last_button = button;  // update last button ID      
     }
   #endif
 }
 
 // Detects if a button is pressed and assign a button ID to it.
-void check_touch_buttons() {
+bool check_touch_buttons() {
   // Check for touch action, determine if they are for a configured button, or something else
   #ifdef FEATURE_TOUCH_DISPLAY
     uint8_t button_ID = 255;  // default to no button pressed
@@ -18966,9 +18987,9 @@ void check_touch_buttons() {
                   t_x = tp.points[0].x;
                   t_y = tp.points[0].y;
                   if (!btn[b]->contains(t_x, t_y)) // touch on this btn has stopped                    
-                    return;// had touch at sample time but not now
+                    return 0;// had touch at sample time but not now
                 } else {                  
-                  return;   // lost touch before timer ended                  
+                  return 0;   // lost touch before timer ended                  
                 }
               }  // end while loop for debounce
               #endif
@@ -18977,13 +18998,14 @@ void check_touch_buttons() {
               button_ID = b;
               button_active = true;     // set active flag if any valid button triggered on
               process_buttons(button_ID);  // process any touch item
-              return;
+              return 1;
             }
           } 
         } // check configured buttons
         //debug_serial_port->print("Non-Button or already active button pressed -- ID = "); debug_serial_port->println(button_ID);
       } // end if (pressed)
     } // end of scan period
+    return 0;
   #endif
 }
 
@@ -24354,8 +24376,6 @@ void main_loop(void * pvParameters )
           service_send_buffer(PRINTCHAR);
           check_ptt_tail();
 
-          check_touch_buttons();
-
           #ifdef FEATURE_POTENTIOMETER
               check_potentiometer();
           #endif
@@ -24368,6 +24388,8 @@ void main_loop(void * pvParameters )
                 M5.update();
           #endif
   
+          check_touch_buttons();
+
           #ifdef FEATURE_BT_KEYBOARD
               BT_Keyboard_Status();
               #ifndef USE_BT_TASK
@@ -24523,7 +24545,7 @@ void loop()
       #endif        
       
       #if defined (FEATURE_BT_KEYBOARD) 
-        #ifndef USE_BT_TASK
+        #ifdef USE_BT_TASK
           check_bt_keyboard();
         #endif
       #endif
