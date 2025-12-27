@@ -18795,8 +18795,8 @@ int print_memory(byte memory_number, char *mem_string) {
       }
       i++;
     }
-    return 0;
   #endif
+    return 0;
 }
 
 void popup_toggle() {  // toggle popup on and off
@@ -24417,7 +24417,9 @@ void setup()
     initialize_pins();
     initialize_display();
     create_buttons();
-    update_icons();
+    #ifdef FEATURE_TFT_DISPLAY
+      update_icons();
+    #endif
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues
     initialize_keyer_state();
