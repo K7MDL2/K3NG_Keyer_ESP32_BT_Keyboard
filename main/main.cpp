@@ -18936,9 +18936,11 @@ void process_buttons() { // (uint8_t button_ID) {
           BtnX_active = button;          
           queueadd(PS2_F1_ALT);   // add char to the queue  
           break;
+
         case BUTTON_2: // This will cycle the memory # each time it is pressed.           
           if (BtnX_active != 0)  // another keyboard queue key is active until canceled
             break;
+            
           btn[2].p_btn.drawButton(true, "MEM");  // set background color to show it is active
           if (mem_number < 10) {// cycle through the 10 memories
             length = print_memory(mem_number, mem_string);  // Get memory string
@@ -18955,10 +18957,12 @@ void process_buttons() { // (uint8_t button_ID) {
             repeat_key = false;
           }          
           break;
+
         case BUTTON_3:
           button_active = false; // re-enable buttons
           queueadd(PS2_UPARROW);   // add char to the queue                    
           break;
+
         case BUTTON_4:
           button_active = false; // re-enable buttons
           queueadd(PS2_DOWNARROW);   // add char to the queue                   
@@ -18983,21 +18987,25 @@ void process_buttons() { // (uint8_t button_ID) {
             btn[1].p_btn.drawButton(false, "WAIT");  // set background color to show it is active
           }                                  
           break;
+
         case BUTTON_6:
           button_active = false;    // re-enable buttons 
           strcpy(popup_text, btn6_text);
           popup_toggle();
           break;
+
         case BUTTON_7:
           button_active = false;    // re-enable buttons 
           strcpy(popup_text, btn7_text);
           popup_toggle();
           break;
+
         case BUTTON_8:
           button_active = false;    // re-enable buttons 
           strcpy(popup_text, btn8_text);
           popup_toggle();
           break;
+
         case CW_BOX1:
         case CW_BOX2:
         default: 

@@ -66,9 +66,9 @@
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
-//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
+#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // The Setup file is then automatically selected.  When the TFT_eSPI library is updated, it will overwrite the changes in the User_Setup_Select.h file.
@@ -107,6 +107,7 @@
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
     //#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
     #define FEATURE_TFT_DISPLAY
+    //#define FEATURE_TOUCH_DISPLAY
 #endif
 
 //#define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library

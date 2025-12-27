@@ -23,4 +23,4 @@ dependencies:
   #espressif/m5stack_core_2: ^3.0.1
   #espressif/esp_bsp_devkit: ^3.0.1
   esp-idf-lib/mcp23x17: ^1.1.9
-  #atanisoft/esp_lcd_touch_xpt2046: ^1.0.6
+  atanisoft/esp_lcd_touch_xpt2046: ^1.0.6

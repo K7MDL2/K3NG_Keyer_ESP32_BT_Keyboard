@@ -103,7 +103,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define SD_SPI_DC_PIN    2
   // 36 ADC input free - input only
 #elif defined (FEATURE_TFT_HOSYOND_320x480_LCD)
-    #define bt_keyboard_LED 17  // indicates BT keyboard connection status  3 on IdeaSpark 1.9" onboard Blue LED
+    #define bt_keyboard_LED 17  // indicates BT keyboard connection status - Blue LED
     #define paddle_left     23 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define paddle_right    19 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define tx_key_line_1   18 // (high = key down/tx on)
@@ -114,8 +114,9 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define tx_inhibit_pin   0  //13 
     #define tx_pause_pin     0  //14
     #ifdef FEATURE_STRAIGHT_KEY
-      #define pin_straight_key 1 //TXD0
+      #define pin_straight_key 16 //TXD0 - GREEN LED
     #endif //FEATURE_STRAIGHT_KEY
+    // 25 and 32 are external i2c or GPIO - good for I2C port expander with pin 35 for IRQ input.
 #else // ESP-WROOM-32, 27, 5 33
   #define bt_keyboard_LED   2 //2  // indicates BT keyboard connection status
   #define paddle_left       25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
