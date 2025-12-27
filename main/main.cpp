@@ -3612,23 +3612,29 @@ int bt_keyboard_available() {
 }
 #endif // FEATURE_BT_KEYBOARD
 
-#if defined(FEATURE_TOUCH_DISPLAY)
 int touch_key_read() {  // if touch_button_available then ther eis a non-zero touch key value set in keyboard_button
-  #ifndef USE_TOUCH_TASK
-    check_touch_buttons();    
-  #endif 
-  if (button_active) process_buttons();
-  return queuepop();
+  #if defined(FEATURE_TOUCH_DISPLAY)
+    #ifndef USE_TOUCH_TASK
+      check_touch_buttons();    
+    #endif 
+    if (button_active) process_buttons();
+    return queuepop();
+    #else
+      return 0;
+  #endif
 }
 
 int touch_button_available() {
-  #ifndef USE_TOUCH_TASK
-    check_touch_buttons();
+  #if defined(FEATURE_TOUCH_DISPLAY)
+    #ifndef USE_TOUCH_TASK
+      check_touch_buttons();
+    #endif
+    if (button_active) process_buttons();
+    return queue_available();
+  #else
+    return 0;
   #endif
-  if (button_active) process_buttons();
-  return queue_available();
 }
-#endif
 
 #ifdef FEATURE_TFT_DISPLAY
 void update_icons(void) {
@@ -18632,15 +18638,16 @@ void mydelay(unsigned long ms)
 //--------------------------------------------------------------------- 
 
 #ifdef FEATURE_TOUCH_DISPLAY
-
-  #include "TAMC_GT911.h"
-  #define TOUCH_SDA  33
-  #define TOUCH_SCL  32
-  #define TOUCH_INT  21  // not used because R25 is not installed on DIYMalls 3.2" display
-  #define TOUCH_RST  25
-  #define TOUCH_WIDTH  320
-  #define TOUCH_HEIGHT 240
-  TAMC_GT911 tp = TAMC_GT911(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, TOUCH_WIDTH, TOUCH_HEIGHT);
+  #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD
+    #include "TAMC_GT911.h"
+    #define TOUCH_SDA  33
+    #define TOUCH_SCL  32
+    #define TOUCH_INT  21  // not used because R25 is not installed on DIYMalls 3.2" display
+    #define TOUCH_RST  25
+    #define TOUCH_WIDTH  320
+    #define TOUCH_HEIGHT 240
+    TAMC_GT911 tp = TAMC_GT911(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, TOUCH_WIDTH, TOUCH_HEIGHT);
+  #endif
 #endif
 
 // Text associated with touch buttons
@@ -18659,10 +18666,13 @@ void initialize_display() {
       #ifdef FEATURE_TFT_DISPLAY
         initialize_TFT_LCD_display();
       #endif
+
       #ifdef FEATURE_TOUCH_DISPLAY
-        tp.begin();  // does a Wire.begin() on 1st I2C bus 0
-        tp.setRotation(ROTATION_LEFT);
-        debug_serial_port->println("Completed setup on 2nd i2c bus for Touch Sensor");
+        #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD
+          tp.begin();  // does a Wire.begin() on 1st I2C bus 0
+          tp.setRotation(ROTATION_LEFT);
+          debug_serial_port->println("Completed setup on 2nd i2c bus for GT911 Touch Sensor");
+        #endif
       #endif
     #endif
 
@@ -19062,12 +19072,21 @@ void process_buttons() { // (uint8_t button_ID) {
         // Scan buttons every 50ms at most
         if (millis() - scanTime >= 50) {  // check every 50ms for any activity
           scanTime = millis();
-          tp.read();
-          if (tp.isTouched) {           
+
+          #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD          
+            tp.read();
+            if (tp.isTouched) {           
+              t_x = tp.points[0].x;
+              t_y = tp.points[0].y;  
+          #endif
+          
+          #ifdef FEATURE_TFT_HOSYOND_320x480_LCD
+            uint16_t threshold = 7;  // 1-20 pressure level for resistedive screen.  TFT_eSPI has a Z param also
+            if (lcd.getTouch(&t_x, &t_y, threshold)) {
+          #endif
+          
             bool pressed = true;                               
             button_ID = 255;
-            t_x = tp.points[0].x;
-            t_y = tp.points[0].y;    
             button_active = false;     // set active flag if any valid button triggered on       
 
             for (uint8_t b = 0; b < buttonCount; b++) {
@@ -19084,10 +19103,18 @@ void process_buttons() { // (uint8_t button_ID) {
                 pressed = true;
                 while (pressed) {  // measure duration of button press
                   mydelay(30);
-                  tp.read();
-                  pressed = tp.isTouched;
-                  duration += (millis() - tpTime);
-         
+                  
+                  #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD  
+                    tp.read();
+                    pressed = tp.isTouched;
+                  #endif
+
+                  #ifdef FEATURE_TFT_HOSYOND_320x480_LCD
+                    pressed = lcd.getTouch(&t_x, &t_y, threshold);
+                  #endif
+
+                  duration += (millis() - tpTime);                  
+
                   if (duration >= 120 && duration < 700) {               
                     //debug_serial_port->print("*Short duration = "); debug_serial_port->println(duration);
                     btn[b].len = 1;

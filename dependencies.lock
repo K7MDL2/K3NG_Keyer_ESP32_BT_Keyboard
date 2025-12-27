@@ -1,18 +1,4 @@
 dependencies:
-  atanisoft/esp_lcd_touch_xpt2046:
-    component_hash: 7e6381b67b6e487379118368b8e91624dc87036ef5734818de1db9eb35697998
-    dependencies:
-    - name: espressif/esp_lcd_touch
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0.4'
-    - name: idf
-      require: private
-      version: '>=4.4'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.6
   chmorgan/esp-libhelix-mp3:
     component_hash: cbb76089dc2c5749f7b470e2e70aedc44c9da519e04eb9a67d4c7ec275229e53
     dependencies:
@@ -368,16 +354,6 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.2.2
-  espressif/esp_lcd_touch:
-    component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.4.2'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.2.1
   espressif/esp_modem:
     component_hash: 40af7f39c6c8c0c85c98014721fca8d9d2186f18f70645c66b94548192cf1e03
     dependencies:
@@ -614,13 +590,12 @@ dependencies:
       type: service
     version: 0.0.3
 direct_dependencies:
-- atanisoft/esp_lcd_touch_xpt2046
 - esp-idf-lib/mcp23x17
 - esp-idf-lib/pcf8574
 - espressif/arduino-esp32
 - espressif/spi_bus
 - idf
 - panigrah/esp32-idf-hd44780
-manifest_hash: 02a0291b2728b5b4f9ccc30c684d0bb55f752ea8956ef9a464cb29430ea8add3
+manifest_hash: ac897850772e0b5eba6f76697b20c3f7fd8f594e69ebc9722a724170c30cce6d
 target: esp32
 version: 2.0.0
