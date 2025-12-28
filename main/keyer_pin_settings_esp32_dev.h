@@ -55,9 +55,13 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD)     // for DIY Malls 3.2" 320x240 TFT st7789
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
     #ifdef FEATURE_MCP23017_EXPANDER
+      #define MCP23X17_ADDR 0x27    
+      #define MCP23017_I2C_PORT I2C_NUM_1
       #define MCP23017_INTA_GPIO 35 // input only, no pullup on this pin
       #define paddle_left     MCP23017_PIN0 // expander pin PA0
       #define paddle_right    MCP23017_PIN1 // expander pin PA1
+      #define I2CDEV_SDA_PIN  21   // override the sdkconfig pair of 21, 22
+      #define I2CDEV_SCL_PIN  22
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY
@@ -104,10 +108,31 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   // 36 ADC input free - input only
 #elif defined (FEATURE_TFT_HOSYOND_320x480_LCD)
     #define bt_keyboard_LED 17  // indicates BT keyboard connection status - Blue LED
-    #define paddle_left     23 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-    #define paddle_right    19 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+    #ifdef FEATURE_MCP23017_EXPANDER
+      #define MCP23X17_ADDR 0x27
+      #define MCP23017_I2C_PORT I2C_NUM_0
+      #define MCP23017_INTA_GPIO 35 // input only, no pullup on this pin
+      #define paddle_left     MCP23017_PIN0 // expander pin PA0
+      #define paddle_right    MCP23017_PIN1 // expander pin PA1
+      #define I2CDEV_SDA_PIN  32   // override the sdkconfig pair of 21, 22
+      #define I2CDEV_SCL_PIN  25
+      #ifdef FEATURE_STRAIGHT_KEY
+        #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
+      #endif //FEATURE_STRAIGHT_KEY
+      #define TOUCH_X   300     // x  300 default
+      #define TOUCH_X1  3598    // x1 3600 default
+      #define TOUCH_Y   345     // y  300 default
+      #define TOUCH_Y1  3549    // y1 3600 default
+      #define TOUCH_BITS 1      // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
+    #else
+      #define paddle_left     3 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_right    5 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #ifdef FEATURE_STRAIGHT_KEY
+        #define pin_straight_key  39
+      #endif //FEATURE_STRAIGHT_KEY
+    #endif
     #define tx_key_line_1   18 // (high = key down/tx on)
-    #define sidetone_line   26 //21 connect a passive buzzer for sidetone
+    #define sidetone_line   26 //26 connect a passive buzzer for sidetone
     #define audio_enable     4  // audio amp enable = LOW for this display (only?)
     #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1        22 // PTT ("push to talk") lines RED LED

@@ -262,8 +262,8 @@ void TFT_eSPI::calibrateTouch(uint16_t *parameters, uint32_t color_fg, uint32_t 
         break;
       }
 
-    // user has to get the chance to release
-    if(i>0) delay(1000);
+    // user has to get the chance to release 
+    delay(2000);
 
     for(uint8_t j= 0; j<8; j++){
       // Use a lower detect threshold as corners tend to be less sensitive

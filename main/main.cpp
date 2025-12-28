@@ -1383,8 +1383,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.12.26"
-#define eeprom_magic_number 45              // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "K7MDL-2025.12.28"
+#define eeprom_magic_number 46             // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
 #include "keyer_hardware.h"
@@ -1658,15 +1658,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define COLUMN_WIDTH 15         // width of mono-spaced scroll box font in pixels
   #define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
 
-  #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
-  #define SCREEN_HEIGHT (TFT_WIDTH-1)
-  #define SCROLL_BOX_LEFT_SIDE 3
-  
   #ifdef FEATURE_TFT_HOSYOND_320x480_LCD
+    #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
+    #define SCREEN_HEIGHT (TFT_WIDTH-1)
+    #define SCROLL_BOX_LEFT_SIDE 3
     #define SCREEN_BOX_HEIGHT 180    // This is set to the working area defined in the currently red border area.  
-    // 170 for the 170x320 and 240x320 displays
-    // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
-    // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter.
     #define SCROLL_BOX_TOP 39   // 1 row below the status bar border line
     #define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
     #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
@@ -1677,7 +1673,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define ICON_ANCHOR (380)
     #define STATUS_BAR_X_CURSOR (8)
   #else
-  #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
+    #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
+    #define SCREEN_HEIGHT (TFT_WIDTH-1)
+    #define SCROLL_BOX_LEFT_SIDE 3
+    #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
     // 170 for the 170x320 and 240x320 displays
     // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
     // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter. 
@@ -1724,8 +1723,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #include "i2cdev.h"
     #include <mcp23x17.h>
     #include <Wire.h>
-    #define MCP23X17_ADDR 0x27
-    static mcp23x17_t MCP23017 = { I2C_NUM_0 };
+    static mcp23x17_t MCP23017 = { MCP23017_I2C_PORT };
   #endif
 #endif
 
@@ -1969,7 +1967,7 @@ void initialize_tonsin();
   
   void process_buttons(); //uint8_t button_ID);
   int touch_button_available();
-  #define USE_TOUCH_TASK
+  
   #ifdef USE_TOUCH_TASK
     void check_touch_buttons(void * pvParameters);
   #else
@@ -1980,7 +1978,7 @@ void initialize_tonsin();
 // ________________________________
 // 
 #ifdef FEATURE_TFT_DISPLAY
-void initialize_TFT_LCD_display(void);
+void initialize_TFT_display(void);
 void initialize_m5stack_core2();
 int32_t h = 320;  // calculate actual at run time
 int32_t w = 240;
@@ -3639,6 +3637,8 @@ int touch_button_available() {
 #ifdef FEATURE_TFT_DISPLAY
 void update_icons(void) {
     
+    if (popup_active) return;  // bail, these screen writes below are outside the popup window
+
     static char GridSq[12] = "CN87xs\0";
     static char last_GridSq[12] = "\0";
     const int32_t row = STATUS_BAR_X_CURSOR;
@@ -4101,9 +4101,9 @@ void repeat_memory_msg(byte memory_number){
     repeat_memory = memory_number;
     #ifdef FEATURE_DISPLAY
       if (LCD_COLUMNS < 9){
-        lcd_center_print_timed("RptMem" + String(memory_number+1), 0, default_display_msg_delay); 
+        lcd_center_print_timed("RptMem" + String(memory_number), 0, default_display_msg_delay); 
       } else {
-        lcd_center_print_timed("Repeat Memory " + String(memory_number+1), 0, default_display_msg_delay); 
+        lcd_center_print_timed("Repeat Memory " + String(memory_number), 0, default_display_msg_delay); 
       }
       service_display();
     #endif //FEATURE_DISPLAY
@@ -4790,7 +4790,7 @@ void ps2_keyboard_program_memory(byte memory_number)
   #ifdef FEATURE_DISPLAY
     if (memory_number < 9) {
       lcd_string.concat(' ');
-    }
+    }    
     lcd_string.concat(memory_number+1);
     lcd_center_print_timed(lcd_string, 0, default_display_msg_delay);
   #else
@@ -4872,7 +4872,7 @@ void ps2_keyboard_program_memory(byte memory_number)
   } else {
     for (x = 0;x < temp_memory_index;x++) {  // write to memory
       EEPROM.write((memory_start(memory_number)+x),temp_memory[x]);
-      if ((memory_start(memory_number) + x) == memory_end(memory_number)) {    // are we at last memory location?
+      if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
         x = temp_memory_index;
       }
 
@@ -12613,7 +12613,7 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
     #ifdef FEATURE_MEMORIES
       case 33: repeat_play_memory(port_to_use); break;      // ! - repeat play
       case 124: serial_set_memory_repeat(port_to_use); break; // | - set memory repeat time
-      case 48: serial_play_memory(9); break;    // 0 - play memory 10
+      case 48: serial_play_memory(0); break;    // 0 - play memory 10
       case 49:                                  // 1-9 - play memory #
       case 50:
       case 51:
@@ -12623,20 +12623,20 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
       case 55:
       case 56: 
       case 57: serial_play_memory(incoming_serial_byte-49); break;
-      case 80: repeat_memory = 255; serial_program_memory(port_to_use); break;                                // P - program memory
+      case 80: repeat_memory = 255; serial_program_memory(port_to_use); break; // P - program memory
     #endif //FEATURE_MEMORIES
     case 'Q': serial_qrss_mode(); break; // Q - activate QRSS mode
     case 'R': speed_mode = SPEED_NORMAL; port_to_use->println(F("\r\nQRSS Off")); break; // R - activate regular timing mode
-    case 'S': serial_status(port_to_use); break;                                              // S - Status command
-    case 'J': serial_set_dit_to_dah_ratio(port_to_use); break;                          // J - dit to dah ratio
+    case 'S': serial_status(port_to_use); break;                     // S - Status command
+    case 'J': serial_set_dit_to_dah_ratio(port_to_use); break;       // J - dit to dah ratio
     #ifdef FEATURE_TRAINING_COMMAND_LINE_INTERFACE
-      case 'K': serial_cw_practice(port_to_use); break;                     // K - CW practice
+      case 'K': serial_cw_practice(port_to_use); break;              // K - CW practice
     #endif //FEATURE_TRAINING_COMMAND_LINE_INTERFACE
     case 'L': serial_set_weighting(port_to_use); break;
     #ifdef FEATURE_FARNSWORTH
-      case 'M': serial_set_farnsworth(port_to_use); break;                                // M - set Farnsworth speed
+      case 'M': serial_set_farnsworth(port_to_use); break;          // M - set Farnsworth speed
     #endif
-    case 'N':                                                                // N - paddle reverse
+    case 'N':                                                       // N - paddle reverse
       port_to_use->print(F("\r\nPaddles "));
       if (configuration.paddle_mode == PADDLE_NORMAL) {
         configuration.paddle_mode = PADDLE_REVERSE;
@@ -16241,16 +16241,16 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
 
       if (!memory_number_entered) {
         if ((incoming_serial_byte > 47) && (incoming_serial_byte < 58)) {  // do we have a number?
-          if (memory_1_or_1x_flag){    
+          if (memory_1_or_1x_flag){    // previous byte was a 1, so this is 10-19
             memory_number = incoming_serial_byte - 48 + 10;
-            memory_1_or_1x_flag = 0;
+            memory_1_or_1x_flag = 0;   // stop collecting bytes
             memory_number_entered = 1;
           } else {
-            memory_number = incoming_serial_byte - 48;
+            memory_number = incoming_serial_byte - 48;  // get 0-9.  If 1, it could be 10-19, set flag to check next byte
             if ((memory_number == 1) && (number_of_memories > 9)) {
               memory_1_or_1x_flag = 1;
             } else {
-              memory_number_entered = 1;
+              memory_number_entered = 1;   // single digit, stop collectiing bytes
             }
           }
           // memory number out of range check
@@ -16297,12 +16297,9 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
             EEPROM.write((memory_start(memory_number-1)+memory_index),255);
             port_to_use->println(F("Memory full, truncating."));
           }
-
         }
-
       } //
     }
-
   }
 
   if ((memory_number_entered) && (memory_data_entered) && (!error_flag)){
@@ -16621,7 +16618,7 @@ byte play_memory(byte memory_number) {
 
         #ifdef DEBUG_PLAY_MEMORY
           debug_serial_port->println(F("\n\nplay_memory:\r"));
-          debug_serial_port->print(F("    Memory number:"));
+          debug_serial_port->print(F("    Internal Memory number:"));
           debug_serial_port->println(memory_number);
           debug_serial_port->print(F("    EEPROM location:"));
           debug_serial_port->println(y);
@@ -16677,7 +16674,7 @@ byte play_memory(byte memory_number) {
                     winkey_port_write(eeprom_byte_read,0);
                   #endif // OPTION_PROSIGN_SUPPORT
 
-		}
+		            }   
                 #ifdef FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
                   #if defined(OPTION_PROSIGN_SUPPORT)
                     if ((eeprom_temp > PROSIGN_START) && (eeprom_temp < PROSIGN_END)){
@@ -16768,11 +16765,21 @@ byte play_memory(byte memory_number) {
               case 'I': // insert memory #
                 y++;
                 if (y < (memory_end(memory_number)+1)) {  // get the next byte           
-                 eeprom_byte_read = EEPROM.read(y);                 
+                  eeprom_byte_read = EEPROM.read(y); 
                   if (number_of_memories > (eeprom_byte_read-49)) {
                     jump_back_to_y = y;
-                    jump_back_to_memory_number = memory_number;
+                    jump_back_to_memory_number = memory_number;                    
                     memory_number = (eeprom_byte_read-49);
+                    
+                    #ifndef DEBUG_PLAY_MEMORY
+                      debug_serial_port->print(F("\nplay_memory: jump back to original memory:"));
+                      debug_serial_port->print(jump_back_to_memory_number);
+                      debug_serial_port->print(F("  jump back to original memory byte location (9999 max):"));
+                      debug_serial_port->print(jump_back_to_y);
+                      debug_serial_port->print(F("  Insert memory:"));
+                      debug_serial_port->println(memory_number);
+                    #endif                    
+                    
                     y = ((memory_start(memory_number)) - 1);
                     if (keyer_machine_mode == KEYER_NORMAL) {
                       primary_serial_port->println();
@@ -17081,11 +17088,14 @@ byte play_memory(byte memory_number) {
         
         // if we had an inserted memory, jump back to the original one
         if (/*(y== (memory_end(memory_number)+1)) &&*/ (jump_back_to_y < 9999) && (jump_back_to_memory_number < 255)) {
+          y = jump_back_to_y;
           #ifdef DEBUG_PLAY_MEMORY
             debug_serial_port->print(F("\nplay_memory: jump back to original memory:"));
-            debug_serial_port->println(jump_back_to_memory_number);
+            debug_serial_port->print(jump_back_to_memory_number);
+            debug_serial_port->print(F("  jump back to original memory byte location:"));
+            debug_serial_port->println(y);
           #endif
-          y = jump_back_to_y;
+          
           memory_number = jump_back_to_memory_number;
           jump_back_to_y = 9999;
           jump_back_to_memory_number = 255;
@@ -17468,7 +17478,7 @@ void read_io_handler(void *pvParameters)
     // Set the expander port A pins for the paddles to input with pullup
     //Wire1.begin(CONFIG_I2CDEV_DEFAULT_SDA_PIN, CONFIG_I2CDEV_DEFAULT_SCL_PIN, 1000000);   // Touch has 1 instance set in library so we get 2nd
     ESP_ERROR_CHECK(i2cdev_init());  // on 21, 22.  Use bus num 1 since the TP assumes bus 0.
-    ESP_ERROR_CHECK(mcp23x17_init_desc(&MCP23017, MCP23X17_ADDR, I2C_NUM_1, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SDA_PIN, (gpio_num_t ) CONFIG_I2CDEV_DEFAULT_SCL_PIN));
+    ESP_ERROR_CHECK(mcp23x17_init_desc(&MCP23017, MCP23X17_ADDR, MCP23017_I2C_PORT, (gpio_num_t ) I2CDEV_SDA_PIN, (gpio_num_t ) I2CDEV_SCL_PIN));
     MCP23017.cfg.master.clk_speed = 1000000;
     
     mcp23x17_set_mode(&MCP23017, paddle_left, MCP23X17_GPIO_INPUT);
@@ -18664,7 +18674,7 @@ void initialize_display() {
         Wire.begin(21, 22, 100000); // SDA = GPIO 25, SCL = GPIO 26 for ESp32-WROOM32 Dev Module
       #endif
       #ifdef FEATURE_TFT_DISPLAY
-        initialize_TFT_LCD_display();
+        initialize_TFT_display();
       #endif
 
       #ifdef FEATURE_TOUCH_DISPLAY
@@ -19085,6 +19095,11 @@ void process_buttons() { // (uint8_t button_ID) {
             if (lcd.getTouch(&t_x, &t_y, threshold)) {
           #endif
           
+            //uint16_t x, y;
+            //uint16_t  threshold=4;
+            //lcd.getTouch(&x, &y, threshold);
+            //debug_serial_port->printf("GetTouch: x:%d y:%d z:%d\n", x, y, threshold);
+
             bool pressed = true;                               
             button_ID = 255;
             button_active = false;     // set active flag if any valid button triggered on       
@@ -24338,7 +24353,11 @@ void initialize_st7789_lcd()
 #endif
 
 #ifdef FEATURE_TFT_DISPLAY
-  void initialize_TFT_LCD_display(void) 
+  #if defined(CAL_TOUCH2)
+    #define CALIBRATION_FILE "/calibrationData"
+    #include "FS.h"
+  #endif
+  void initialize_TFT_display(void) 
   {
         #ifdef FEATURE_M5STACK_CORE2
             //lcd.setRotation(1);
@@ -24348,9 +24367,119 @@ void initialize_st7789_lcd()
         #else
             lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
             //lcd.invertDisplay(1);
-            lcd.setRotation(3);
-            lcd.fillScreen(TFT_BLACK);  
+            lcd.setRotation(3);  //3 for most displays
+                
+            #if defined(CAL_TOUCH1)
+              uint16_t calibrationData[5] = {304, 3548, 145, 3600, 1};  // plug in results of cal below
+              
+              // *******************   Used to calibrate a touch screen - required for Hosyond 3.5" TFT
+              // Calibrate the touch screen and retrieve the scaling factors
+              lcd.calibrateTouch(calibrationData, TFT_WHITE, TFT_RED, 15);
+              /*
+              // Replace above line with the code sent to Serial Monitor
+              // once calibration is complete, e.g.:
+              uint16_t calData[5] = { 286, 3534, 283, 3600, 6 };
+              tft.setTouch(calData);
+              */
+              while(1) {
+                mydelay(1000);
+                // Clear the screen
+                lcd.fillScreen(TFT_BLACK);
+                lcd.setTextColor(TFT_WHITE, TFT_BLACK);  
+                lcd.setTextSize(2);
+                lcd.drawCentreString("Touch screen to test!",lcd.width()/2, lcd.height()/2, 2);
+                for (int i=0; i< 5; i++) {
+                  debug_serial_port->print(calibrationData[i]);
+                  debug_serial_port->print(" ");
+                }  
+                debug_serial_port->println("");
+              }
+
+              // *******************   Used to calibrate a touch screen - required for Hosyond 3.5" TFT
+            
+            #elif defined(CAL_TOUCH2)
+              uint16_t calibrationData[5] = {};
+              uint8_t calDataOK = 0;
+              lcd.setRotation(3);
+              lcd.fillScreen((0xFFFF));
+              lcd.setCursor(20, 0, 2);
+              lcd.setTextColor(TFT_BLACK, TFT_WHITE);  
+              lcd.setTextSize(2);
+              //lcd.println("  calibration run");
+              debug_serial_port->println("Touch calibration Mode");
+                            
+              // check file system
+              if (!SPIFFS.begin()) {
+                debug_serial_port->println("formatting file system");
+
+                SPIFFS.format();
+                SPIFFS.begin();
+              }
+              
+              // check if calibration file exists
+              if (SPIFFS.exists(CALIBRATION_FILE)) {
+                fs::File f = SPIFFS.open(CALIBRATION_FILE, "r");
+                if (f) {
+                  debug_serial_port->println("Cal file exists");
+                  if (f.readBytes((char *)calibrationData, 14) == 14) {
+                    calDataOK = 1;
+                    debug_serial_port->println("Cal file data OK");
+                  }
+                  f.close();
+                }
+              }
+              if (!calDataOK) {
+                // calibration data valid
+                debug_serial_port->println("Cal file data OK, start calibration");
+                lcd.setTouch(calibrationData);
+              } else {
+                // data not valid. recalibrate
+                debug_serial_port->println("Cal file data NOT OK, recalibrate");
+                lcd.calibrateTouch(calibrationData, TFT_WHITE, TFT_RED, 15);
+                // store data
+                debug_serial_port->println("Store Cal data");
+                fs::File f = SPIFFS.open(CALIBRATION_FILE, "w");
+                if (f) {
+                  f.write((const unsigned char *)calibrationData, 14);
+                  f.close();
+                  debug_serial_port->printf("Cal file data Stored - x:%d x1:%d y:%d y1:%d bits=0x%X\n", calibrationData[0], calibrationData[1], calibrationData[2], calibrationData[3], calibrationData[4]);
+                }
+              }
+              lcd.fillScreen((0xFFFF));
+              
+              while(1) {
+                uint16_t x, y;
+                static uint16_t color;
+
+                if (lcd.getTouch(&x, &y)) {
+
+                  lcd.setCursor(25, 20, 2);
+                  lcd.printf("x: %i     ", x);
+                  lcd.setCursor(25, 70, 2);
+                  lcd.printf("y: %i    ", y);
+
+                  lcd.drawPixel(x, y, color);
+                  color += 155;
+                }
+              }           
+            
+            // *****************
+            #elif defined(CAL_TOUCH) || defined(SET_CAL)
+                  /*  params are x, x1, y, y1, and rotate=bit0, invertx=bit1, inverty=bit2
+                  touchCalibration_rotate = parameters[4] & 0x01;
+                  touchCalibration_invert_x = parameters[4] & 0x02;
+                  touchCalibration_invert_y = parameters[4] & 0x04;
+                  */
+              uint16_t calibrationData[5] = {TOUCH_X, TOUCH_X1, TOUCH_Y, TOUCH_Y1, TOUCH_BITS};  // My own results are pretty good.
+              // can run this to cal at startup.
+              #ifdef CAL_TOUCH
+                lcd.calibrateTouch(calibrationData, TFT_WHITE, TFT_RED, 15);
+              #endif
+              debug_serial_port->printf("Cal data - x:%d x1:%d y:%d y1:%d bits=0x%X\n", calibrationData[0], calibrationData[1], calibrationData[2], calibrationData[3], calibrationData[4]);
+              lcd.setTouch(calibrationData);              
+            #endif
         #endif
+        lcd.fillScreen(TFT_BLACK);  
         lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
         // Set up new screen and draw status bar and icons in it
         lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
