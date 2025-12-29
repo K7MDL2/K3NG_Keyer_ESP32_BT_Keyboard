@@ -99,8 +99,7 @@ GENERIC STM32F103C
 #if defined(FEATURE_BUTTONS) &&  !defined(FEATURE_PS2_KEYBOARD) && !defined(FEATURE_USB_KEYBOARD) && !defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(FEATURE_WINKEY_EMULATION)
   #define number_of_memories byte(analog_buttons_number_of_buttons-1)
 #else
-//  #define number_of_memories byte(8)
-  #define number_of_memories byte(10) //sp5iou 20220124 With many memories, be carefull to not put to much content. It caould disable memory programming and eeprom formatting is then necessary
+  #define number_of_memories byte(12) //sp5iou 20220124 With many memories, be carefull to not put to much content. It caould disable memory programming and eeprom formatting is then necessary
 #endif
 
 #ifdef FEATURE_CAPACITIVE_PADDLE_PINS

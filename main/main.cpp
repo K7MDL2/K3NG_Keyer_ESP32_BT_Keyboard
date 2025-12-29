@@ -1384,7 +1384,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 */
 
 #define CODE_VERSION "K7MDL-2025.12.28"
-#define eeprom_magic_number 46             // you can change this number to have the unit re-initialize EEPROM
+#define eeprom_magic_number 47             // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
 #include "keyer_hardware.h"
@@ -16767,7 +16767,7 @@ byte play_memory(byte memory_number) {
                     jump_back_to_memory_number = memory_number;                    
                     memory_number = (eeprom_byte_read-49);
                     
-                    #ifndef DEBUG_PLAY_MEMORY
+                    #ifdef DEBUG_PLAY_MEMORY
                       debug_serial_port->print(F("\nplay_memory: jump back to original memory:"));
                       debug_serial_port->print(jump_back_to_memory_number);
                       debug_serial_port->print(F("  jump back to original memory byte location (9999 max):"));
@@ -23930,8 +23930,8 @@ void update_time(){
                                         case 0x4D : ch = PS2_END; break; // End key
                                         case 0x4B : ch = PS2_PAGEUP; break; // PgUp key
                                         case 0x4E : ch = PS2_PAGEDOWN; break; // PgDn key
-                                        case 0x4F : ch = PS2_RIGHTARROW; break;   // right cursor key
-                                        case 0x50 : ch = PS2_LEFTARROW; break;   // left cursor key
+                                        case 0x4F : ch = PS2_LEFTARROW; break;   // right cursor key
+                                        case 0x50 : ch = PS2_RIGHTARROW; break;   // left cursor key
                                         case 0x51 : ch = PS2_DOWNARROW; break;   // down cursor key
                                         case 0x52 : ch = PS2_UPARROW; break;   // up cursor key
                                         //case 0x53 : ch = BT_SCROLL; break;   // No Scroll on BT keyboards so far
