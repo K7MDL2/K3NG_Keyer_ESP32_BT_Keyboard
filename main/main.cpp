@@ -1667,10 +1667,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
     #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
-    #define ICON_SPACING (ICON_COLUMN_WIDTH+3)   
-    #define GRID_ANCHOR (180)
-    #define WPM_ANCHOR (280)
-    #define ICON_ANCHOR (380)
+    #define ICON_SPACING (ICON_COLUMN_WIDTH+4)   
+    #define GRID_ANCHOR (178)
+    #define WPM_ANCHOR (278)
+    #define ICON_ANCHOR (378)
     #define STATUS_BAR_X_CURSOR (8)
   #else
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
@@ -3675,38 +3675,32 @@ void update_icons(void) {
 
     if (last_sending_mode != sending_mode)    // modes are : Auto, Manual, Auto-Interrupted
     {
-      lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-      lcd.drawChar(' ', ICON_ANCHOR, row);
-      if (sending_mode == AUTOMATIC_SENDING ) {
-          lcd.setTextColor(TFT_ORANGE, TFT_BLACK);
-          lcd.drawChar('A', ICON_ANCHOR, row);
+      switch (last_sending_mode) {
+        case AUTOMATIC_SENDING:             lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('A', ICON_ANCHOR, row); break;
+        case AUTOMATIC_SENDING_INTERRUPTED: lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('I', ICON_ANCHOR, row); break;
+        case MANUAL_SENDING:                lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('M', ICON_ANCHOR, row); break;
       }
-      if (sending_mode == AUTOMATIC_SENDING_INTERRUPTED ) {
-          lcd.setTextColor(TFT_ORANGE, TFT_BLACK);
-          lcd.drawChar('I', ICON_ANCHOR, row);
+      switch (sending_mode) {
+        case AUTOMATIC_SENDING:             lcd.setTextColor(TFT_ORANGE, TFT_BLACK); lcd.drawChar('A', ICON_ANCHOR, row); break;
+        case AUTOMATIC_SENDING_INTERRUPTED: lcd.setTextColor(TFT_ORANGE, TFT_BLACK); lcd.drawChar('I', ICON_ANCHOR, row); break;
+        case MANUAL_SENDING:                lcd.setTextColor(TFT_PINK, TFT_BLACK);   lcd.drawChar('M', ICON_ANCHOR, row); break;
       }
-      if (sending_mode == MANUAL_SENDING ) {
-          lcd.setTextColor(TFT_PINK, TFT_BLACK);
-          lcd.drawChar('M', ICON_ANCHOR, row);
-      }
+      last_sending_mode = sending_mode;
     }
+
     static byte last_keyer_machine_mode = 255;
 
     if (last_keyer_machine_mode != keyer_machine_mode)    // modes are : Beacon KEYER_NORMAL KEYER_COMMAND_MODE
     {
-      lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-      lcd.drawChar(' ', ICON_ANCHOR+ICON_SPACING, row);
-      if (keyer_machine_mode == BEACON ) {
-          lcd.setTextColor(TFT_ORANGE, TFT_BLACK);
-          lcd.drawChar('B', ICON_ANCHOR+ICON_SPACING, row);
+      switch (last_keyer_machine_mode) {
+        case BEACON:              lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('B', ICON_ANCHOR+ICON_SPACING, row); break;
+        case KEYER_NORMAL:        lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('N', ICON_ANCHOR+ICON_SPACING, row); break;
+        case KEYER_COMMAND_MODE:  lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('C', ICON_ANCHOR+ICON_SPACING, row); break;
       }
-      if (keyer_machine_mode == KEYER_NORMAL ) {
-          lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-          lcd.drawChar('N', ICON_ANCHOR+ICON_SPACING, row);
-      }
-      if (keyer_machine_mode == KEYER_COMMAND_MODE ) {
-          lcd.setTextColor(TFT_PINK, TFT_BLACK);
-          lcd.drawChar('C', ICON_ANCHOR+ICON_SPACING, row);
+      switch (keyer_machine_mode) {
+        case BEACON:              lcd.setTextColor(TFT_ORANGE, TFT_BLACK);    lcd.drawChar('B', ICON_ANCHOR+ICON_SPACING, row); break;
+        case KEYER_NORMAL:        lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK); lcd.drawChar('N', ICON_ANCHOR+ICON_SPACING, row);; break;
+        case KEYER_COMMAND_MODE:  lcd.setTextColor(TFT_PINK, TFT_BLACK);      lcd.drawChar('C', ICON_ANCHOR+ICON_SPACING, row); break;
       }
       last_keyer_machine_mode = keyer_machine_mode;
     }
@@ -3715,12 +3709,14 @@ void update_icons(void) {
 
     if (last_ptt_line_activated != ptt_line_activated)  // Tx state changed
     {
-      lcd.drawChar(' ', ICON_ANCHOR+(2*ICON_SPACING), row); // Tx Rx state
+      lcd.setTextColor(TFT_BLACK, TFT_BLACK);
       if (ptt_line_activated) {
+          lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
           lcd.setTextColor(TFT_RED, TFT_BLACK);
           lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
       } else {
-          lcd.setTextColor(TFT_GREEN, TFT_BLACK);
+          lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
+          lcd.setTextColor(TFT_GREEN, TFT_BLACK);          
           lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
       }
       last_ptt_line_activated = ptt_line_activated;
@@ -17541,9 +17537,13 @@ void initialize_pins() {
     }
   #endif //FEATURE_CAPACITIVE_PADDLE_PINS
   
+  // This pin 4 is for the Hoysond 3.5" TFT to enable the audio amp. 
+  // It works OK for input, but it does not work as an output on 2 boards.  It is always logic high.
+  // A trace cut to pin 1 of the audio amp was made and a jumper to GND made on the amp enable Pin 1.
+  // Setting this to input.  Could remove it but might be useful for similar boards that do work.  Make it output then.
   if (audio_enable){  // enable audio amp (LOW). DAC pin outputs to audio amp and then out to speaker
-    pinMode (audio_enable, OUTPUT);
-    digitalWrite (audio_enable, audio_enable_active_state);
+    pinMode (audio_enable, INPUT_PULLUP);  // this pin is disconnected 
+    digitalRead (audio_enable);
   }
 
   if (tx_key_line_1) {
