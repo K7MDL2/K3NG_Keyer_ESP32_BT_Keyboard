@@ -111,6 +111,7 @@
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
+    //#define USE_TASK // runs main loop in a task
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
@@ -171,7 +172,7 @@
 // #define OPTION_REVERSE_BUTTON_ORDER                // This is mainly for the DJ0MY NanoKeyer http://nanokeyer.wordpress.com/
 ///#define OPTION_PROG_MEM_TRIM_TRAILING_SPACES         // trim trailing spaces from memory when programming in command mode
 ///#define OPTION_DIT_PADDLE_NO_SEND_ON_MEM_RPT         // this makes dit paddle memory interruption a little smoother
- #define OPTION_MORE_DISPLAY_MSGS                     // additional optional display messages - comment out to save memory
+#define OPTION_MORE_DISPLAY_MSGS                     // additional optional display messages - comment out to save memory
 // #define OPTION_WATCHDOG_TIMER                        // this enables a four second ATmega48/88/168/328 watchdog timer; use for unattended/remote operation only
 // #define OPTION_MOUSE_MOVEMENT_PADDLE               // experimental (just fooling around) - mouse movement will act like a paddle
 // #define OPTION_NON_ENGLISH_EXTENSIONS  // add support for additional CW characters (i.e. À, Å, Þ, etc.)

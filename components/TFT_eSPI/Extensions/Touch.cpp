@@ -12,7 +12,7 @@
 
 // Define a default pressure threshold
 #ifndef Z_THRESHOLD
-  #define Z_THRESHOLD 10  //350 // Touch pressure threshold for validating touches
+  #define Z_THRESHOLD 350 // Touch pressure threshold for validating touches
 #endif
 
 /***************************************************************************************
