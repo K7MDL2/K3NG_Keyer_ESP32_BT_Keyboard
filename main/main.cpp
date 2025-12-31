@@ -3588,7 +3588,7 @@ void lcd_scroll_box_clear() {
       //if (TFT_VIEWPORT_EXISTS) {
       //    debug_serial_port->println("Close Viewport");
           lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
       //    lcd.resetViewport();
       //}
       //else {
@@ -3606,7 +3606,7 @@ void lcd_scroll_box_clear() {
 #ifdef FEATURE_BT_KEYBOARD
 char bt_keyboard_read() {
   #ifndef USE_BT_TASK
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     check_bt_keyboard();
   #endif
   return queuepop();
@@ -3614,7 +3614,7 @@ char bt_keyboard_read() {
 
 int bt_keyboard_available() {
   #ifndef USE_BT_TASK
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     check_bt_keyboard();
   #endif
   return queue_available();
@@ -3626,7 +3626,7 @@ int touch_key_read() {  // if touch_button_available then ther eis a non-zero to
     #ifndef USE_TOUCH_TASK
       check_touch_buttons();    
     #endif 
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     if (button_active) process_buttons();
     return queuepop();
     #else
@@ -3857,7 +3857,7 @@ void service_display() {
       lcd_status = lcd_previous_status;
       switch (lcd_status) {
         case LCD_CLEAR:
-            vTaskDelay(0);
+            vTaskDelay(1 / portTICK_PERIOD_MS);
             lcd_scroll_box_clear();
             break;
         case LCD_SCROLL_MSG:   // this is called after a timed message clears the display and the buffer has to be redrawn onscreen.  Also at start of Pause
@@ -4807,7 +4807,7 @@ void ps2_keyboard_program_memory(byte memory_number)
   repeat_memory = 255;
   while (looping) {
     #ifdef HARDWARE_ESP32_DEV
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
     #endif
     #ifdef FEATURE_PS2_KEYBOARD
     while (keyboard.available() == 0) {
@@ -4921,7 +4921,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
 
   while (looping) {
     #ifdef HARDWARE_ESP32_DEV
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
     #endif
     #ifdef FEATURE_PS2_KEYBOARD
     if (keyboard.available() == 0) {        // wait for the next keystroke
@@ -5059,7 +5059,7 @@ void debug_capture ()
   byte serial_byte_in;
   int x = 1022;
 
-  while (primary_serial_port->available() == 0) {vTaskDelay(0);}  // wait for first byte
+  while (primary_serial_port->available() == 0) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for first byte
   serial_byte_in = primary_serial_port->read();
   primary_serial_port->write(serial_byte_in);
   //if ((serial_byte_in > 47) or (serial_byte_in = 20)) { primary_serial_port->write(serial_byte_in); }  // echo back
@@ -5069,7 +5069,7 @@ void debug_capture ()
     EEPROM.write(x,serial_byte_in);
     x--;
     while ( x > 400) {
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       if (primary_serial_port->available() > 0) {
         serial_byte_in = primary_serial_port->read();
         EEPROM.write(x,serial_byte_in);
@@ -5082,7 +5082,7 @@ void debug_capture ()
     }
   }
 
-  while (1) {vTaskDelay(0);}
+  while (1) {vTaskDelay(1 / portTICK_PERIOD_MS);}
 
 }
 #endif
@@ -5114,7 +5114,7 @@ void debug_capture_dump()
     }
   }
 
-  while (1) {vTaskDelay(0);}
+  while (1) {vTaskDelay(1 / portTICK_PERIOD_MS);}
 
 }
 #endif
@@ -5453,7 +5453,7 @@ void check_paddles()
 
   static byte last_closure = NO_CLOSURE;
 
-
+  vTaskDelay(1 / portTICK_PERIOD_MS);
   check_dit_paddle();
   check_dah_paddle();  
 
@@ -5719,7 +5719,7 @@ void ptt_key(){
     #endif
 
     while (!all_delays_satisfied){
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       #ifdef FEATURE_SEQUENCER
         if (sequencer_1_pin){
           if (((millis() - ptt_activation_time) >= configuration.ptt_active_to_sequencer_active_time[0]) || sequencer_1_active){
@@ -6251,7 +6251,7 @@ void check_dit_paddle()
         repeat_memory = 255;
         #ifdef OPTION_DIT_PADDLE_NO_SEND_ON_MEM_RPT
           dit_buffer = 0;
-          while (!paddle_pin_read(dit_paddle)) {vTaskDelay(0);};
+          while (!paddle_pin_read(dit_paddle)) {vTaskDelay(1 / portTICK_PERIOD_MS);};
           memory_rpt_interrupt_flag = 1;
         #endif
       }
@@ -6798,7 +6798,7 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
     #else
     while (((micros() - start) < ticks) && (service_tx_inhibit_and_pause() == 0)){
     #endif
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       check_ptt_tail();
       
       #if defined(FEATURE_SERIAL) && !defined(OPTION_DISABLE_SERIAL_PORT_CHECKING_WHILE_SENDING_CW)
@@ -7072,7 +7072,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
   unsigned long entry_time = millis();
 
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     #ifdef OPTION_WATCHDOG_TIMER
       wdt_reset();
     #endif  //OPTION_WATCHDOG_TIMER
@@ -7118,7 +7118,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
 
     #ifdef FEATURE_BUTTONS
       while (analogbuttonread(0)) {    // hit the button to get out of command mode if no paddle was hit
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
         looping = 0;
         button_hit = 1;
       }
@@ -7213,11 +7213,11 @@ void command_mode() {
   #endif
 
   while (stay_in_command_mode) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     cw_char = 0;
     looping = 1;
     while (looping) {
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       int8_t button_temp = button_array.Pressed();
 
           #ifdef FEATURE_DISPLAY
@@ -7263,7 +7263,7 @@ void command_mode() {
         cw_char = 9;
         mydelay(50);
         button_that_was_pressed = button_temp;
-        while (button_array.Held(button_that_was_pressed)) {vTaskDelay(0);}
+        while (button_array.Held(button_that_was_pressed)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
       }
 
       #if defined(FEATURE_SERIAL)
@@ -8027,7 +8027,7 @@ void command_progressive_5_char_echo_practice() {
   #endif 
 
   while (loop1) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     // if (practice_mode_called == ECHO_MIXED){
     //   practice_mode = random(ECHO_2_CHAR_WORDS,ECHO_QSO_WORDS+1);
     // } else {
@@ -8080,7 +8080,7 @@ void command_progressive_5_char_echo_practice() {
     
     loop2 = 1;
     while (loop2) {
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       user_send_loop = 1;
       user_sent_cw = "";
       cw_char = 0;
@@ -8088,7 +8088,7 @@ void command_progressive_5_char_echo_practice() {
 
       // send the CW to the user
       while ((x < (cw_to_send_to_user.length())) && (x < progressive_step_counter)) {
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
         send_char(cw_to_send_to_user[x],KEYER_NORMAL);
         // test
         // port_to_use->print(cw_to_send_to_user[x]);
@@ -8098,7 +8098,7 @@ void command_progressive_5_char_echo_practice() {
       //port_to_use->println();
 
       while (user_send_loop) {
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
         // get their paddle input
 
         #ifdef FEATURE_DISPLAY
@@ -8155,7 +8155,7 @@ void command_progressive_5_char_echo_practice() {
 
         // does the user want to exit?
         while (analogbuttonread(0)) {
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           user_send_loop = 0;
           loop1 = 0;
           loop2 = 0;
@@ -8336,7 +8336,7 @@ void command_keying_compensation_adjust() {
   #endif
 
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8350,7 +8350,7 @@ void command_keying_compensation_adjust() {
       }
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       looping = 0;
     }
    
@@ -8360,7 +8360,7 @@ void command_keying_compensation_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(0);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
   config_dirty = 1;
@@ -8384,7 +8384,7 @@ void command_dah_to_dit_ratio_adjust() {
   #endif
 
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8394,7 +8394,7 @@ void command_dah_to_dit_ratio_adjust() {
       adjust_dah_to_dit_ratio(-10);
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       looping = 0;
     }
    
@@ -8404,7 +8404,7 @@ void command_dah_to_dit_ratio_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(0);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
 }
@@ -8426,7 +8426,7 @@ void command_weighting_adjust() {
   #endif
 
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8438,7 +8438,7 @@ void command_weighting_adjust() {
       if (configuration.weighting < 10){configuration.weighting = 10;}
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       looping = 0;
     }
    
@@ -8447,7 +8447,7 @@ void command_weighting_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(0);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
 }
@@ -8479,7 +8479,7 @@ void command_tuning_mode() {
 
   key_tx = 1;
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     #ifdef OPTION_WATCHDOG_TIMER
       wdt_reset();
     #endif  //OPTION_WATCHDOG_TIMER
@@ -8524,7 +8524,7 @@ void command_tuning_mode() {
   sending_mode = MANUAL_SENDING;
   tx_and_sidetone_key(0);
   ptt_unkey();
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(0);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
   key_tx = 0;
   send_dit();
   dit_buffer = 0;
@@ -8565,7 +8565,7 @@ void command_sidetone_freq_adj() {
   #endif
 
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
         #ifdef FEATURE_M5STACK_CORE2
           M5.Speaker.tone(700, configuration.hz_sidetone);
@@ -8618,7 +8618,7 @@ void command_sidetone_freq_adj() {
       mydelay(10);
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       looping = 0;
     }
 
@@ -8627,7 +8627,7 @@ void command_sidetone_freq_adj() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(0);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
           #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
             noTone(sidetone_line);
           #else
@@ -8666,7 +8666,7 @@ void command_speed_mode(byte mode) {
   }         
   
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     send_dit();
     if ((paddle_pin_read(paddle_left) == LOW)) {
       if (mode == COMMAND_SPEED_MODE_KEYER_WPM) {
@@ -8700,7 +8700,7 @@ void command_speed_mode(byte mode) {
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0) ))  // if paddles are squeezed or button0 pressed - exit
     {
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       looping = 0;
     }
 
@@ -8715,7 +8715,7 @@ void command_speed_mode(byte mode) {
   dit_buffer = 0;
   dah_buffer = 0;
 
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(0);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
   #ifndef FEATURE_DISPLAY
     // announce speed in CW
     if (mode == COMMAND_SPEED_MODE_KEYER_WPM){
@@ -8873,7 +8873,7 @@ void check_buttons() {
   button_depress_time = button_array.last_pressed_ms;
 
   while (button_array.Held(analogbuttontemp, button_depress_time + 1000)) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     if ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
       button_depress_time = 1001;  // if button 0 is held and a paddle gets hit, assume we have a hold and shortcut out
     }
@@ -8936,7 +8936,7 @@ void check_buttons() {
         key_tx = 0;
         // do stuff if this is a command button hold down
         while (button_array.Held(analogbuttontemp)) {
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           if (paddle_pin_read(paddle_left) == LOW) { 
  	          #ifdef OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
               speed_change(-1);                                           // left paddle decrease speed
@@ -9000,7 +9000,7 @@ void check_buttons() {
       }  // (analogbuttontemp == 0)
       if ((analogbuttontemp > 0) && (analogbuttontemp < analog_buttons_number_of_buttons)) {
         while (button_array.Held(analogbuttontemp)) {
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           if (((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) && (analogbuttontemp < (number_of_memories + 1))){
             #ifdef FEATURE_MEMORIES
               repeat_memory = analogbuttontemp - 1;
@@ -9674,7 +9674,7 @@ void serial_qrss_mode()
   byte error =0;
 
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     if (primary_serial_port->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -9711,7 +9711,7 @@ void serial_qrss_mode()
   if (error) {
     primary_serial_port->println(F("Error..."));
     while (primary_serial_port->available() > 0) { 
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       incoming_serial_byte = primary_serial_port->read(); 
     }  // clear out buffer
     return;
@@ -11082,7 +11082,7 @@ void service_winkey(byte action) {
     if (!winkey_discard_bytes_init_done) {
       if (primary_serial_port->available()) {
         for (int z = winkey_discard_bytes_startup;z > 0;z--) {
-          while (primary_serial_port->available() == 0) {vTaskDelay(0);}
+          while (primary_serial_port->available() == 0) {vTaskDelay(1 / portTICK_PERIOD_MS);}
           primary_serial_port->read();
         }
         winkey_discard_bytes_init_done = 1;
@@ -12281,7 +12281,7 @@ void check_serial(){
 
 
   while (primary_serial_port->available() > 0) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming_serial_byte = primary_serial_port->read();
     #ifdef FEATURE_SLEEP
       last_activity_time = millis(); 
@@ -12332,7 +12332,7 @@ void check_serial(){
 
   #ifdef FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
     while (secondary_serial_port->available() > 0) {
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       incoming_serial_byte = secondary_serial_port->read();     
       #ifdef FEATURE_SLEEP
         last_activity_time = millis(); 
@@ -12376,8 +12376,8 @@ void serial_page_pause(PRIMARY_SERIAL_CLS * port_to_use,byte seconds_timeout){
   unsigned long pause_start_time = millis();
 
   port_to_use->println(F("\r\nPress enter..."));
-  while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){vTaskDelay(0);}
-  while (port_to_use->available()){vTaskDelay(0); port_to_use->read();}
+  while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){vTaskDelay(1 / portTICK_PERIOD_MS);}
+  while (port_to_use->available()){vTaskDelay(1 / portTICK_PERIOD_MS); port_to_use->read();}
 
 
 }
@@ -12606,7 +12606,6 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
         break;         
     #endif //FEATURE_AMERICAN_MORSE
 
-
     case 'I':                                                                      // I - transmit line on/off
       //port_to_use->print(F("\r\nTX o")); //WD9DMP-1
       if (key_tx && keyer_machine_mode != KEYER_COMMAND_MODE) { //Added check that keyer is NOT in command mode or keyer might be enabled for paddle commands (WD9DMP-1)
@@ -12621,7 +12620,7 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
     #ifdef FEATURE_MEMORIES
       case 33: repeat_play_memory(port_to_use); break;      // ! - repeat play
       case 124: serial_set_memory_repeat(port_to_use); break; // | - set memory repeat time
-      case 48: serial_play_memory(0); break;    // 0 - play memory 10
+      case 48: serial_play_memory(9); break;    // 0 - play memory 10
       case 49:                                  // 1-9 - play memory #
       case 50:
       case 51:
@@ -12674,7 +12673,6 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
       }
       config_dirty = 1;
     break;
-
 
     case 'T': // T - tune
       #ifdef FEATURE_MEMORIES
@@ -12913,7 +12911,7 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
   String userinput = "";
 
   while (looping) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     if (port_to_use->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -13167,7 +13165,7 @@ void cli_sd_ls_command(PRIMARY_SERIAL_CLS * port_to_use,String directory){
   File dir = SD.open(directory);
 
   while (true) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     File entry =  dir.openNextFile();
     if (! entry) {
       // no more files
@@ -13796,7 +13794,6 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit,PRIMARY
   int numbers[6];
 
   while (looping) {
-    vTaskDelay(0);
     if (port_to_use->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -13839,7 +13836,7 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit,PRIMARY
     if (raise_error_message == RAISE_ERROR_MSG){
       port_to_use->println(F("Error..."));
     }
-    while (port_to_use->available() > 0) { vTaskDelay(0); incoming_serial_byte = port_to_use->read(); }  // clear out buffer
+    while (port_to_use->available() > 0) { vTaskDelay(1 / portTICK_PERIOD_MS); incoming_serial_byte = port_to_use->read(); }  // clear out buffer
     return(-1);
   } else {
     int y = 1;
@@ -14020,7 +14017,7 @@ void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
 
   mydelay(100);
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming = port_to_use->read();
   }
 
@@ -14028,12 +14025,12 @@ void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
   tx_and_sidetone_key(1);
   port_to_use->println(F("\r\nKeying tx - press a key to unkey"));
   #ifdef FEATURE_BUTTONS
-    while ((port_to_use->available() == 0) && (!analogbuttonread(0))) {vTaskDelay(0);}  // keystroke or button0 hit gets us out of here
+    while ((port_to_use->available() == 0) && (!analogbuttonread(0))) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // keystroke or button0 hit gets us out of here
   #else
-    while (port_to_use->available() == 0) {vTaskDelay(0);}
+    while (port_to_use->available() == 0) {vTaskDelay(1 / portTICK_PERIOD_MS);}
   #endif
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming = port_to_use->read();
   }
   tx_and_sidetone_key(0);
@@ -14164,7 +14161,7 @@ String generate_callsign(byte callsign_mode) {
 //   int caller_wpm_delta = 0;
 
 //   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-//   vTaskDelay(0);
+//   vTaskDelay(1 / portTICK_PERIOD_MS);
 //     port_to_use->read();
 //   }  
 
@@ -14182,7 +14179,7 @@ String generate_callsign(byte callsign_mode) {
 //   term.println(F("-------- ---- -------\n\n"));    
   
 //   while (loop1){
-//      vTaskDelay(0);
+//      vTaskDelay(1 / portTICK_PERIOD_MS);
 //     // get user keyboard input
 //     if (port_to_use->available()){      
 //       user_input_buffer[user_input_buffer_characters] = toupper(port_to_use->read());
@@ -14377,7 +14374,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       port_to_use->read();
     }  
    
@@ -14393,7 +14390,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
     menu_loop2 = 1;
     
     while (menu_loop2) {
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -14436,7 +14433,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use) {
   while(menu_loop) {
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       port_to_use->read();
     }  
    
@@ -14457,7 +14454,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use) {
     menu_loop2 = 1;
     
     while (menu_loop2) {   
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)) {
@@ -14540,20 +14537,20 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
   port_to_use->println(F("Receive / Transmit Echo Practice\r\n\r\nCopy the code and send it back using the paddle."));
   port_to_use->println(F("Enter a blackslash \\ to exit.\r\n"));
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming_char = port_to_use->read();
   }
   port_to_use->print(F("Press enter to start...\r\n"));
   while (port_to_use->available() == 0) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
   }
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming_char = port_to_use->read();
   }
 
   while (loop1) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     if (practice_mode_called == ECHO_MIXED){
       practice_mode = random(ECHO_2_CHAR_WORDS,ECHO_QSO_WORDS+1);
     } else {
@@ -14603,7 +14600,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
     loop2 = 1;
     
     while (loop2){
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       user_send_loop = 1;
       user_sent_cw = "";
       cw_char = 0;
@@ -14611,7 +14608,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 
       // send the CW to the user
       while ((x < (cw_to_send_to_user.length())) && (x < progressive_step_counter)) {
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
         send_char(cw_to_send_to_user[x],KEYER_NORMAL);
         // test
         port_to_use->print(cw_to_send_to_user[x]);
@@ -14622,7 +14619,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 
       while (user_send_loop) {
         // get their paddle input
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
         #ifdef FEATURE_DISPLAY
           service_display();
         #endif
@@ -14695,7 +14692,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
         }
         #ifdef FEATURE_BUTTONS
           while (analogbuttonread(0)) {                                                 // can exit by pressing the Command Mode button
-            vTaskDelay(0);
+            vTaskDelay(1 / portTICK_PERIOD_MS);
             user_send_loop = 0;
             loop1 = 0;
             loop2 = 0;
@@ -14780,7 +14777,7 @@ void serial_receive_practice_menu(PRIMARY_SERIAL_CLS * port_to_use,byte practice
   while(menu_loop) {
  
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       port_to_use->read();
     }  
    
@@ -14803,7 +14800,7 @@ void serial_receive_practice_menu(PRIMARY_SERIAL_CLS * port_to_use,byte practice
     menu_loop2 = 1;
     
     while (menu_loop2){
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -14865,7 +14862,7 @@ void serial_set_wordspace_parameters(PRIMARY_SERIAL_CLS * port_to_use,byte mode_
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       port_to_use->read();
     }  
   
@@ -14880,7 +14877,7 @@ void serial_set_wordspace_parameters(PRIMARY_SERIAL_CLS * port_to_use,byte mode_
     temp_value = 0;
     
     while (menu_loop2){
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char > 47) && (incoming_char < 58)){
@@ -14936,7 +14933,7 @@ void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use){
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       port_to_use->read();
     }  
     
@@ -14949,7 +14946,7 @@ void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use){
     menu_loop2 = 1;
     
     while (menu_loop2){
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -15003,12 +15000,12 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
   #endif
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming_char = port_to_use->read();
   }
 
   while (loop1){
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     switch(random_mode){
       case RANDOM_LETTER_GROUPS: random_character = random(65,91); break;
       case RANDOM_NUMBER_GROUPS: random_character = random(48,58); break;
@@ -15055,7 +15052,7 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
       }
     #else 
       while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
         loop1 = 0;
       }    
     #endif //FEATURE_BUTTONS
@@ -15079,7 +15076,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       port_to_use->read();
     }  
     
@@ -15107,7 +15104,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
     menu_loop2 = 1;
     
     while (menu_loop2){
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -15178,13 +15175,13 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
   #endif
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     port_to_use->read();
   }
 
 
   while (loop1){
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     if (practice_type_called == WORDSWORTH_MIXED){
       practice_type = random(WORDSWORTH_2_CHAR_WORDS,WORDSWORTH_QSO_WORDS+1);
     } else {
@@ -15225,12 +15222,12 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
     repetitions = 0;
 
     while ((loop3) && (repetitions < configuration.wordsworth_repetition)){ // word sending loop
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       loop2 = 1;
       x = 0;
 
       while (loop2){ //character sending loop
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
         #if defined(DEBUG_WORDSWORTH)
           debug_serial_port->print(F("wordsworth_practice: send_char:"));
           debug_serial_port->print(word_buffer[x]);
@@ -15348,20 +15345,20 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   port_to_use->println(F("If you are using the Arduino serial monitor, select \"Carriage Return\" line ending."));
   port_to_use->println(F("Enter a blackslash \\ to exit.\r\n"));
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming_char = port_to_use->read();
   }
   port_to_use->print(F("Press enter to start...\r\n"));
   while (port_to_use->available() == 0) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
   }
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming_char = port_to_use->read();
   }
 
   while (loop1){
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     if (practice_type_called == PRACTICE_MIXED){
       practice_type = random(PRACTICE_2_CHAR_WORDS,PRACTICE_QSO_WORDS+1);
     } else {
@@ -15415,7 +15412,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
     loop2 = 1;
     
     while (loop2){
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       #if defined(DEBUG_CALLSIGN_PRACTICE_SHOW_CALLSIGN)
         port_to_use->println(callsign);
       #endif
@@ -15424,7 +15421,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
       user_entered_cw = "";
       x = 0;
       while (serialwaitloop) {
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
         if(x < (cw_to_send_to_user.length())){
           send_char(cw_to_send_to_user[x],KEYER_NORMAL);
           #ifdef FEATURE_DISPLAY
@@ -15435,7 +15432,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
         }
 
         while(port_to_use->available() > 0) {
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           incoming_char = port_to_use->read();
           incoming_char = toUpperCase(incoming_char);
           port_to_use->print(incoming_char);
@@ -15481,13 +15478,13 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   
       #ifdef FEATURE_BUTTONS
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           loop1 = 0;
           loop2 = 0;
         }
       #else 
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           loop1 = 0;
           loop2 = 0;
         }    
@@ -15534,14 +15531,14 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
   port_to_use->println(F("Callsign receive practice\r\n"));
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     incoming_char = port_to_use->read();
   }
 
 
 
   while (loop1){
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     if (practice_type_called == PRACTICE_MIXED){
       practice_type = random(PRACTICE_2_CHAR_WORDS,PRACTICE_QSO_WORDS+1);
     } else {
@@ -15600,7 +15597,7 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
     x = 0;
 
     while ((loop2) && (x < (cw_to_send_to_user.length()))) {
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       send_char(cw_to_send_to_user[x],KEYER_NORMAL);
       #ifdef FEATURE_DISPLAY
         display_scroll_print_char(cw_to_send_to_user[x]);
@@ -15617,14 +15614,14 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
 
       #ifdef FEATURE_BUTTONS
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           loop1 = 0;
           loop2 = 0;
           x = 99;
         }
       #else 
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           loop1 = 0;
           loop2 = 0;
           x = 99;
@@ -16222,7 +16219,6 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
 
 
   while (looping){
-    vTaskDelay(0);
     if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
       check_paddles();
       service_dit_dah_buffers();
@@ -16279,7 +16275,6 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
           memory_data_entered = 1;
           #if !defined(OPTION_SAVE_MEMORY_NANOKEYER)
             while ((port_to_use->available()) && (incoming_serial_byte_buffer_size < serial_program_memory_buffer_size)){  // get serial data if available
-              vTaskDelay(0);
               incoming_serial_byte_buffer[incoming_serial_byte_buffer_size] = uppercase(port_to_use->read()); 
               incoming_serial_byte_buffer_size++;
             }  
@@ -16287,7 +16282,6 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
           EEPROM.write((memory_start(memory_number-1)+memory_index),incoming_serial_byte);
           #if !defined(OPTION_SAVE_MEMORY_NANOKEYER)
             while ((port_to_use->available()) && (incoming_serial_byte_buffer_size < serial_program_memory_buffer_size)){  // get serial data if available
-              vTaskDelay(0);
               incoming_serial_byte_buffer[incoming_serial_byte_buffer_size] = uppercase(port_to_use->read()); 
               incoming_serial_byte_buffer_size++;
             }   
@@ -16311,7 +16305,7 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
 
   if ((memory_number_entered) && (memory_data_entered) && (!error_flag)){
     #if defined(HARDWARE_ESP32_DEV)
-    EEPROM.commit(); //SP5IOU 20220129
+      EEPROM.commit(); //SP5IOU 20220129
     #endif
     port_to_use->print(F("\n\rWrote memory "));
     port_to_use->println(memory_number);
@@ -16381,7 +16375,7 @@ byte memory_nonblocking_delay(unsigned long delaytime)
   unsigned long starttime = millis();
 
   while ((millis() - starttime) < delaytime) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     check_paddles();
     #ifdef FEATURE_BUTTONS
       if (((dit_buffer) || (dah_buffer) || (analogbuttonread(0))) && (keyer_machine_mode != BEACON)) {   // exit if the paddle or button0 was hit
@@ -16391,7 +16385,7 @@ byte memory_nonblocking_delay(unsigned long delaytime)
       dit_buffer = 0;
       dah_buffer = 0;
       #ifdef FEATURE_BUTTONS
-        while (analogbuttonread(0)) {vTaskDelay(0);}
+        while (analogbuttonread(0)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
       #endif
       return 1;
     }
@@ -17061,7 +17055,7 @@ byte play_memory(byte memory_number) {
               button0_buffer = 0;
               repeat_memory = 255;
               #ifdef FEATURE_BUTTONS
-                while (analogbuttonread(0)) {vTaskDelay(0);}
+                while (analogbuttonread(0)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
               #endif  
               return 0;
             }
@@ -17072,7 +17066,7 @@ byte play_memory(byte memory_number) {
               button0_buffer = 0;
               repeat_memory = 255;
               #ifdef FEATURE_BUTTONS
-                while (analogbuttonread(0)) {vTaskDelay(0);}
+                while (analogbuttonread(0)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
               #endif  
               return 0;
             }
@@ -17205,19 +17199,19 @@ void program_memory(int memory_number)
   dah_buffer = 0;
   
   #if defined(FEATURE_BUTTONS) && !defined(FEATURE_STRAIGHT_KEY)
-    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0))) {vTaskDelay(0); }  // loop until user starts sending or hits the button
+    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0))) {vTaskDelay(1 / portTICK_PERIOD_MS); }  // loop until user starts sending or hits the button
   #endif
 
   #if defined(FEATURE_BUTTONS) && defined(FEATURE_STRAIGHT_KEY)
     #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
-      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { vTaskDelay(0);}  // loop until user starts sending or hits the button
+      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { vTaskDelay(1 / portTICK_PERIOD_MS);}  // loop until user starts sending or hits the button
     #else
-      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { vTaskDelay(0);}  // loop until user starts sending or hits the button
+      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { vTaskDelay(1 / portTICK_PERIOD_MS);}  // loop until user starts sending or hits the button
     #endif
   #endif
 
   while (loop2) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     #ifdef DEBUG_MEMORY_WRITE
       debug_serial_port->println(F("program_memory: entering loop2\r"));
     #endif
@@ -17229,7 +17223,7 @@ void program_memory(int memory_number)
 
 
     while (loop1) {
-       vTaskDelay(0);
+       vTaskDelay(1 / portTICK_PERIOD_MS);
        check_paddles();
        if (dit_buffer) {
          sending_mode = MANUAL_SENDING;
@@ -17290,7 +17284,7 @@ void program_memory(int memory_number)
 
        #ifdef FEATURE_BUTTONS
          while (analogbuttonread(0)) {    // hit the button to get out of command mode if no paddle was hit
-           vTaskDelay(0);
+           vTaskDelay(1 / portTICK_PERIOD_MS);
            loop1 = 0;
            loop2 = 0;
          }
@@ -17472,7 +17466,7 @@ void read_io_handler(void *pvParameters)
             #endif
             bits = 0x00;
         }
-        vTaskDelay(0);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
     } 
 }
 
@@ -18300,7 +18294,7 @@ void check_eeprom_for_initialization(){
    #endif
   // do an eeprom reset to defaults if paddles are squeezed
   if (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {
-    while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {vTaskDelay(0);}
+    while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {vTaskDelay(1 / portTICK_PERIOD_MS);}
     initialize_eeprom();
   }
   
@@ -18387,7 +18381,7 @@ void initialize_serial_ports(){
             primary_serial_port_baud_rate = PRIMARY_SERIAL_PORT_BAUD;
           #endif  //ifndef OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION
         }
-        while (analogbuttonread(0)) {vTaskDelay(0);}
+        while (analogbuttonread(0)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
       #else //FEATURE_BUTTONS  
         #ifdef OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION
           primary_serial_port_mode = SERIAL_WINKEY_EMULATION;
@@ -20033,7 +20027,7 @@ void initialize_usb()
     #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
     unsigned long start_init = millis();
     while ((millis() - start_init) < 2000){
-      vTaskDelay(0);
+      vTaskDelay(1 / portTICK_PERIOD_MS);
       Usb.Task();
     }
     #ifdef DEBUG_USB
@@ -20153,7 +20147,7 @@ uint8_t read_capacitive_pin(int pinToMeasure) {
   // Discharge the pin first by setting it low and output
   *port &= ~(bitmask);
   *ddr  |= bitmask;
-  vTaskDelay(0);
+  vTaskDelay(1 / portTICK_PERIOD_MS);
   // Prevent the timer IRQ from disturbing our measurement
   noInterrupts();
   // Make the pin an input with the internal pull-up on
@@ -20364,7 +20358,7 @@ int paddle_pin_read(int pin_to_read) {
     #if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
         #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
             // !OPTION_INVERT_PADDLE_PIN_LOGIC
-            if (pin_to_read == paddle_left) {              
+            if (pin_to_read == paddle_left) {                            
               //debug_serial_port->print("Paddle Left  Val = "); debug_serial_port->println(paddle_left_state);
               return (int) paddle_left_state;
             }
@@ -20441,7 +20435,7 @@ void command_alphabet_send_practice(){
   
   do
   {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
     cw_char = get_cw_input_from_user(0);
     if (letter == (char)(convert_cw_number_to_ascii(cw_char))){  
       if (correct_answer_led) {
@@ -20724,7 +20718,7 @@ void service_web_server() {
     valid_request = 0;
 
     while (client.connected()){ 
-      vTaskDelay(0);  
+      vTaskDelay(1 / portTICK_PERIOD_MS);  
       if (client.available()){
         char c = client.read();
      
@@ -20810,7 +20804,7 @@ void service_web_server() {
             web_print_page_404(client);                      
           }
 
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           client.stop();
           web_server_incoming_string = "";  
          }
@@ -23678,7 +23672,7 @@ void update_time(){
         while (1)
         {
     #endif    
-          vTaskDelay(0);
+          vTaskDelay(1 / portTICK_PERIOD_MS);
           #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
                 //uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
@@ -24298,7 +24292,7 @@ static void listSPIFFS(char * path) {
 	DIR* dir = opendir(path);
 	assert(dir != NULL);
 	while (true) {
-    vTaskDelay(0);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
 		struct dirent*pe = readdir(dir);
 		if (!pe) break;
 		ESP_LOGI(__FUNCTION__,"d_name=%s d_ino=%d d_type=%x", pe->d_name,pe->d_ino, pe->d_type);
@@ -24622,13 +24616,13 @@ void main_loop(void)
     //if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
       #if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
         if (keyer_machine_mode == BEACON) {
-            vTaskDelay(0);                                                                 // an odd duration delay before we enter BEACON mode
+            vTaskDelay(1 / portTICK_PERIOD_MS);                                                                 // an odd duration delay before we enter BEACON mode
             #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
                 unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
             #endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
 
             while (keyer_machine_mode == BEACON) {                                        // if we're in beacon mode, just keep playing memory 1
-                vTaskDelay(0);
+                vTaskDelay(1 / portTICK_PERIOD_MS);
                 if (!send_buffer_bytes) {
                     add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
                     add_to_send_buffer(0);
