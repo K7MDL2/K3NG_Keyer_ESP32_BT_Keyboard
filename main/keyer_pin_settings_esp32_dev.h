@@ -66,8 +66,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY
     #else
-      #define paddle_left     3 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-      #define paddle_right    5 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_left     21 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_right    22 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  25 //TXD0
       #endif //FEATURE_STRAIGHT_KEY
@@ -119,11 +119,6 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY
-      #define TOUCH_X   300     // x  300 default
-      #define TOUCH_X1  3598    // x1 3600 default
-      #define TOUCH_Y   345     // y  300 default
-      #define TOUCH_Y1  3549    // y1 3600 default
-      #define TOUCH_BITS 1      // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
     #else
       #define paddle_left     3 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
       #define paddle_right    5 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
@@ -131,6 +126,11 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  39
       #endif //FEATURE_STRAIGHT_KEY
     #endif
+    #define TOUCH_X   300     // x  300 default
+    #define TOUCH_X1  3598    // x1 3600 default
+    #define TOUCH_Y   345     // y  300 default
+    #define TOUCH_Y1  3549    // y1 3600 default
+    #define TOUCH_BITS  (0x01) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
     #define tx_key_line_1   18 // (high = key down/tx on)
     #define sidetone_line   26 //26 connect a passive buzzer for sidetone
     #define audio_enable     4  // audio amp enable = LOW for this display (only?)
@@ -154,7 +154,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define tx_inhibit_pin    0
   #define tx_pause_pin      0
   #ifdef FEATURE_STRAIGHT_KEY
-    #define pin_straight_key 1 //TXD0
+    #define pin_straight_key 27 //TXD0
   #endif //FEATURE_STRAIGHT_KEY
 #endif
 

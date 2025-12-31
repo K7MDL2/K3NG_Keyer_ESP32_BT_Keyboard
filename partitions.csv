@@ -1,15 +1,7 @@
-# Name,   Type, SubType, Offset,  Size, Flags
-# Note: if you change the phy_init or app partition offset, make sure to change the offset in Kconfig.projbuild
-#nvs,      data, nvs,     0x9000,  0x6000,
-#phy_init, data, phy,     0xF000,  0x1000,
-#factory,  app,  factory, 0x20000, 2M,
-
-nvs,      data, nvs,     ,        0x6000,
-phy_init, data, phy,     ,        0x1000,
-factory,  app,  factory, ,        2M,
-
-# 64K storage size is 0x10000
-#storage,  data, spiffs,        , 0xF0000, 
-storage1,  data, spiffs,        , 0x10000, 
-storage2,  data, spiffs,        , 0x10000, 
-#storage3,  data, spiffs,        , 0x80000, 
+# ESP-IDF Partition Table
+# Name, Type, SubType, Offset, Size, Flags
+nvs,data,nvs,,0x6000,
+phy_init,data,phy,,0x1000,
+factory,app,factory,,2M,
+storage1,data,spiffs,,0x10000,
+storage2,data,spiffs,,0x10000,

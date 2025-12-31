@@ -1,6 +1,4 @@
 /*
-GENERIC STM32F103C                                                                                   
-
 
 */
 
