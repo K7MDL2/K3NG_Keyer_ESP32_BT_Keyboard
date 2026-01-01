@@ -18883,23 +18883,23 @@ void popup(bool show)
   #endif
 }
 
+#ifdef FEATURE_TOUCH_DISPLAY
 void refresh_button_row(uint8_t row) {
-  char text[6] = {};
   lcd.setFreeFont(TFT_FONT_SMALL);
-  for (int t=0; t< NUM_KEYS; t++) {
+  for (int t=0; t < NUM_KEYS; t++) {
     if (key[t].row == row) {
       if (key[t].hold) {
-        strcpy(text, key[t].text_on);
-        btn[key[t].btn_idx].p_btn.drawButton(true, text);
+        debug_serial_port->print(F("Hold ON ")); debug_serial_port->println(key[t].text_on);
+        btn[key[t].btn_idx].p_btn.drawButton(true, key[t].text_on);
       } else {
-        strcpy(text, key[t].text_off);
-        //debug_serial_port->println(text);
-        btn[key[t].btn_idx].p_btn.drawButton(false, text);
+        debug_serial_port->print(F("Hold OFF "));debug_serial_port->println(key[t].text_off);
+        btn[key[t].btn_idx].p_btn.drawButton(false, key[t].text_off);
       }
     }
   }
   lcd.setFreeFont(TFT_FONT_MEDIUM);
 }
+#endif
 
 void create_buttons() {
   #ifdef FEATURE_TOUCH_DISPLAY
@@ -19003,20 +19003,22 @@ void process_buttons() { // (uint8_t button_ID) {
             repeat_key_ID = key_ID;  
             repeat_key = true;
             queueadd(PS2_F1_ALT);   // add char to the queue              
-          } 
+          }
+          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
           break;
 
         case BUTTON_2: // This will cycle the memory # each time it is pressed.           
           if (BtnX_active == 0 || BtnX_active == key_ID) {      // another keyboard queue key is active until canceled , allow if Button 2     
             if (mem_number < number_of_memories) {// cycle through the 10 memories
               length = print_memory(mem_number, mem_string);  // Get memory string
-              sprintf(popup_text, "Memory %d:%s", (int)mem_number+1, mem_string);           
-              popup(true);            // post up the popup_text string in window
+              sprintf(popup_text, "Memory %d:%s", (int)mem_number+1, mem_string);                         
               mem_number++;           // next memory if buton pressed again  
               key[key_ID].hold = true;
+              BtnX_active = key_ID;
               repeat_key_ID = key_ID;  
               repeat_key = true;
-              BtnX_active = key_ID;
+              refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
+              popup(true);            // post up the popup_text string in window
             }
             else {  // stop repeat.  Use CW_BOX to remove window like all other keys.     
               repeat_key_ID = 255;
@@ -19045,12 +19047,14 @@ void process_buttons() { // (uint8_t button_ID) {
             debug_serial_port->println(F("RESUME"));   
             key[key_ID].hold = false;           
           }
+          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
           break;
 
         case BUTTON_6:
           if (BtnX_active != 0) break;  // another keyboard queue key is active until canceled
           key[key_ID].hold = true;
-          BtnX_active = key_ID;  // Hold button state ON          
+          BtnX_active = key_ID;  // Hold button state ON   
+          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window       
           strcpy(popup_text, btn6_text);
           popup_toggle();
           break;
@@ -19059,6 +19063,7 @@ void process_buttons() { // (uint8_t button_ID) {
           if (BtnX_active != 0) break;   // another keyboard queue key is active until canceled
           key[key_ID].hold = true;
           BtnX_active = key_ID;  // Hold button state ON
+          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
           strcpy(popup_text, btn7_text);
           popup_toggle();
           break;
@@ -19067,6 +19072,7 @@ void process_buttons() { // (uint8_t button_ID) {
           if (BtnX_active != 0) break;   // another keyboard queue key is active until canceled
           key[key_ID].hold = true;
           BtnX_active = key_ID;  // Hold button state ON
+          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
           strcpy(popup_text, btn8_text);
           popup_toggle();
           break;
@@ -19080,6 +19086,7 @@ void process_buttons() { // (uint8_t button_ID) {
           keyboard_button = 0;
           mem_number = 0;
           clear_holds();
+          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
           debug_serial_port->print(F("BtnX Active="));debug_serial_port->print(BtnX_active);
           debug_serial_port->print(F("  PTT="));debug_serial_port->println(ptt_line_activated);
           //if (BtnX_active || ptt_line_activated) {    
@@ -19092,7 +19099,6 @@ void process_buttons() { // (uint8_t button_ID) {
       }      
       last_button = key_ID;  // update last button ID      
     }
-    refresh_button_row(button_row);
   #endif
 }
 
