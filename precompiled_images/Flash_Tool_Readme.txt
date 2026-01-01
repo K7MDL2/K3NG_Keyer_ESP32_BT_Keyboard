@@ -10,8 +10,8 @@ https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Using-the-Flash-Down
 There are 3 files plus this readme file.  The filenames are listed below along with the offset number that you will enter with it in the Flash Download Tool UI.
 
 1. Bootloader.bin   0x1000 (1 plus 3 zeros)
-2. K3NG_keyer.bin  0x10000  (2 plus 4 zeros)
-3. partition-table.bin 0x8000 (9 plus 3 zeros)
+2. K3NG_keyer.bin  0x20000  (2 plus 4 zeros)
+3. partition-table.bin 0x9000 (9 plus 3 zeros)
 
 
 Enter the above data into the tool, select your com port connected to your CPU, then hit START.  It runs fairly quick.  
