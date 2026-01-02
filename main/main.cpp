@@ -1953,8 +1953,8 @@ void mydelay(uint32_t _ms);
   bool popup_active = false;
   uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
   bool button_active = false;
-  uint8_t repeat_key_ID = false;
   uint8_t button_row = 0;  // default to row 1
+  uint16_t BtnX_active = 0;  // tracks if a key_ID is active across touches
  
   const uint8_t buttonCount = 6;  // sizeof(btn) / sizeof(btn[0]);
   struct BTN_State {
@@ -1990,6 +1990,7 @@ void mydelay(uint32_t _ms);
   void process_buttons();
   int touch_button_available();
   void refresh_button_row(uint8_t row);
+  void memX_key(uint16_t key_ID, uint8_t memory_number);
   
   #ifdef USE_TOUCH_TASK
     void check_touch_buttons(void * pvParameters);
@@ -2086,7 +2087,6 @@ byte zero = 0;
 byte iambic_flag = 0;
 unsigned long last_config_write = 0;
 uint16_t memory_area_end = 0;
-int keyboard_button = 0;  // used at end to detect if a valid button was just pressed.
 
 #ifdef FEATURE_SLEEP
   unsigned long last_activity_time = 0;
@@ -3646,7 +3646,7 @@ int bt_keyboard_available() {
 }
 #endif // FEATURE_BT_KEYBOARD
 
-int touch_key_read() {  // if touch_button_available then ther eis a non-zero touch key value set in keyboard_button
+int touch_key_read() {  // if touch_button_available then ther eis a non-zero touch key value set in button_active
   #if defined(FEATURE_TOUCH_DISPLAY)
     #ifndef USE_TOUCH_TASK
       check_touch_buttons();    
@@ -17483,7 +17483,7 @@ static void IRAM_ATTR paddle_intr_handler(void *arg)
 //-------------------------------------------------------------------
 void read_io_handler(void *pvParameters)
 {
-    EventBits_t e_bits;
+    //EventBits_t e_bits;
     uint16_t bits = 0;
     mydelay(100);
     while (1)
@@ -18889,10 +18889,10 @@ void refresh_button_row(uint8_t row) {
   for (int t=0; t < NUM_KEYS; t++) {
     if (key[t].row == row) {
       if (key[t].hold) {
-        debug_serial_port->print(F("Hold ON ")); debug_serial_port->println(key[t].text_on);
+        //debug_serial_port->print(F("Hold ON ")); debug_serial_port->println(key[t].text_on);
         btn[key[t].btn_idx].p_btn.drawButton(true, key[t].text_on);
       } else {
-        debug_serial_port->print(F("Hold OFF "));debug_serial_port->println(key[t].text_off);
+        //debug_serial_port->print(F("Hold OFF "));debug_serial_port->println(key[t].text_off);
         btn[key[t].btn_idx].p_btn.drawButton(false, key[t].text_off);
       }
     }
@@ -18918,12 +18918,89 @@ void create_buttons() {
   #endif
 }
 
-void clear_holds() {
+void clear_holds_key() {
   for (int t = 0; t < NUM_KEYS; t++) {   // clear any button in hold state
-    if (key[t].hold) {
-      debug_serial_port->print(F("ESC: Btn was in HOLD: "));debug_serial_port->println(key[t].text_off);
-    }
+    //if (key[t].hold) {
+      //debug_serial_port->print(F("ESC: Btn was in HOLD: "));debug_serial_port->println(key[t].text_off);
+    //}
     key[t].hold = false;  
+  }
+}
+
+void generic_popup_key(uint16_t key_ID, const char* msg_text) {
+  if (BtnX_active == 0) { //}  || BtnX_active == key_ID) {       // another keyboard queue key is active until canceled  
+  
+    debug_serial_port->print(F("Generic PopUp Key ID= ")); debug_serial_port->print(key_ID);
+    debug_serial_port->print(F("  Text: ")); debug_serial_port->print(msg_text);        
+    debug_serial_port->print(F("  Len: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].len);    
+
+    if (btn[key[key_ID].btn_idx].len == 1) {  // short press   
+      BtnX_active = key_ID;  // Do not hold state on
+      key[key_ID].hold = false;
+      refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window       
+      strcpy(popup_text, msg_text);    
+      debug_serial_port->print(F("Short press for key ")); debug_serial_port->println(key[key_ID].text_on);  
+      popup_toggle();
+    } else {  // long press      
+      BtnX_active = key_ID;  // Hold button state ON
+      key[key_ID].hold = true;
+      refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window       
+      strcpy(popup_text, msg_text);
+      debug_serial_port->print(F("Long press for key ")); debug_serial_port->println(key[key_ID].text_off);
+      //  Do something different
+    }
+  }
+}
+
+// Send memory #X on press, repeats memeory #X on long press
+void memX_key(uint16_t key_ID, uint8_t memory_number) {  
+  //if (BtnX_active != 0 && BtnX_active != key_ID) return;       // another keyboard queue key is active until canceled                   
+  if (BtnX_active != 0) return;       // another keyboard queue key is active until canceled                   
+  
+  //debug_serial_port->print(F("Memory Key ID= ")); debug_serial_port->print(key_ID);
+  //debug_serial_port->print(F("  Memory = ")); debug_serial_port->println(memory_number);
+
+  if (btn[key[key_ID].btn_idx].len == 1) {  // short press
+    BtnX_active = 0;  // Do not hold state on
+    key[key_ID].hold = false;
+    queueadd(PS2_F1 + memory_number - 1);   // add char to the queue
+  } else {  // long press
+    BtnX_active = key_ID;  // Hold button state ON
+    key[key_ID].hold = true;
+    queueadd(PS2_F1_ALT + memory_number - 1);   // add char to the queue              
+  }
+  refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
+}
+
+void pause_btn_toggle_key(uint16_t key_ID) {
+  queueadd(PS2_TAB);   // Pause/Resume
+  if (!pause_sending_buffer) {
+    debug_serial_port->println(F("PAUSE"));
+    key[key_ID].hold = true;      
+  } else {
+    debug_serial_port->println(F("RESUME"));   
+    key[key_ID].hold = false;           
+  }
+  refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
+}
+
+void list_memory_key(uint16_t key_ID, uint8_t memory_number) {
+  char mem_string[LCD_COLUMNS*LCD_ROWS] = {};
+
+  if (BtnX_active == 0 || BtnX_active == key_ID) {      // another keyboard queue key is active until canceled , allow if Button 2     
+    if (memory_number < number_of_memories) {// cycle through the 10 memories
+      int length = print_memory(memory_number, mem_string);  // Get memory string
+      sprintf(popup_text, "Memory %d:%s len=%d", (int)memory_number+1, mem_string, length);
+      //memory_number++;           // next memory if buton pressed again  
+      key[key_ID].hold = true;
+      BtnX_active = key_ID;
+      refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
+      popup(true);            // post up the popup_text string in window
+    }
+    else {  // stop repeat.  Use CW_BOX to remove window like all other keys.     
+      key[key_ID].hold = false;
+      memory_number = 0;
+    }
   }
 }
 
@@ -18933,14 +19010,10 @@ void clear_holds() {
 // The button row counter is reset to 0 if it exceeds the number of button rows.
 void process_buttons() { // (uint8_t button_ID) {
   // Process button presses
-  #ifdef FEATURE_TOUCH_DISPLAY    
-    int button, length;
-    char mem_string[LCD_COLUMNS*LCD_ROWS] = {};
-    static byte mem_number = 0;
-    static int BtnX_active = 0;
+  #ifdef FEATURE_TOUCH_DISPLAY        
     static int last_button = 0;
-    static uint32_t scanTime = millis();
-    int key_ID = 0;
+    uint16_t key_ID = 0;
+    static uint8_t mem_number = 0;
 
     //debug_serial_port->print(F("button active = ")); debug_serial_port->println(button_active);
 
@@ -18950,6 +19023,11 @@ void process_buttons() { // (uint8_t button_ID) {
       if (btn[key[t].btn_idx].p_btn.isPressed() && (key[t].row == button_row || key[t].row == 255))  {  // Only look at current button row keys or CW_BOX
         key_ID = t;  // flag the latest touched button, converted to key #
         debug_serial_port->print(F("\nKey_ID:")); debug_serial_port->print(key_ID);
+        if (btn[key[t].btn_idx].len == 0 || btn[key[t].btn_idx].len == 2) {
+          debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[t].btn_idx].len); 
+          debug_serial_port->print(F("  Invalid Duration: ")); debug_serial_port->println(btn[key[t].btn_idx].duration);
+          return;
+        }
         debug_serial_port->print(F("  Row:" )); debug_serial_port->print(key[t].row);
         debug_serial_port->print(F("  Label: ")); debug_serial_port->print(key[t].text_off);
         debug_serial_port->print(F("  Hold: ")); debug_serial_port->print(key[t].hold);
@@ -18960,145 +19038,68 @@ void process_buttons() { // (uint8_t button_ID) {
         break;        
       }      
     }
-    
-    if (btn[key[key_ID].btn_idx].p_btn.isPressed() && (key_ID >= buttonCount || btn[key[key_ID].btn_idx].len == 0 || btn[key[key_ID].btn_idx].len == 2)) {
-      debug_serial_port->print(F("\nKey ID= ")); debug_serial_port->print(key_ID);
-      debug_serial_port->print(F("   Invalid Duration: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].duration);
-      return;
-    }
-    
-    // set to true if only want to process this button (along with CW_BOX to reset this)  
-    static bool repeat_key = false;  // also set the repeat_key_ID to specify which key is repeating
 
     // F-Key (always btn_idx == 0) cycles through rows of action buttons - button_row is the top dawg
     if (key_ID == BUTTON_F1 || key_ID == BUTTON_F2) {
       if (button_row == 0) {
         button_row = 1; // switch to row 2 if button_row = 0      
-        debug_serial_port->println("Switch to Row 2");
+        //debug_serial_port->println("Switch to Row 2");
       } else {
         button_row = 0;
-        debug_serial_port->println("Switch to Row 1");
+        //debug_serial_port->println("Switch to Row 1");
       }
       refresh_button_row(button_row);
       return;
     }
 
-    // process the action buttons in each row
-    //button = button_ID + (button_row * 10);
-    
+    // process the action buttons in each row    
     // Let CW Box, WPM, PAUSE keys through even when other keys are active
-    if (1) {
-    //if ((repeat_key && key_ID == repeat_key_ID)|| !repeat_key || key_ID == BUTTON_3 || key_ID == BUTTON_4 || key_ID == BUTTON_5 || key_ID == CW_BOX) { //} || key_ID == CW_BOX2) {  // filter keys if repeat on
-    //if (button != last_button || button == CW_BOX1 || button == CW_BOX2) {      
-      switch (key_ID) {
-        case BUTTON_1:  
-          if (BtnX_active != 0) break;       // another keyboard queue key is active until canceled                   
-          if (btn[key_ID].len == 1) {  // short press
-            BtnX_active = 0;  // Do not hold state on
-            key[key_ID].hold = false;
-            queueadd(PS2_F1);   // add char to the queue              
-          } else {  // long press
-            BtnX_active = key_ID;  // Hold button state ON
-            key[key_ID].hold = true;
-            repeat_key_ID = key_ID;  
-            repeat_key = true;
-            queueadd(PS2_F1_ALT);   // add char to the queue              
-          }
-          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
-          break;
+       
+    switch (key_ID) {
+      case BUTTON_1:  
+        memX_key(key_ID, 1); break;  // Memory 1
 
-        case BUTTON_2: // This will cycle the memory # each time it is pressed.           
-          if (BtnX_active == 0 || BtnX_active == key_ID) {      // another keyboard queue key is active until canceled , allow if Button 2     
-            if (mem_number < number_of_memories) {// cycle through the 10 memories
-              length = print_memory(mem_number, mem_string);  // Get memory string
-              sprintf(popup_text, "Memory %d:%s", (int)mem_number+1, mem_string);                         
-              mem_number++;           // next memory if buton pressed again  
-              key[key_ID].hold = true;
-              BtnX_active = key_ID;
-              repeat_key_ID = key_ID;  
-              repeat_key = true;
-              refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
-              popup(true);            // post up the popup_text string in window
-            }
-            else {  // stop repeat.  Use CW_BOX to remove window like all other keys.     
-              repeat_key_ID = 255;
-              repeat_key = false;
-              key[key_ID].hold = false;
-            }
-          }
-          break;
-
-        case BUTTON_3:
-          queueadd(PS2_UPARROW);   // add char to the queue
-          break;
-
-        case BUTTON_4:
-          queueadd(PS2_DOWNARROW);   // add char to the queue
-          break;
-
-        /// Row 2 buttons ///
-
-        case BUTTON_5: // btn1 with button == 1
-          queueadd(PS2_TAB);
-          if (!pause_sending_buffer) {
-            debug_serial_port->println(F("PAUSE"));
-            key[key_ID].hold = true;      
-          } else {
-            debug_serial_port->println(F("RESUME"));   
-            key[key_ID].hold = false;           
-          }
-          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
-          break;
-
-        case BUTTON_6:
-          if (BtnX_active != 0) break;  // another keyboard queue key is active until canceled
-          key[key_ID].hold = true;
-          BtnX_active = key_ID;  // Hold button state ON   
-          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window       
-          strcpy(popup_text, btn6_text);
-          popup_toggle();
-          break;
-
-        case BUTTON_7:
-          if (BtnX_active != 0) break;   // another keyboard queue key is active until canceled
-          key[key_ID].hold = true;
-          BtnX_active = key_ID;  // Hold button state ON
-          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
-          strcpy(popup_text, btn7_text);
-          popup_toggle();
-          break;
-
-        case BUTTON_8:
-          if (BtnX_active != 0) break;   // another keyboard queue key is active until canceled
-          key[key_ID].hold = true;
-          BtnX_active = key_ID;  // Hold button state ON
-          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
-          strcpy(popup_text, btn8_text);
-          popup_toggle();
-          break;
-
-        case CW_BOX:
-        default: 
-          debug_serial_port->println(F("Button: CW Box or Default"));
-          if (popup_active) popup(false);
-          repeat_key_ID = 255;
-          repeat_key = false;
-          keyboard_button = 0;
+      case BUTTON_2: // This will cycle the memory # each time it is pressed.                   
+        list_memory_key(key_ID, mem_number);
+        mem_number++;
+        if (mem_number >= number_of_memories)
           mem_number = 0;
-          clear_holds();
-          refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
-          debug_serial_port->print(F("BtnX Active="));debug_serial_port->print(BtnX_active);
-          debug_serial_port->print(F("  PTT="));debug_serial_port->println(ptt_line_activated);
-          //if (BtnX_active || ptt_line_activated) {    
-            debug_serial_port->println(F("Sending Keyboard ESC key"));       
-            BtnX_active = 0;        
-            queueflush(); 
-            queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer                  
-          //}
-          break;
-      }      
-      last_button = key_ID;  // update last button ID      
-    }
+        break;
+
+      case BUTTON_3:
+        queueadd(PS2_UPARROW); break;  // add char to the queue - WPM Up
+
+      case BUTTON_4:
+        queueadd(PS2_DOWNARROW); break;  // add char to the queue - WPM down          
+
+      /// Row 2 buttons ///
+
+      case BUTTON_5:
+        pause_btn_toggle_key(key_ID); break;
+
+      case BUTTON_6:
+        generic_popup_key(key_ID, btn6_text); break;
+
+      case BUTTON_7:
+        generic_popup_key(key_ID, btn7_text); break;
+
+      case BUTTON_8:
+        generic_popup_key(key_ID, btn8_text); break;
+
+      case CW_BOX:
+      default: 
+        debug_serial_port->println(F("Button: CW Box or Default"));
+        if (popup_active) popup(false);
+        clear_holds_key();  // reset key[].hold for all keys
+        mem_number = 0;
+        refresh_button_row(button_row);   
+        //debug_serial_port->println(F("Sending Keyboard ESC key"));       
+        BtnX_active = 0;        
+        queueflush(); 
+        queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer                  
+        break;
+    }      
+    last_button = key_ID;  // update last button ID      
   #endif
 }
 
@@ -19119,7 +19120,6 @@ void process_buttons() { // (uint8_t button_ID) {
       {
   #endif
         // Check for touch action, determine if they are for a configured button, or something else      
-        uint8_t button_ID = 255;  // default to no button pressed
         static uint32_t scanTime = millis();
         static uint32_t tpTime = millis();
         uint32_t duration = 0;
@@ -19140,16 +19140,15 @@ void process_buttons() { // (uint8_t button_ID) {
             #endif
             
             #ifdef FEATURE_TFT_HOSYOND_320x480_LCD              
-              //if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex               
-                pressed = lcd.getTouch(&t_x, &t_y, threshold);
+              //if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex  
+              uint16_t threshold = 320;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also              
+              pressed = lcd.getTouch(&t_x, &t_y, threshold);
               //  xSemaphoreGive (xMutex);  // release the mutex 
               //}
             #endif              
                       
               if (pressed) {              
               //debug_serial_port->printf("GetTouch: x:%d y:%d z:%d\n", t_x, t_y, threshold);
-                
-              button_ID = 255;
               //button_active = false;     // set active flag if any valid button triggered on       
 
               for (uint8_t b = 0; b < buttonCount; b++) {
@@ -19163,7 +19162,7 @@ void process_buttons() { // (uint8_t button_ID) {
 
                   tpTime = millis();
                   while (pressed) {  // measure duration of button press
-                    mydelay(30);
+                    mydelay(20);
                     
                     #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD  
                       tp.read();
@@ -19177,45 +19176,40 @@ void process_buttons() { // (uint8_t button_ID) {
                       //}               
                     #endif
                     
-                    duration += (millis() - tpTime);                  
-
-                    if (duration >= 120 && duration < 700) {               
+                    duration += (millis() - tpTime);      // add each touch to total duration            
+                    if (duration >= 100 && duration < 700) {               
                       //debug_serial_port->print(F("*Short duration = ")); debug_serial_port->println(duration);
                       btn[b].len = 1;
                       btn[b].duration = duration;
                     }
-
                     if (duration >= 700 && duration < 1800) {  // using medium length zone as a buffer band, not used for keys
                       //debug_serial_port->print(F("**Long duration = ")); debug_serial_port->println(duration);      
                       btn[b].len = 2; 
                       btn[b].duration = duration;                   
                     } 
-
                     if (duration >= 1800) {
                       //debug_serial_port->print(F("***Very Long duration = ")); debug_serial_port->println(duration);      
                       btn[b].len = 3;
                       btn[b].duration = duration;
                     }
-
                     if (btn[b].len == 0) 
                       btn[b].duration = duration;
                   }
 
-                  if (btn[b].len != 1 && btn[b].len != 3) {  // skip - press duration too short or in middle guard band                        
+                  if (btn[b].len == 0) {  // skip - press duration too short or in middle guard band                        
                     btn[b].p_btn.press(false); 
                     break;
                   }
                   btn[b].p_btn.press(true); // record state info for valid button. - process_buttons() will pick up event and add it to the ch queue)
-                  button_ID = b;
                   button_active = true;     // set active flag if any valid button triggered on                                 
                 } else {
                   btn[b].p_btn.press(false); // touch landed outside current button hot spot, set to false
                 }                   
               }   // loop through button list and update state for each 
             }   // touched
-          }   // end of scan period
-          mydelay(10);
+          }   // end of scan period          
       #ifdef USE_TOUCH_TASK
+      mydelay(10);
       } // end of while loop for task mode 
       debug_serial_port->println("Error: Exited Check Buttons Task Loop");
       #endif   
