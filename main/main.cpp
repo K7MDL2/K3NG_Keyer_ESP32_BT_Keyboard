@@ -1383,7 +1383,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2025.12.31"
+#define CODE_VERSION "K7MDL-2026.1.1"
 #define eeprom_magic_number 47             // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1930,25 +1930,24 @@ void mydelay(uint32_t _ms);
 // Buttons and Popup Window for Touch Displays
 //---------------------------------------------------------------------
 
-  // row 1 buttons which is calculated as button_id + (button_row*10)
   #define BUTTON_F1 0
-  #define BUTTON_1  1
-  #define BUTTON_2  2
-  #define BUTTON_3  3
-  #define BUTTON_4  4
-  
-  // row 2 buttons which is calculated as button_id + (button_row*10)
+  #define BUTTON_PAUSE  1
+  #define BUTTON_PTT_ENABLE  2
+  #define BUTTON_WPM_UP  3
+  #define BUTTON_WPM_DN  4
   #define BUTTON_F2 5
-  #define BUTTON_5  6
-  #define BUTTON_6  7
-  #define BUTTON_7  8
-  #define BUTTON_8  9
+  #define BUTTON_MEM_1  6
+  #define BUTTON_MEM_2  7
+  #define BUTTON_MEM_3  8
+  #define BUTTON_MEM_4  9
+  #define BUTTON_F3 10
+  #define BUTTON_MEM_LIST  11
+  #define BUTTON_POPUP_2  12
+  #define BUTTON_POPUP_3  13
+  #define BUTTON_POPUP_4  14
+  #define CW_BOX    15
 
-  // non button row touch zones
-  #define CW_BOX    10
-  //#define CW_BOX2   11
-
-  #define NUM_BUTTON_ROWS  2; // number of rows of buttons
+ 
   char popup_text[(LCD_COLUMNS*LCD_ROWS)+20] = {}; // Text to display in popup
   bool popup_active = false;
   uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
@@ -1963,7 +1962,8 @@ void mydelay(uint32_t _ms);
     uint32_t duration;
   } btn[buttonCount] = {};
   
-  const int NUM_KEYS = 11;
+  const int NUM_BUTTON_ROWS = 3; // number of rows of buttons
+  const int NUM_KEYS = 15+1;
   struct Keys {
     //struct BTN_State btn;  // pointer to touch button structure
     const uint8_t btn_idx;  // button array index - 0-5 for 6 buttons in a row
@@ -1974,17 +1974,25 @@ void mydelay(uint32_t _ms);
     const char text_off[6]; // key text when not highlighted
     const char text_on[6];  // key label text when highlighted
   } key[NUM_KEYS] = { 
-    {0, 0, false, false, false, "F1", "F1"},   // BUTTON_0
-    {1, 0, false, false, false, "M1\0", "M1-R\0"}, // BUTTON_1
-    {2, 0, false, false, false, "MEM\0", "MEM\0"}, // BUTTON_2
-    {3, 0, false, false, false, "W-U\0", "W-U\0"}, // BUTTON_3
-    {4, 0, false, false, false, "W-D\0", "W-D\0"}, // BUTTON_4
-    {0, 1, false, false, false, "F2\0", "F2\0"},   // BUTTON_5
-    {1, 1, false, false, false, "WAIT\0", "WAIT\0"},// BUTTON_6
-    {2, 1, false, false, false, "6\0", "6\0"},     // BUTTON_7
-    {3, 1, false, false, false, "7\0", "7\0"},     // BUTTON_8
-    {4, 1, false, false, false, "8\0", "8\0"},     // BUTTON_9
-    {5, 255, false, false, false, "", ""}            // CW_BOX
+    {0, 0, false, false, false, "F1", "F1"},          // BUTTON_F1
+    {1, 0, false, false, false, "WAIT\0", "WAIT\0"},  // BUTTON_PAUSE
+    {2, 0, false, false, false, "PTTE\0", "PTTD\0"},  // BUTTON_PTT_ENABLE
+    {3, 0, false, false, false, "W-U\0", "W-U\0"},    // BUTTON_WPM_UP
+    {4, 0, false, false, false, "W-D\0", "W-D\0"},    // BUTTON_WPM_DN
+
+    {0, 1, false, false, false, "F2\0", "F2\0"},      // BUTTON_F2
+    {1, 1, false, false, false, "M1\0", "M1-R\0"},    // BUTTON_MEM_1
+    {2, 1, false, false, false, "M2\0", "M2-R\0"},    // BUTTON_MEM_2
+    {3, 1, false, false, false, "M3\0", "M3-R\0"},    // BUTTON_MEM_3
+    {4, 1, false, false, false, "M4\0", "M4-R\0"},    // BUTTON_MEM_4
+
+    {0, 2, false, false, false, "F3\0", "F3\0"},      // BUTTON_F3
+    {1, 2, false, false, false, "MEM\0", "MEM\0"},    // BUTTON_MEM_LIST
+    {2, 2, false, false, false, "MSG2\0", "MSG2\0"},  // BUTTON_POPUP_2
+    {3, 2, false, false, false, "MSG3\0", "MSG3\0"},  // BUTTON_POPUP_3
+    {4, 2, false, false, false, "MSG4\0", "MSG4\0"},  // BUTTON_POPUP_4
+    
+    {5, 255, false, false, false, "", ""}             // CW_BOX
   };
 
   void process_buttons();
@@ -4085,7 +4093,6 @@ void check_for_dirty_configuration()
       debug_serial_port->println(F("check_for_dirty_configuration: wrote config\n"));
     #endif
   }
-
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -4107,7 +4114,6 @@ void check_memory_repeat() {
   }
   
   if (repeat_memory == 255){last_memory_repeat_time = 0;}
-
 }
 #endif
 
@@ -18698,9 +18704,10 @@ void mydelay(uint32_t _ms)
 
 // Text associated with touch buttons
 // Text content sized to fit in teh window.  Later desire to make scrllable with button and/or touch gesture
-const char btn6_text[] = {"This is even longer test text for Button #6"};
-const char btn7_text[] = {"This is for Button #7"};
-const char btn8_text[] = {"This is test text for Button #8"};
+const char btn1_text[] = {"Future Button Text Msg #1"};
+const char btn2_text[] = {"This is even longer test text Msg #2"};
+const char btn3_text[] = {"This is for Button Msg #3"};
+const char btn4_text[] = {"This is test text Msg #4"};
 
 void initialize_display() {
 
@@ -18930,9 +18937,9 @@ void clear_holds_key() {
 void generic_popup_key(uint16_t key_ID, const char* msg_text) {
   if (BtnX_active == 0) { //}  || BtnX_active == key_ID) {       // another keyboard queue key is active until canceled  
   
-    debug_serial_port->print(F("Generic PopUp Key ID= ")); debug_serial_port->print(key_ID);
-    debug_serial_port->print(F("  Text: ")); debug_serial_port->print(msg_text);        
-    debug_serial_port->print(F("  Len: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].len);    
+    //debug_serial_port->print(F("Generic PopUp Key ID= ")); debug_serial_port->print(key_ID);
+    //debug_serial_port->print(F("  Text: ")); debug_serial_port->print(msg_text);        
+    //debug_serial_port->print(F("  Len: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].len);    
 
     if (btn[key[key_ID].btn_idx].len == 1) {  // short press   
       BtnX_active = key_ID;  // Do not hold state on
@@ -18954,7 +18961,6 @@ void generic_popup_key(uint16_t key_ID, const char* msg_text) {
 
 // Send memory #X on press, repeats memeory #X on long press
 void memX_key(uint16_t key_ID, uint8_t memory_number) {  
-  //if (BtnX_active != 0 && BtnX_active != key_ID) return;       // another keyboard queue key is active until canceled                   
   if (BtnX_active != 0) return;       // another keyboard queue key is active until canceled                   
   
   //debug_serial_port->print(F("Memory Key ID= ")); debug_serial_port->print(key_ID);
@@ -19040,51 +19046,57 @@ void process_buttons() { // (uint8_t button_ID) {
     }
 
     // F-Key (always btn_idx == 0) cycles through rows of action buttons - button_row is the top dawg
-    if (key_ID == BUTTON_F1 || key_ID == BUTTON_F2) {
-      if (button_row == 0) {
-        button_row = 1; // switch to row 2 if button_row = 0      
-        //debug_serial_port->println("Switch to Row 2");
-      } else {
-        button_row = 0;
-        //debug_serial_port->println("Switch to Row 1");
+    if (key[key_ID].btn_idx == 0) {  // F1, F2, F3, etc are always touch btn0
+      button_row++;
+      if (button_row >= NUM_BUTTON_ROWS) {
+        button_row = 0;        
       }
+      //debug_serial_port->print("Switch to Row "); debug_serial_port->println(button_row);
       refresh_button_row(button_row);
       return;
     }
 
-    // process the action buttons in each row    
-    // Let CW Box, WPM, PAUSE keys through even when other keys are active
-       
+    // process the action buttons
     switch (key_ID) {
-      case BUTTON_1:  
-        memX_key(key_ID, 1); break;  // Memory 1
-
-      case BUTTON_2: // This will cycle the memory # each time it is pressed.                   
+      case BUTTON_PAUSE: pause_btn_toggle_key(key_ID); break;
+      
+      case BUTTON_MEM_LIST: // This will cycle the memory # each time it is pressed.                   
         list_memory_key(key_ID, mem_number);
         mem_number++;
         if (mem_number >= number_of_memories)
           mem_number = 0;
         break;
 
-      case BUTTON_3:
-        queueadd(PS2_UPARROW); break;  // add char to the queue - WPM Up
+      case BUTTON_WPM_UP: queueadd(PS2_UPARROW); break;  // add char to the queue - WPM Up
 
-      case BUTTON_4:
-        queueadd(PS2_DOWNARROW); break;  // add char to the queue - WPM down          
+      case BUTTON_WPM_DN: queueadd(PS2_DOWNARROW); break;  // add char to the queue - WPM down          
 
-      /// Row 2 buttons ///
+      case BUTTON_MEM_1: memX_key(key_ID, 1); break;  // Memory 1
 
-      case BUTTON_5:
-        pause_btn_toggle_key(key_ID); break;
+      case BUTTON_MEM_2: memX_key(key_ID, 2); break;  // Memory 2
+      
+      case BUTTON_MEM_3: memX_key(key_ID, 3); break;  // Memory 3
+      
+      case BUTTON_MEM_4: memX_key(key_ID, 4); break;  // Memory 4
 
-      case BUTTON_6:
-        generic_popup_key(key_ID, btn6_text); break;
+      case BUTTON_PTT_ENABLE:
+        if (configuration.ptt_disabled){
+          configuration.ptt_disabled = 0;
+          key[key_ID].hold = false;
+        } else {
+          configuration.ptt_disabled = 1;
+          ptt_unkey();
+          key[key_ID].hold = true;
+        }
+        config_dirty = 1;
+        refresh_button_row(button_row);
+        break;
+        
+      case BUTTON_POPUP_2: generic_popup_key(key_ID, btn2_text); break;
 
-      case BUTTON_7:
-        generic_popup_key(key_ID, btn7_text); break;
+      case BUTTON_POPUP_3: generic_popup_key(key_ID, btn3_text); break;
 
-      case BUTTON_8:
-        generic_popup_key(key_ID, btn8_text); break;
+      case BUTTON_POPUP_4: generic_popup_key(key_ID, btn4_text); break;
 
       case CW_BOX:
       default: 
@@ -19092,11 +19104,9 @@ void process_buttons() { // (uint8_t button_ID) {
         if (popup_active) popup(false);
         clear_holds_key();  // reset key[].hold for all keys
         mem_number = 0;
-        refresh_button_row(button_row);   
-        //debug_serial_port->println(F("Sending Keyboard ESC key"));       
-        BtnX_active = 0;        
-        queueflush(); 
-        queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer                  
+        BtnX_active = 0;
+        refresh_button_row(button_row);
+        queueflush(); queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer                  
         break;
     }      
     last_button = key_ID;  // update last button ID      
@@ -19177,12 +19187,12 @@ void process_buttons() { // (uint8_t button_ID) {
                     #endif
                     
                     duration += (millis() - tpTime);      // add each touch to total duration            
-                    if (duration >= 100 && duration < 700) {               
+                    if (duration >= 100 && duration < 1000) {               
                       //debug_serial_port->print(F("*Short duration = ")); debug_serial_port->println(duration);
                       btn[b].len = 1;
                       btn[b].duration = duration;
                     }
-                    if (duration >= 700 && duration < 1800) {  // using medium length zone as a buffer band, not used for keys
+                    if (duration >= 1000 && duration < 1800) {  // using medium length zone as a buffer band, not used for keys
                       //debug_serial_port->print(F("**Long duration = ")); debug_serial_port->println(duration);      
                       btn[b].len = 2; 
                       btn[b].duration = duration;                   
@@ -24844,9 +24854,6 @@ void loop()
 //  void app_main(void) 
   {
     BaseType_t xReturned;
-    TaskHandle_t xHandle_MAIN = NULL;
-    //TaskHandle_t xHandle_BT = NULL;
-    TaskHandle_t xHandle_TOUCH = NULL;
 
     //initArduino();  // Initialize the Arduino environment
 
@@ -24861,36 +24868,39 @@ void loop()
     //                timer_1s_callback);
 
     #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
-        xReturned = xTaskCreatePinnedToCore(
-                    check_touch_buttons,      /* Function that implements the task. */
-                    "Chk_Touch",          /* Text name for the task. */
-                    2048,      /* Stack size in words, not bytes. */
-                    ( void * ) 1,    /* Parameter passed into the task. */
-                    5, /* Priority at which the task is created. */
-                    &xHandle_TOUCH,
-                    1);  //tskNO_AFFINITY ); 
+      TaskHandle_t xHandle_TOUCH = NULL;
+      xReturned = xTaskCreatePinnedToCore(
+                  check_touch_buttons,      /* Function that implements the task. */
+                  "Chk_Touch",          /* Text name for the task. */
+                  2048,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  5, /* Priority at which the task is created. */
+                  &xHandle_TOUCH,
+                  1);  //tskNO_AFFINITY ); 
     #endif
 
 
     #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
-        xReturned = xTaskCreate(
-                    check_bt_keyboard,       /* Function that implements the task. */
-                    "Chk_BT_Keys",          /* Text name for the task. */
-                    8192,      /* Stack size in words, not bytes. */
-                    ( void * ) 1,    /* Parameter passed into the task. */
-                    6,/* Priority at which the task is created. */
-                    NULL); //&xHandle_BT );
+      TaskHandle_t xHandle_BT = NULL;
+      xReturned = xTaskCreate(
+                  check_bt_keyboard,       /* Function that implements the task. */
+                  "Chk_BT_Keys",          /* Text name for the task. */
+                  8192,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  6,/* Priority at which the task is created. */
+                  NULL); //&xHandle_BT );
     #endif
     
     #if defined(USE_TASK)
-    xReturned = xTaskCreatePinnedToCore(
-                main_loop,       /* Function that implements the task. */
-                "Main_Loop",          /* Text name for the task. */
-                12000,      /* Stack size in words, not bytes. */
-                ( void * ) 1,    /* Parameter passed into the task. */
-                4,/* Priority at which the task is created. */
-                &xHandle_MAIN,
-                1);  // core 0
+      TaskHandle_t xHandle_MAIN = NULL;
+      xReturned = xTaskCreatePinnedToCore(
+                  main_loop,       /* Function that implements the task. */
+                  "Main_Loop",          /* Text name for the task. */
+                  12000,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  4,/* Priority at which the task is created. */
+                  &xHandle_MAIN,
+                  1);  // core 0
     #endif
 
     while (1)
