@@ -46,10 +46,22 @@ This fork on a ESP32-WROOM32 adds
  - Using interrupts for all paddle and straight key IO pin, both the port expander and local GPIO pins.
 
 Check out the latest changes on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
- 
+
+> [!NOTE]
+> Arduino IDE Users see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE
+>
+
 See the Wiki Pages for more information about parts supported and configuration. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
+This is a 3.5" 480x320 TFT with a single panel of 16 keys.  Here a blue message window is diplaying the contents of memory #3 which is using the Insert Memory macro '\Ix' to insert memories 7 and 8 which happen to be programmed with my callsign and grid square.
+
+![20260103_004828](https://github.com/user-attachments/assets/2b84576d-e6be-43b1-b7e4-6095e2f6b35f)
+
+This is a 3.2" 320x240 TFT with 4 rows of 4 keys (not counting the Fx key to change rows).  has identical 16 keys on each.
+
 <img width="1146" height="610" alt="image" src="https://github.com/user-attachments/assets/b4512298-544b-4bc3-94d5-6bd83fdc7d14" />
+
+Also seen in the above picture is a 16 port expander (MCP23017) on a I2C bus.  The paddles and straight key are on PA0-3.
 
 *************************************************************************
 
