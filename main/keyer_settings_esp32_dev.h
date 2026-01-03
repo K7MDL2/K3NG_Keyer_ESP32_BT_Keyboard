@@ -46,11 +46,11 @@
 #define default_memory_repeat_time 3000  // time in milliseconds
 
 #ifdef FEATURE_TFT_HOSYOND_320x480_LCD   // for 480px wide display
-  #define LCD_COLUMNS 30
-  #define LCD_ROWS 5
-#elif defined (FEATURE_TFT_DISPLAY)  // all other 320px wideTFT displays
-  #define LCD_COLUMNS 20
-  #define LCD_ROWS 5
+  #define LCD_COLUMNS 30  // sets the char per line in cw text scroll box
+  #define LCD_ROWS 5      // number of rows in teh CW Scroill Box
+#elif defined(FEATURE_TFT_DISPLAY)  // all 320px wideTFT displays
+  #define LCD_COLUMNS 20  // sets the char per line in cw text scroll box
+  #define LCD_ROWS 5      // number of rows in the CW Scroill Box
 #else
   #define LCD_COLUMNS 20
   #define LCD_ROWS 4
@@ -168,8 +168,6 @@
 
 #endif //FEATURE_WINKEY_EMULATION
 
-
-
 #define PRIMARY_SERIAL_PORT &Serial
 #define PRIMARY_SERIAL_PORT_BAUD 115200     // This applies only when the port is in Command Line Interface mode.  In Winkey mode it will default to 1200.
 
@@ -177,7 +175,6 @@
   #define SECONDARY_SERIAL_PORT &Serial1
   #define SECONDARY_SERIAL_PORT_BAUD 115200
 #endif
-
 
 #define CW_DECODER_SCREEN_COLUMNS 120        // word wrap at this many columns
 #define CW_DECODER_SPACE_PRINT_THRESH 4.5   // print space if no tone for this many element lengths

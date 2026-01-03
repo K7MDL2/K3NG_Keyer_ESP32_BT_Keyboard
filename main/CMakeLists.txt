@@ -21,7 +21,6 @@ message(STATUS "Main:  CONFIG_DISPLAY_TYPE: ${CONFIG_DISPLAY_TYPE}")
 idf_component_register(SRCS "main.cpp" ${app_sources}
     INCLUDE_DIRS "."  ${include_dirs}
     REQUIRES nvs_flash bt_keyboard bt TFT_eSPI gt911-arduino LiquidCrystal_I2C arduino-esp32)
-    #REQUIRES nvs_flash bt_keyboard bt LiquidCrystal_I2C arduino-esp32)
 
 #  create precompiled files
 set(out_path "${CMAKE_SOURCE_DIR}/precompiled_images/${CONFIG_DISPLAY_TYPE}")
@@ -37,7 +36,7 @@ add_custom_command(OUTPUT "${out_path}/app.bin"
   COMMENT "Copying binary to precompiled_images/app.bin"
   COMMAND "${CMAKE_COMMAND}" -E copy "${app_bin}" "${out_path}"
   COMMAND "${CMAKE_COMMAND}" -E copy "${build_dir}/bootloader/bootloader.bin" "${out_path}" 
-  COMMAND "${CMAKE_COMMAND}" -E copy "${build_dir}/partition_table/partition-table.bin" "${out_path}" 
+  COMMAND "${CMAKE_COMMAND}" -E copy "${build_dir}/partition_table/partition-table.bin" "${out_path}"   
 )
 
 add_custom_target(copy_app_binary ALL DEPENDS "${out_path}/app.bin")

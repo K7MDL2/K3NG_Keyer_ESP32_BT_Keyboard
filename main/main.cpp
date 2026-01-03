@@ -1383,7 +1383,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.1"
+#define CODE_VERSION "K7MDL-2026.1.2"
 #define eeprom_magic_number 47             // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1707,7 +1707,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define SCROLL_BOX_ROW5 (SCROLL_TEXT_TOP_LINE+(4*FONT_HEIGHT))
   #define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
   #define SCROLL_BOX_BOTTOM (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT)
-  #define BUTTON_ROW (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+8)
+  #define BUTTON_ROW  (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+8)
+  #define BUTTON_ROW2 (SCROLL_BOX_TOP+(2*(SCROLL_BOX_HEIGHT+8)))  // used when 2 rows are displayed at a time
   #define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
   #define TFT_SET_VIEWPORT (lcd.setViewport(SCROLL_BOX_LEFT_SIDE+2, SCROLL_BOX_TOP+2, SCROLL_BOX_WIDTH-4, SCROLL_BOX_HEIGHT-4, false))
   #define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
@@ -1924,29 +1925,37 @@ void sinewave_interrupt_compute();
 void initialize_sinewave_generator();
 void initialize_tonsin();
 void mydelay(uint32_t _ms);
+void setup_esp();
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
 // Buttons and Popup Window for Touch Displays
 //---------------------------------------------------------------------
-
-  #define BUTTON_F1 0
-  #define BUTTON_PAUSE  1
-  #define BUTTON_PTT_ENABLE  2
-  #define BUTTON_WPM_UP  3
-  #define BUTTON_WPM_DN  4
-  #define BUTTON_F2 5
-  #define BUTTON_MEM_1  6
-  #define BUTTON_MEM_2  7
-  #define BUTTON_MEM_3  8
-  #define BUTTON_MEM_4  9
-  #define BUTTON_F3 10
-  #define BUTTON_MEM_LIST  11
-  #define BUTTON_POPUP_2  12
-  #define BUTTON_POPUP_3  13
-  #define BUTTON_POPUP_4  14
-  #define CW_BOX    15
-
+// list all possible buttons to get a unique ID.  The order does not matter
+enum button_ID{
+  BUTTON_F1 = 0,
+  BUTTON_PAUSE,
+  BUTTON_PTT_ENABLE,
+  BUTTON_WPM_UP,
+  BUTTON_WPM_DN,
+  BUTTON_F2,
+  BUTTON_MEM_1,
+  BUTTON_MEM_2,
+  BUTTON_MEM_3,
+  BUTTON_MEM_4,
+  BUTTON_F3,
+  BUTTON_MEM_5,
+  BUTTON_MEM_6,
+  BUTTON_MEM_7,
+  BUTTON_MEM_8,
+  BUTTON_F4,
+  BUTTON_MEM_LIST,
+  BUTTON_POPUP_2,
+  BUTTON_POPUP_3,
+  BUTTON_POPUP_4,
+  CW_BOX,
+  BUTTON_last_button
+};
  
   char popup_text[(LCD_COLUMNS*LCD_ROWS)+20] = {}; // Text to display in popup
   bool popup_active = false;
@@ -1955,17 +1964,36 @@ void mydelay(uint32_t _ms);
   uint8_t button_row = 0;  // default to row 1
   uint16_t BtnX_active = 0;  // tracks if a key_ID is active across touches
  
-  const uint8_t buttonCount = 6;  // sizeof(btn) / sizeof(btn[0]);
+
+  // Create all posible keys assignments here.  Config variables will then define how many of them 
+  //  will be be in a row and how many rows.
+  // Keys are mapped to buttons.  Each row of buttons are reused for each row.
+  // In the case of 2 rows displayed at the same time, they are instead a single row with half
+  //  of the buttons placed on lower Y row.  Thre may not be a need for the Fx key in this case.
+  //  If so, can hide it somehow TBD.
+
+  #ifdef TOUCH_BUTTON_16
+    const uint8_t buttonCount = 16 + 1;  // sizeof(btn) / sizeof(btn[0]);  
+    const int NUM_BUTTON_ROWS = 1; // number of rows of buttons
+    const int NUM_KEYS = buttonCount;  // +1 is CW Scroll Box touch zone.  Fx key counts as a regular key
+  #else
+    const uint8_t buttonCount = 5 + 1;  // sizeof(btn) / sizeof(btn[0]);  
+    const int NUM_BUTTON_ROWS = 4; // number of rows of buttons
+    const int NUM_KEYS = (NUM_BUTTON_ROWS*5)+1;  // +1 is CW Scroll Box touch zone.  Fx key counts as a regular key
+
+  #endif
+  // The +1 is the CW Scroll Box touch zone. More may added for Yes/No confirmation buttons. 
+  // This includs the Fx kay though it might be hidden or unused in some cases
+
   struct BTN_State {
     TFT_eSPI_Button p_btn;
     uint8_t len;
     uint32_t duration;
   } btn[buttonCount] = {};
   
-  const int NUM_BUTTON_ROWS = 3; // number of rows of buttons
-  const int NUM_KEYS = 15+1;
+  // Cannot exceed value of BUTTON_last_button
   struct Keys {
-    //struct BTN_State btn;  // pointer to touch button structure
+    const uint8_t key_event;   // label for a key eventhandler to use
     const uint8_t btn_idx;  // button array index - 0-5 for 6 buttons in a row
     const uint8_t row;  // store which row this key bleongs to.
     bool hold;   // this is a long duration key - can be used to highlight a key when displays
@@ -1973,27 +2001,56 @@ void mydelay(uint32_t _ms);
     bool window;  // used to keep popup window up during successive key presses.
     const char text_off[6]; // key text when not highlighted
     const char text_on[6];  // key label text when highlighted
-  } key[NUM_KEYS] = { 
-    {0, 0, false, false, false, "F1", "F1"},          // BUTTON_F1
-    {1, 0, false, false, false, "WAIT\0", "WAIT\0"},  // BUTTON_PAUSE
-    {2, 0, false, false, false, "PTTE\0", "PTTD\0"},  // BUTTON_PTT_ENABLE
-    {3, 0, false, false, false, "W-U\0", "W-U\0"},    // BUTTON_WPM_UP
-    {4, 0, false, false, false, "W-D\0", "W-D\0"},    // BUTTON_WPM_DN
-
-    {0, 1, false, false, false, "F2\0", "F2\0"},      // BUTTON_F2
-    {1, 1, false, false, false, "M1\0", "M1-R\0"},    // BUTTON_MEM_1
-    {2, 1, false, false, false, "M2\0", "M2-R\0"},    // BUTTON_MEM_2
-    {3, 1, false, false, false, "M3\0", "M3-R\0"},    // BUTTON_MEM_3
-    {4, 1, false, false, false, "M4\0", "M4-R\0"},    // BUTTON_MEM_4
-
-    {0, 2, false, false, false, "F3\0", "F3\0"},      // BUTTON_F3
-    {1, 2, false, false, false, "MEM\0", "MEM\0"},    // BUTTON_MEM_LIST
-    {2, 2, false, false, false, "MSG2\0", "MSG2\0"},  // BUTTON_POPUP_2
-    {3, 2, false, false, false, "MSG3\0", "MSG3\0"},  // BUTTON_POPUP_3
-    {4, 2, false, false, false, "MSG4\0", "MSG4\0"},  // BUTTON_POPUP_4
-    
-    {5, 255, false, false, false, "", ""}             // CW_BOX
+  } key[NUM_KEYS] = 
+  #ifdef TOUCH_BUTTON_16
+  { 
+    {BUTTON_PAUSE,      0, 0, false, false, false, "WAIT\0", "WAIT\0"}, 
+    {BUTTON_PTT_ENABLE, 1, 0, false, false, false, "PTTE\0", "PTTD\0"},
+    {BUTTON_WPM_UP,     2, 0, false, false, false, "W-U\0", "W-U\0"}, 
+    {BUTTON_WPM_DN,     3, 0, false, false, false, "W-D\0", "W-D\0"},
+    {BUTTON_MEM_1,      4, 0, false, false, false, "M1\0", "M1-R\0"},
+    {BUTTON_MEM_2,      5, 0, false, false, false, "M2\0", "M2-R\0"},
+    {BUTTON_MEM_3,      6, 0, false, false, false, "M3\0", "M3-R\0"},
+    {BUTTON_MEM_4,      7, 0, false, false, false, "M4\0", "M4-R\0"},
+    {BUTTON_MEM_5,      8, 0, false, false, false, "M5\0", "M5-R\0"},
+    {BUTTON_MEM_6,      9, 0, false, false, false, "M6\0", "M6-R\0"},
+    {BUTTON_MEM_7,      10, 0, false, false, false, "M7\0", "M7-R\0"},
+    {BUTTON_MEM_8,      11, 0, false, false, false, "M8\0", "M8-R\0"},
+    {BUTTON_MEM_LIST,   12, 0, false, false, false, "MEM\0", "MEM\0"},  
+    {BUTTON_POPUP_2,    13, 0, false, false, false, "MSG2\0", "MSG2\0"},
+    {BUTTON_POPUP_3,    14, 0, false, false, false, "MSG3\0", "MSG3\0"},
+    {BUTTON_POPUP_4,    15, 0, false, false, false, "MSG4\0", "MSG4\0"},
+    {CW_BOX, 5, 255, false, false, false, "", ""}
   };
+  #else
+  { 
+    {BUTTON_F1,         0, 0, false, false, false, "F1", "F1"},
+    {BUTTON_PAUSE,      1, 0, false, false, false, "WAIT\0", "WAIT\0"}, 
+    {BUTTON_PTT_ENABLE, 2, 0, false, false, false, "PTTE\0", "PTTD\0"},
+    {BUTTON_WPM_UP,     3, 0, false, false, false, "W-U\0", "W-U\0"}, 
+    {BUTTON_WPM_DN,     4, 0, false, false, false, "W-D\0", "W-D\0"},
+
+    {BUTTON_F2,         0, 1, false, false, false, "F2\0", "F2\0"},
+    {BUTTON_MEM_1,      1, 1, false, false, false, "M1\0", "M1-R\0"},
+    {BUTTON_MEM_2,      2, 1, false, false, false, "M2\0", "M2-R\0"},
+    {BUTTON_MEM_3,      3, 1, false, false, false, "M3\0", "M3-R\0"},
+    {BUTTON_MEM_4,      4, 1, false, false, false, "M4\0", "M4-R\0"},
+    
+    {BUTTON_F3,         0, 2, false, false, false, "F3\0", "F3\0"},
+    {BUTTON_MEM_5,      1, 2, false, false, false, "M5\0", "M5-R\0"},
+    {BUTTON_MEM_6,      2, 2, false, false, false, "M6\0", "M6-R\0"},
+    {BUTTON_MEM_7,      3, 2, false, false, false, "M7\0", "M7-R\0"},
+    {BUTTON_MEM_8,      4, 2, false, false, false, "M8\0", "M8-R\0"},
+
+    {BUTTON_F4,         0, 3, false, false, false, "F4\0", "F4\0"},
+    {BUTTON_MEM_LIST,   1, 3, false, false, false, "MEM\0", "MEM\0"},   
+    {BUTTON_POPUP_2,    2, 3, false, false, false, "MSG2\0", "MSG2\0"}, 
+    {BUTTON_POPUP_3,    3, 3, false, false, false, "MSG3\0", "MSG3\0"},
+    {BUTTON_POPUP_4,    4, 3, false, false, false, "MSG4\0", "MSG4\0"},
+    
+    {CW_BOX, 5, 255, false, false, false, "", ""}             // 
+  };
+  #endif
 
   void process_buttons();
   int touch_button_available();
@@ -3601,8 +3658,6 @@ void check_backlight() {
     }
     lcd.backlight();
   }
-
-
 }
 #endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 
@@ -3679,9 +3734,9 @@ int touch_button_available() {
   #endif
 }
 
-#ifdef FEATURE_TFT_DISPLAY
+
 void update_icons(void) {
-    
+#ifdef FEATURE_TFT_DISPLAY    
     #ifdef FEATURE_TOUCH_DISPLAY
       if (popup_active) return;  // bail, these screen writes below are outside the popup window
     #endif
@@ -3801,8 +3856,9 @@ void update_icons(void) {
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);   // set back to normal size and color
     lcd.setFreeFont(TFT_FONT_MEDIUM);
     lcd.setTextDatum(MY_DATUM);
-}
 #endif
+}
+
 
 #ifdef FEATURE_TFT_DISPLAY
 void testlcd(char status, int x, int y) {
@@ -11865,7 +11921,7 @@ void service_winkey(byte action) {
             #if defined(__AVR__) //#ifndef ARDUINO_SAM_DUE
               asm volatile ("jmp 0"); /*wdt_enable(WDTO_30MS); while(1) {};*/ 
             #else
-              setup();
+              setup_esp();
             #endif //__AVR__
             break;  // reset command
           case 0x02:  // host open command - send version back to host
@@ -12566,7 +12622,7 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
       #if defined(__AVR__)
         asm volatile ("jmp 0"); /*wdt_enable(WDTO_30MS); while(1) {} ;*/ 
       #else //__AVR__
-        setup();
+        setup_esp();
       #endif //__AVR__
       break;  // ~ - reset unit
     case '*':                                                // * - paddle echo on / off
@@ -13055,7 +13111,7 @@ void cli_wifi(PRIMARY_SERIAL_CLS* port_to_use, String command_arguments) {
     port_to_use->print(F(" configuration.wifipassword "));
     port_to_use->println(configuration.wifipassword); //DEBUG
     write_settings_to_eeprom(0);
-    setup();
+    setup_esp();
 }
 #endif
 //---------------------------------------------------------------------
@@ -18692,12 +18748,6 @@ void mydelay(uint32_t _ms)
 #ifdef FEATURE_TOUCH_DISPLAY
   #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD
     #include "TAMC_GT911.h"
-    #define TOUCH_SDA  33
-    #define TOUCH_SCL  32
-    #define TOUCH_INT  21  // not used because R25 is not installed on DIYMalls 3.2" display
-    #define TOUCH_RST  25
-    #define TOUCH_WIDTH  320
-    #define TOUCH_HEIGHT 240
     TAMC_GT911 tp = TAMC_GT911(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, TOUCH_WIDTH, TOUCH_HEIGHT);
   #endif
 #endif
@@ -18896,10 +18946,10 @@ void refresh_button_row(uint8_t row) {
   for (int t=0; t < NUM_KEYS; t++) {
     if (key[t].row == row) {
       if (key[t].hold) {
-        //debug_serial_port->print(F("Hold ON ")); debug_serial_port->println(key[t].text_on);
+        debug_serial_port->print(F("Hold ON ")); debug_serial_port->println(key[t].text_on);
         btn[key[t].btn_idx].p_btn.drawButton(true, key[t].text_on);
       } else {
-        //debug_serial_port->print(F("Hold OFF "));debug_serial_port->println(key[t].text_off);
+        debug_serial_port->print(F("Hold OFF "));debug_serial_port->println(key[t].text_off);
         btn[key[t].btn_idx].p_btn.drawButton(false, key[t].text_off);
       }
     }
@@ -18908,18 +18958,34 @@ void refresh_button_row(uint8_t row) {
 }
 #endif
 
+// Create all our button objects.  Some diplays have more space so placement changes.
 void create_buttons() {
   #ifdef FEATURE_TOUCH_DISPLAY
-    //uint16_t parameters[5];
     lcd.setFreeFont(TFT_FONT_SMALL);
     //lcd.setLabelDatum(MY_DATUM);
-    //lcd.calibrateTouch(0,TFT_BLUE, TFT_GREY,2);
-    btn[0].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "F1", 2);  // library modified to ignore text size
-    btn[1].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64,  BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "M1-R", 2);  // library modified to ignore text size
-    btn[2].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+128, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "MEM", 2);  // library modified to ignore text size
-    btn[3].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "W-U", 2);  // library modified to ignore text size
-    btn[4].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "W-D", 2);  // library modified to ignore text size
-    btn[5].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    // All touch displays have at least 5 usable keys and a CW Scroll Box touch zone
+    btn[0].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+0,   BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[1].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+64,  BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[2].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+128, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[3].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[4].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    
+    // These keys are only created if a larger display is used with room for more keys
+    #if (TOUCH_BUTTONS_PER_LINE == 16)
+    btn[6].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+320, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[7].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+384, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[8].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+448, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size   
+    // 2nd row of 8
+    btn[9].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+0,   BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[10].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64,  BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[11].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[12].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[13].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+320, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[14].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+384, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[15].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+448, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    #endif
+    
     refresh_button_row(0);
     lcd.setFreeFont(TFT_FONT_MEDIUM);
   #endif
@@ -19010,9 +19076,8 @@ void list_memory_key(uint16_t key_ID, uint8_t memory_number) {
   }
 }
 
-// Processes the button press.
+// Processes the button press, looks up the key it is assigned to for the current row
 // Pressing the FUNC button increments the button row counter
-// The button# is set to the button_ID plus the row number multiplied by 10.
 // The button row counter is reset to 0 if it exceeds the number of button rows.
 void process_buttons() { // (uint8_t button_ID) {
   // Process button presses
@@ -19072,12 +19137,13 @@ void process_buttons() { // (uint8_t button_ID) {
       case BUTTON_WPM_DN: queueadd(PS2_DOWNARROW); break;  // add char to the queue - WPM down          
 
       case BUTTON_MEM_1: memX_key(key_ID, 1); break;  // Memory 1
-
       case BUTTON_MEM_2: memX_key(key_ID, 2); break;  // Memory 2
-      
       case BUTTON_MEM_3: memX_key(key_ID, 3); break;  // Memory 3
-      
       case BUTTON_MEM_4: memX_key(key_ID, 4); break;  // Memory 4
+      case BUTTON_MEM_5: memX_key(key_ID, 5); break;  // Memory 5
+      case BUTTON_MEM_6: memX_key(key_ID, 6); break;  // Memory 6      
+      case BUTTON_MEM_7: memX_key(key_ID, 7); break;  // Memory 7
+      case BUTTON_MEM_8: memX_key(key_ID, 8); break;  // Memory 8
 
       case BUTTON_PTT_ENABLE:
         if (configuration.ptt_disabled){
@@ -24599,15 +24665,18 @@ void initialize_st7789_lcd()
   }
 #endif
 
-void setup()
+void setup_esp()
 {
+    static bool setup_called = false;
+    
+    if (setup_called) return;  // for main.ino co-existance
+    setup_called = true;
+    
     initialize_serial_ports();        // Goody - this is available for testing startup issues  
     initialize_pins();
     initialize_display();
     create_buttons();
-    #ifdef FEATURE_TFT_DISPLAY
-      update_icons();
-    #endif
+    update_icons();
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues
     initialize_keyer_state();
@@ -24848,83 +24917,91 @@ void main_loop(void)
 //}
   
 // --------------------------------------------------------------------------------------------
-void loop()
-//extern "C"  
-//{
-//  void app_main(void) 
+//void loop()
+
+#if defined(PROJECT_ESP32_COMPILER)
+#undef USE_MAIN_H
+extern "C" { void app_main (void) 
+#else
+void app_main(void)
+#endif
+{
+  BaseType_t xReturned;
+
+  #if defined(PROJECT_ESP32_COMPILER)
+    initArduino();  // Initialize the Arduino environment
+    setup_esp(); // call actual setup
+  #endif
+
+  //TimerHandle_t my_timer = xTimerCreate(
+  //                "timer_1s",
+  //                pdMS_TO_TICKS(1000),
+  //                pdTRUE, NULL,
+  //                timer_1s_callback);
+
+  #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
+    TaskHandle_t xHandle_TOUCH = NULL;
+    xReturned = xTaskCreatePinnedToCore(
+                check_touch_buttons,      /* Function that implements the task. */
+                "Chk_Touch",          /* Text name for the task. */
+                2048,      /* Stack size in words, not bytes. */
+                ( void * ) 1,    /* Parameter passed into the task. */
+                5, /* Priority at which the task is created. */
+                &xHandle_TOUCH,
+                1);  //tskNO_AFFINITY ); 
+  #endif
+
+
+  #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
+    TaskHandle_t xHandle_BT = NULL;
+    xReturned = xTaskCreate(
+                check_bt_keyboard,       /* Function that implements the task. */
+                "Chk_BT_Keys",          /* Text name for the task. */
+                8192,      /* Stack size in words, not bytes. */
+                ( void * ) 1,    /* Parameter passed into the task. */
+                6,/* Priority at which the task is created. */
+                NULL); //&xHandle_BT );
+  #endif
+  
+  #if defined(USE_TASK)
+    TaskHandle_t xHandle_MAIN = NULL;
+    xReturned = xTaskCreatePinnedToCore(
+                main_loop,       /* Function that implements the task. */
+                "Main_Loop",          /* Text name for the task. */
+                12000,      /* Stack size in words, not bytes. */
+                ( void * ) 1,    /* Parameter passed into the task. */
+                4,/* Priority at which the task is created. */
+                &xHandle_MAIN,
+                1);  // core 0
+  #endif
+
+  while (1)
   {
-    BaseType_t xReturned;
-
-    //initArduino();  // Initialize the Arduino environment
-
-    // this is where the magic happens
+    #ifdef USE_TASK
+      mydelay(5000);
+    #else
+      main_loop();
+    #endif        
     
-    //setup(); // call setup for here when not in Arduino statup mode
-    
-    //TimerHandle_t my_timer = xTimerCreate(
-    //                "timer_1s",
-    //                pdMS_TO_TICKS(1000),
-    //                pdTRUE, NULL,
-    //                timer_1s_callback);
-
-    #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
-      TaskHandle_t xHandle_TOUCH = NULL;
-      xReturned = xTaskCreatePinnedToCore(
-                  check_touch_buttons,      /* Function that implements the task. */
-                  "Chk_Touch",          /* Text name for the task. */
-                  2048,      /* Stack size in words, not bytes. */
-                  ( void * ) 1,    /* Parameter passed into the task. */
-                  5, /* Priority at which the task is created. */
-                  &xHandle_TOUCH,
-                  1);  //tskNO_AFFINITY ); 
-    #endif
-
-
-    #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
-      TaskHandle_t xHandle_BT = NULL;
-      xReturned = xTaskCreate(
-                  check_bt_keyboard,       /* Function that implements the task. */
-                  "Chk_BT_Keys",          /* Text name for the task. */
-                  8192,      /* Stack size in words, not bytes. */
-                  ( void * ) 1,    /* Parameter passed into the task. */
-                  6,/* Priority at which the task is created. */
-                  NULL); //&xHandle_BT );
-    #endif
-    
-    #if defined(USE_TASK)
-      TaskHandle_t xHandle_MAIN = NULL;
-      xReturned = xTaskCreatePinnedToCore(
-                  main_loop,       /* Function that implements the task. */
-                  "Main_Loop",          /* Text name for the task. */
-                  12000,      /* Stack size in words, not bytes. */
-                  ( void * ) 1,    /* Parameter passed into the task. */
-                  4,/* Priority at which the task is created. */
-                  &xHandle_MAIN,
-                  1);  // core 0
-    #endif
-
-    while (1)
-    {
-      #ifdef USE_TASK
-        mydelay(5000);
-      #else
-        main_loop();
-      #endif        
-      
-      #if defined (FEATURE_BT_KEYBOARD) 
-        #ifdef USE_BT_TASK
-          check_bt_keyboard();
-        #endif
+    #if defined (FEATURE_BT_KEYBOARD) 
+      #ifdef USE_BT_TASK
+        check_bt_keyboard();
       #endif
-
-      //esp_task_wdt_reset();
-    }
-
-    //if( xReturned == pdPASS )
-    //{
-        // The task was created. Use the task's handle to delete the task.
-        //vTaskDelete( xHandle );
-    //}
+    #endif
   }
 
-//}
+  //if( xReturned == pdPASS )
+  //{
+      // The task was created. Use the task's handle to delete the task.
+      //vTaskDelete( xHandle );
+  //}
+}
+
+#if defined(PROJECT_ESP32_COMPILER)
+}
+#else
+void call_app_main()
+{
+  app_main();
+}
+#endif

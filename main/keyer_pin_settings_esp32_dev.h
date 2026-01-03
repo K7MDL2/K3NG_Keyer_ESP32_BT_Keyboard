@@ -55,16 +55,16 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD)     // for DIY Malls 3.2" 320x240 TFT st7789
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
     #ifdef FEATURE_MCP23017_EXPANDER
+      #ifdef FEATURE_STRAIGHT_KEY
+        #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
+      #endif //FEATURE_STRAIGHT_KEY
       #define MCP23X17_ADDR 0x27    
       #define MCP23017_I2C_PORT I2C_NUM_1
       #define MCP23017_INTA_GPIO 35 // input only, no pullup on this pin
       #define paddle_left     MCP23017_PIN0 // expander pin PA0
       #define paddle_right    MCP23017_PIN1 // expander pin PA1
-      #define I2CDEV_SDA_PIN  21   // override the sdkconfig pair of 21, 22
+      #define I2CDEV_SDA_PIN  21   // for extrnal i2c modules
       #define I2CDEV_SCL_PIN  22
-      #ifdef FEATURE_STRAIGHT_KEY
-        #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
-      #endif //FEATURE_STRAIGHT_KEY
     #else
       #define paddle_left     21 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
       #define paddle_right    22 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
@@ -72,6 +72,12 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  25 //TXD0
       #endif //FEATURE_STRAIGHT_KEY
     #endif
+    #define TOUCH_SDA  33  // intenral bus for i2c touch controller GT911 pins
+    #define TOUCH_SCL  32
+    #define TOUCH_INT  21  // not actually used because R25 is not installed on DIYMalls 3.2" display and 21 is for i2c
+    #define TOUCH_RST  25
+    #define TOUCH_WIDTH  320  
+    #define TOUCH_HEIGHT 240
     #define tx_key_line_1   16 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
     #define sidetone_line   26 // connect a speaker for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display

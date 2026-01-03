@@ -30,6 +30,8 @@ project(${PROJECT_NAME})
 
 message(STATUS "Project: END: CONFIG_DISPLAY_TYPE: ${CONFIG_DISPLAY_TYPE}")
 
+idf_build_set_property(COMPILE_OPTIONS "-DPROJECT_ESP32_COMPILER" APPEND)
+
 # Create a SPIFFS image from the contents of the 'font' directory
 # that fits the partition named 'storage'. FLASH_IN_PROJECT indicates that
 # the generated image should be flashed when the entire project is flashed to
