@@ -1699,7 +1699,17 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   
   #define TFT_GREY 0x5AEB // New color
   #define FONT_HEIGHT ((lcd.fontHeight()+2))    // using 2px padding for line separation
-  
+  #ifdef TOUCH_BUTTON_16
+    #define BUTTON_HEIGHT 57
+    #define BUTTON_WIDTH  57
+    #define BUTTON_ROW  (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+12)
+    #define BUTTON_ROW2 (BUTTON_ROW+66)  // used when 2 rows are displayed at a time
+  #else
+    #define BUTTON_HEIGHT 60
+    #define BUTTON_WIDTH  60
+    #define BUTTON_ROW  (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+8)
+    #define BUTTON_ROW2 (BUTTON_ROW+66)  // only used when 2 rows are displayed at a time
+  #endif
   #define SCROLL_BOX_ROW1 (SCROLL_TEXT_TOP_LINE)
   #define SCROLL_BOX_ROW2 (SCROLL_TEXT_TOP_LINE+FONT_HEIGHT)
   #define SCROLL_BOX_ROW3 (SCROLL_TEXT_TOP_LINE+(2*FONT_HEIGHT))
@@ -1707,8 +1717,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define SCROLL_BOX_ROW5 (SCROLL_TEXT_TOP_LINE+(4*FONT_HEIGHT))
   #define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
   #define SCROLL_BOX_BOTTOM (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT)
-  #define BUTTON_ROW  (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+8)
-  #define BUTTON_ROW2 (SCROLL_BOX_TOP+(2*(SCROLL_BOX_HEIGHT+8)))  // used when 2 rows are displayed at a time
+ 
   #define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
   #define TFT_SET_VIEWPORT (lcd.setViewport(SCROLL_BOX_LEFT_SIDE+2, SCROLL_BOX_TOP+2, SCROLL_BOX_WIDTH-4, SCROLL_BOX_HEIGHT-4, false))
   #define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
@@ -2004,51 +2013,54 @@ enum button_ID{
   } key[NUM_KEYS] = 
   #ifdef TOUCH_BUTTON_16
   { 
-    {BUTTON_PAUSE,      0, 0, false, false, false, "WAIT\0", "WAIT\0"}, 
-    {BUTTON_PTT_ENABLE, 1, 0, false, false, false, "PTTE\0", "PTTD\0"},
-    {BUTTON_WPM_UP,     2, 0, false, false, false, "W-U\0", "W-U\0"}, 
-    {BUTTON_WPM_DN,     3, 0, false, false, false, "W-D\0", "W-D\0"},
-    {BUTTON_MEM_1,      4, 0, false, false, false, "M1\0", "M1-R\0"},
-    {BUTTON_MEM_2,      5, 0, false, false, false, "M2\0", "M2-R\0"},
-    {BUTTON_MEM_3,      6, 0, false, false, false, "M3\0", "M3-R\0"},
-    {BUTTON_MEM_4,      7, 0, false, false, false, "M4\0", "M4-R\0"},
-    {BUTTON_MEM_5,      8, 0, false, false, false, "M5\0", "M5-R\0"},
-    {BUTTON_MEM_6,      9, 0, false, false, false, "M6\0", "M6-R\0"},
-    {BUTTON_MEM_7,      10, 0, false, false, false, "M7\0", "M7-R\0"},
-    {BUTTON_MEM_8,      11, 0, false, false, false, "M8\0", "M8-R\0"},
-    {BUTTON_MEM_LIST,   12, 0, false, false, false, "MEM\0", "MEM\0"},  
-    {BUTTON_POPUP_2,    13, 0, false, false, false, "MSG2\0", "MSG2\0"},
-    {BUTTON_POPUP_3,    14, 0, false, false, false, "MSG3\0", "MSG3\0"},
-    {BUTTON_POPUP_4,    15, 0, false, false, false, "MSG4\0", "MSG4\0"},
-    {CW_BOX, 5, 255, false, false, false, "", ""}
+    // 1st row
+    {BUTTON_PAUSE,      0,  0, false, false, false, "WAIT\0", "WAIT\0"}, 
+    {BUTTON_PTT_ENABLE, 1,  0, false, false, false, "PTTE\0", "PTTD\0"},
+    {BUTTON_WPM_UP,     2,  0, false, false, false, "W-U\0",  "W-U\0" }, 
+    {BUTTON_WPM_DN,     3,  0, false, false, false, "W-D\0",  "W-D\0" },    
+    {BUTTON_POPUP_2,    4,  0, false, false, false, "MSG2\0", "MSG2\0"},
+    {BUTTON_POPUP_3,    5,  0, false, false, false, "MSG3\0", "MSG3\0"},
+    {BUTTON_POPUP_4,    6,  0, false, false, false, "MSG4\0", "MSG4\0"},
+    {BUTTON_MEM_LIST,   7,  0, false, false, false, "MEM\0",  "MEM\0" }, 
+    //2nd row
+    {BUTTON_MEM_1,      8,  0, false, false, false, "M1\0",   "M1-R\0"},
+    {BUTTON_MEM_2,      9 , 0, false, false, false, "M2\0",   "M2-R\0"},
+    {BUTTON_MEM_3,      10, 0, false, false, false, "M3\0",   "M3-R\0"},
+    {BUTTON_MEM_4,      11, 0, false, false, false, "M4\0",   "M4-R\0"},
+    {BUTTON_MEM_5,      12, 0, false, false, false, "M5\0",   "M5-R\0"},
+    {BUTTON_MEM_6,      13, 0, false, false, false, "M6\0",   "M6-R\0"},
+    {BUTTON_MEM_7,      14, 0, false, false, false, "M7\0",   "M7-R\0"},
+    {BUTTON_MEM_8,      15, 0, false, false, false, "M8\0",   "M8-R\0"},
+    
+    {CW_BOX,            16,255, false, false, false, "",       ""      }
   };
   #else
   { 
-    {BUTTON_F1,         0, 0, false, false, false, "F1", "F1"},
-    {BUTTON_PAUSE,      1, 0, false, false, false, "WAIT\0", "WAIT\0"}, 
-    {BUTTON_PTT_ENABLE, 2, 0, false, false, false, "PTTE\0", "PTTD\0"},
-    {BUTTON_WPM_UP,     3, 0, false, false, false, "W-U\0", "W-U\0"}, 
-    {BUTTON_WPM_DN,     4, 0, false, false, false, "W-D\0", "W-D\0"},
+    {BUTTON_F1,         0, 0, false, false, false, "F1",        "F1"},
+    {BUTTON_PAUSE,      1, 0, false, false, false, "WAIT\0","WAIT\0"}, 
+    {BUTTON_PTT_ENABLE, 2, 0, false, false, false, "PTTE\0","PTTD\0"},
+    {BUTTON_WPM_UP,     3, 0, false, false, false, "W-U\0",  "W-U\0"}, 
+    {BUTTON_WPM_DN,     4, 0, false, false, false, "W-D\0",  "W-D\0"},
 
-    {BUTTON_F2,         0, 1, false, false, false, "F2\0", "F2\0"},
-    {BUTTON_MEM_1,      1, 1, false, false, false, "M1\0", "M1-R\0"},
-    {BUTTON_MEM_2,      2, 1, false, false, false, "M2\0", "M2-R\0"},
-    {BUTTON_MEM_3,      3, 1, false, false, false, "M3\0", "M3-R\0"},
-    {BUTTON_MEM_4,      4, 1, false, false, false, "M4\0", "M4-R\0"},
+    {BUTTON_F2,         0, 1, false, false, false, "F2\0",    "F2\0"},
+    {BUTTON_MEM_1,      1, 1, false, false, false, "M1\0",  "M1-R\0"},
+    {BUTTON_MEM_2,      2, 1, false, false, false, "M2\0",  "M2-R\0"},
+    {BUTTON_MEM_3,      3, 1, false, false, false, "M3\0",  "M3-R\0"},
+    {BUTTON_MEM_4,      4, 1, false, false, false, "M4\0",  "M4-R\0"},
     
-    {BUTTON_F3,         0, 2, false, false, false, "F3\0", "F3\0"},
-    {BUTTON_MEM_5,      1, 2, false, false, false, "M5\0", "M5-R\0"},
-    {BUTTON_MEM_6,      2, 2, false, false, false, "M6\0", "M6-R\0"},
-    {BUTTON_MEM_7,      3, 2, false, false, false, "M7\0", "M7-R\0"},
-    {BUTTON_MEM_8,      4, 2, false, false, false, "M8\0", "M8-R\0"},
+    {BUTTON_F3,         0, 2, false, false, false, "F3\0",    "F3\0"},
+    {BUTTON_MEM_5,      1, 2, false, false, false, "M5\0",  "M5-R\0"},
+    {BUTTON_MEM_6,      2, 2, false, false, false, "M6\0",  "M6-R\0"},
+    {BUTTON_MEM_7,      3, 2, false, false, false, "M7\0",  "M7-R\0"},
+    {BUTTON_MEM_8,      4, 2, false, false, false, "M8\0",  "M8-R\0"},
 
-    {BUTTON_F4,         0, 3, false, false, false, "F4\0", "F4\0"},
-    {BUTTON_MEM_LIST,   1, 3, false, false, false, "MEM\0", "MEM\0"},   
-    {BUTTON_POPUP_2,    2, 3, false, false, false, "MSG2\0", "MSG2\0"}, 
-    {BUTTON_POPUP_3,    3, 3, false, false, false, "MSG3\0", "MSG3\0"},
-    {BUTTON_POPUP_4,    4, 3, false, false, false, "MSG4\0", "MSG4\0"},
+    {BUTTON_F4,         0, 3, false, false, false, "F4\0",    "F4\0"},
+    {BUTTON_MEM_LIST,   1, 3, false, false, false, "MEM\0",  "MEM\0"},   
+    {BUTTON_POPUP_2,    2, 3, false, false, false, "MSG2\0","MSG2\0"}, 
+    {BUTTON_POPUP_3,    3, 3, false, false, false, "MSG3\0","MSG3\0"},
+    {BUTTON_POPUP_4,    4, 3, false, false, false, "MSG4\0","MSG4\0"},
     
-    {CW_BOX, 5, 255, false, false, false, "", ""}             // 
+    {CW_BOX,            5,255, false, false, false, "",      ""     }             // 
   };
   #endif
 
@@ -2163,7 +2175,7 @@ uint16_t memory_area_end = 0;
 
 #ifdef FEATURE_DISPLAY
   enum lcd_statuses {LCD_CLEAR, LCD_REVERT, LCD_TIMED_MESSAGE, LCD_SCROLL_MSG};
-  #define default_display_msg_delay 1000
+  #define default_display_msg_delay 2000
 #endif //FEATURE_DISPLAY
 
 #ifdef FEATURE_LCD_ADAFRUIT_I2C
@@ -4202,9 +4214,9 @@ void repeat_memory_msg(byte memory_number){
     repeat_memory = memory_number;
     #ifdef FEATURE_DISPLAY
       if (LCD_COLUMNS < 9){
-        lcd_center_print_timed("RptMem" + String(memory_number), 0, default_display_msg_delay); 
+        lcd_center_print_timed("RptMem" + String(memory_number+1), 0, default_display_msg_delay); 
       } else {
-        lcd_center_print_timed("Repeat Memory " + String(memory_number), 0, default_display_msg_delay); 
+        lcd_center_print_timed("Repeat Memory " + String(memory_number+1), 0, default_display_msg_delay); 
       }
       service_display();
     #endif //FEATURE_DISPLAY
@@ -17173,7 +17185,9 @@ byte play_memory(byte memory_number) {
             if (LCD_COLUMNS < 9){
               lcd_center_print_timed("MemEmpty", 0, default_display_msg_delay);
             } else {
-              lcd_center_print_timed("Memory empty", 0, default_display_msg_delay);            
+              char mstr[20] = {};
+              sprintf(mstr, "Memory %d Empty", memory_number+1);
+              lcd_center_print_timed(mstr, 0, default_display_msg_delay);            
             }
           #else
             boop();
@@ -18754,7 +18768,6 @@ void mydelay(uint32_t _ms)
 
 // Text associated with touch buttons
 // Text content sized to fit in teh window.  Later desire to make scrllable with button and/or touch gesture
-const char btn1_text[] = {"Future Button Text Msg #1"};
 const char btn2_text[] = {"This is even longer test text Msg #2"};
 const char btn3_text[] = {"This is for Button Msg #3"};
 const char btn4_text[] = {"This is test text Msg #4"};
@@ -18832,7 +18845,7 @@ void initialize_display() {
           lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW3, 4);
         #endif
         lcd.drawString("V:" + String(CODE_VERSION), SCROLL_BOX_CENTER, SCROLL_BOX_ROW5, 4);
-        mydelay(4000);
+        mydelay(100);
       #else
         lcd_center_print_timed("K3NG Keyer", 0, 4000);
         lcd_center_print_timed("BT Keyboard Search..", 1, 4000);
@@ -18946,10 +18959,10 @@ void refresh_button_row(uint8_t row) {
   for (int t=0; t < NUM_KEYS; t++) {
     if (key[t].row == row) {
       if (key[t].hold) {
-        debug_serial_port->print(F("Hold ON ")); debug_serial_port->println(key[t].text_on);
+        //debug_serial_port->print(F("Hold ON ")); debug_serial_port->println(key[t].text_on);
         btn[key[t].btn_idx].p_btn.drawButton(true, key[t].text_on);
       } else {
-        debug_serial_port->print(F("Hold OFF "));debug_serial_port->println(key[t].text_off);
+        //debug_serial_port->print(F("Hold OFF "));debug_serial_port->println(key[t].text_off);
         btn[key[t].btn_idx].p_btn.drawButton(false, key[t].text_off);
       }
     }
@@ -18963,29 +18976,44 @@ void create_buttons() {
   #ifdef FEATURE_TOUCH_DISPLAY
     lcd.setFreeFont(TFT_FONT_SMALL);
     //lcd.setLabelDatum(MY_DATUM);
-    // All touch displays have at least 5 usable keys and a CW Scroll Box touch zone
-    btn[0].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+0,   BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[1].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+64,  BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[2].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+128, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[3].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[4].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
     
-    // These keys are only created if a larger display is used with room for more keys
-    #if (TOUCH_BUTTONS_PER_LINE == 16)
-    btn[6].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+320, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[7].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+384, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[8].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+448, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size   
-    // 2nd row of 8
-    btn[9].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE+0,   BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[10].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+64,  BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[11].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+192, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[12].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+256, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[13].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+320, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[14].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+384, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[15].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE+448, BUTTON_ROW2, 60, 60, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    int16_t bh = BUTTON_HEIGHT;
+    int16_t bw = BUTTON_WIDTH;
+    int16_t br = BUTTON_ROW;
+    int16_t br2 = BUTTON_ROW2;
+    int16_t ba = 1;  // row start
+    #ifdef TOUCH_BUTTON_16
+      int16_t bs = bw + 3;  // start of next button left edge
+    #else
+      int16_t bs = bw + 4;
     #endif
+
+    // All touch displays have at least 5 usable keys and a CW Scroll Box touch zone
+    btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size    
+    #ifndef TOUCH_BUTTON_16
+    btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    #else
+    // These keys are only created if a larger display is used with room for more keys
+    btn[5].p_btn.initButtonUL(&lcd,  ba+(5*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[6].p_btn.initButtonUL(&lcd,  ba+(6*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[7].p_btn.initButtonUL(&lcd,  ba+(7*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size   
     
+    // 2nd row of 8    
+    btn[8].p_btn.initButtonUL(&lcd,  ba+(0*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[9].p_btn.initButtonUL(&lcd,  ba+(1*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[10].p_btn.initButtonUL(&lcd, ba+(2*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[11].p_btn.initButtonUL(&lcd, ba+(3*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[12].p_btn.initButtonUL(&lcd, ba+(4*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[13].p_btn.initButtonUL(&lcd, ba+(5*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[14].p_btn.initButtonUL(&lcd, ba+(6*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[15].p_btn.initButtonUL(&lcd, ba+(7*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[16].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    #endif
+
     refresh_button_row(0);
     lcd.setFreeFont(TFT_FONT_MEDIUM);
   #endif
@@ -19083,7 +19111,7 @@ void process_buttons() { // (uint8_t button_ID) {
   // Process button presses
   #ifdef FEATURE_TOUCH_DISPLAY        
     static int last_button = 0;
-    uint16_t key_ID = 0;
+    uint16_t key_ID = 254;
     static uint8_t mem_number = 0;
 
     //debug_serial_port->print(F("button active = ")); debug_serial_port->println(button_active);
@@ -19094,48 +19122,51 @@ void process_buttons() { // (uint8_t button_ID) {
       if (btn[key[t].btn_idx].p_btn.isPressed() && (key[t].row == button_row || key[t].row == 255))  {  // Only look at current button row keys or CW_BOX
         key_ID = t;  // flag the latest touched button, converted to key #
         debug_serial_port->print(F("\nKey_ID:")); debug_serial_port->print(key_ID);
-        if (btn[key[t].btn_idx].len == 0 || btn[key[t].btn_idx].len == 2) {
-          debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[t].btn_idx].len); 
-          debug_serial_port->print(F("  Invalid Duration: ")); debug_serial_port->println(btn[key[t].btn_idx].duration);
+        if (btn[key[key_ID].btn_idx].len == 0 || btn[key[key_ID].btn_idx].len == 2) {
+          debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[key_ID].btn_idx].len); 
+          debug_serial_port->print(F("  Invalid Duration: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].duration);
           return;
         }
-        debug_serial_port->print(F("  Row:" )); debug_serial_port->print(key[t].row);
-        debug_serial_port->print(F("  Label: ")); debug_serial_port->print(key[t].text_off);
-        debug_serial_port->print(F("  Hold: ")); debug_serial_port->print(key[t].hold);
-        debug_serial_port->print(F("  Window: ")); debug_serial_port->print(key[t].window);
-        debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[t].btn_idx].len); 
-        debug_serial_port->print(F("  Press Duration: ")); debug_serial_port->println(btn[key[t].btn_idx].duration);
-        btn[key[t].btn_idx].p_btn.press(false);   // reset state after assigning Button_ID
+        debug_serial_port->print(F("  Row:" )); debug_serial_port->print(key[key_ID].row);
+        debug_serial_port->print(F("  Column:" )); debug_serial_port->print(key[key_ID].btn_idx);
+        debug_serial_port->print(F("  Label: ")); debug_serial_port->print(key[key_ID].text_off);
+        debug_serial_port->print(F("  Hold: ")); debug_serial_port->print(key[key_ID].hold);
+        debug_serial_port->print(F("  Window: ")); debug_serial_port->print(key[key_ID].window);
+        debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[key_ID].btn_idx].len); 
+        debug_serial_port->print(F("  Press Duration: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].duration);
+        btn[key[key_ID].btn_idx].p_btn.press(false);   // reset state after assigning Button_ID        
         break;        
       }      
     }
 
     // F-Key (always btn_idx == 0) cycles through rows of action buttons - button_row is the top dawg
-    if (key[key_ID].btn_idx == 0) {  // F1, F2, F3, etc are always touch btn0
-      button_row++;
-      if (button_row >= NUM_BUTTON_ROWS) {
-        button_row = 0;        
+    // if TOUCH_BUTTON_16 is set then there is only 1 row and Fx keys are not used
+    #ifndef TOUCH_BUTTON_16
+      if (key[key_ID].btn_idx == 0) {  // F1, F2, F3, etc are always touch btn0
+        button_row++;
+        if (button_row >= NUM_BUTTON_ROWS) {
+          button_row = 0;        
+        }
+        //debug_serial_port->print("Switch to Row "); debug_serial_port->println(button_row);
+        refresh_button_row(button_row);
+        return;
       }
-      //debug_serial_port->print("Switch to Row "); debug_serial_port->println(button_row);
-      refresh_button_row(button_row);
-      return;
-    }
+    #endif
 
     // process the action buttons
-    switch (key_ID) {
+    switch (key[key_ID].key_event) {
       case BUTTON_PAUSE: pause_btn_toggle_key(key_ID); break;
       
+      case BUTTON_WPM_UP: queueadd(PS2_UPARROW); break;  // add char to the queue - WPM Up
+      case BUTTON_WPM_DN: queueadd(PS2_DOWNARROW); break;  // add char to the queue - WPM down          
+
+      // Memory related keys
       case BUTTON_MEM_LIST: // This will cycle the memory # each time it is pressed.                   
         list_memory_key(key_ID, mem_number);
         mem_number++;
         if (mem_number >= number_of_memories)
           mem_number = 0;
         break;
-
-      case BUTTON_WPM_UP: queueadd(PS2_UPARROW); break;  // add char to the queue - WPM Up
-
-      case BUTTON_WPM_DN: queueadd(PS2_DOWNARROW); break;  // add char to the queue - WPM down          
-
       case BUTTON_MEM_1: memX_key(key_ID, 1); break;  // Memory 1
       case BUTTON_MEM_2: memX_key(key_ID, 2); break;  // Memory 2
       case BUTTON_MEM_3: memX_key(key_ID, 3); break;  // Memory 3
@@ -19159,9 +19190,7 @@ void process_buttons() { // (uint8_t button_ID) {
         break;
         
       case BUTTON_POPUP_2: generic_popup_key(key_ID, btn2_text); break;
-
       case BUTTON_POPUP_3: generic_popup_key(key_ID, btn3_text); break;
-
       case BUTTON_POPUP_4: generic_popup_key(key_ID, btn4_text); break;
 
       case CW_BOX:

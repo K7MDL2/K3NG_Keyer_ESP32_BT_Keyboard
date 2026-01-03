@@ -109,7 +109,7 @@
     ///#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
-    //#define TOUCH_BUTTON_16
+    #define TOUCH_BUTTON_16
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
     ////#define USE_TASK // runs main loop in a task
     ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
