@@ -1383,8 +1383,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.2"
-#define eeprom_magic_number 47             // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "K7MDL-2026.1.4"
+#define eeprom_magic_number 48             // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
 #include "keyer_hardware.h"
@@ -17557,7 +17557,7 @@ static void IRAM_ATTR paddle_intr_handler(void *arg)
 }
 
 //-------------------------------------------------------------------
-void read_io_handler(void *pvParameters)
+IRAM_ATTR void read_io_handler(void *pvParameters)
 {
     //EventBits_t e_bits;
     uint16_t bits = 0;
