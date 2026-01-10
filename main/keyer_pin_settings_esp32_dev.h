@@ -11,6 +11,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define MCP23017_PIN0     0  // paddle_left
   #define MCP23017_PIN1     1  // paddle right
   #define MCP23017_PIN2     2  // straight key
+  // These next pins are future usage ideas, not implemeted yet.
   #define MCP23017_PIN3     3  // tx_key_line_1
   #define MCP23017_PIN4     4  // ptt_tx_1
   #define MCP23017_PIN5     5  // tx_key_line_2
@@ -52,7 +53,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define SD_SPI_MISO_PIN 38
   #define SD_SPI_MOSI_PIN 23
   // 21,22 are i2c shared with touch, 39 is touch int.
-#elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD)     // for DIY Malls 3.2" 320x240 TFT st7789
+
+  #elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD)     // for DIY Malls 3.2" 320x240 TFT st7789
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
     #ifdef FEATURE_MCP23017_EXPANDER
       #ifdef FEATURE_STRAIGHT_KEY
@@ -85,7 +87,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define ptt_tx_1         4 // PTT ("push to talk") lines   (4 on 3.2" DIY malls st7789 TFT, red LED)
     #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
     #define tx_pause_pin     0 //14 
-#elif defined (FEATURE_IDEASPARK_LCD)
+
+    #elif defined (FEATURE_IDEASPARK_LCD)
     #define bt_keyboard_LED 13  // indicates BT keyboard connection status pin ? on IdeaSpark 1.9" onboard Blue LED
     #define paddle_left     25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
@@ -99,21 +102,24 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #ifdef FEATURE_STRAIGHT_KEY
       #define pin_straight_key 27
     #endif //FEATURE_STRAIGHT_KEY
-    #define LCD_H_RES      320
-    #define LCD_V_RES      240
-    #define LCD_HOST VSPI_HOST
-    #define LCD_BUF_LINES   60
-    #define LV_TICK_PERIOD_MS 1
-    #define SD_SPI_CS_PIN   15
-    #define SD_SPI_SCK_PIN  18
-    #define SD_SPI_MISO_PIN -1
-    #define SD_SPI_MOSI_PIN 23
-    #define SD_SPI_RST_PIN   4
-    #define SD_SPI_BLK_PIN  32
-    #define SD_SPI_DC_PIN    2
+    
+    // following linbes are used for internal functions
+    //#define LCD_H_RES      320
+    //#define LCD_V_RES      240
+    //#define LCD_HOST VSPI_HOST
+    //#define LCD_BUF_LINES   60
+    //#define LV_TICK_PERIOD_MS 1
+    //#define SD_SPI_CS_PIN   15
+    //#define SD_SPI_SCK_PIN  18
+    //#define SD_SPI_MISO_PIN -1
+    //#define SD_SPI_MOSI_PIN 23
+    //#define SD_SPI_RST_PIN   4
+    //#define SD_SPI_BLK_PIN  32
+    //#define SD_SPI_DC_PIN    2
   // 36 ADC input free - input only
+
 #elif defined (FEATURE_TFT_HOSYOND_320x480_LCD)
-    #define bt_keyboard_LED 17  // indicates BT keyboard connection status - Blue LED
+    #define bt_keyboard_LED 17  // indicates BT keyboard connection status - GPIO17 is Blue LED
     #ifdef FEATURE_MCP23017_EXPANDER
       #define MCP23X17_ADDR 0x27
       #define MCP23017_I2C_PORT I2C_NUM_0
@@ -126,8 +132,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY
     #else
-      #define paddle_left     3 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-      #define paddle_right    5 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_left     32 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_right    25 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  39
       #endif //FEATURE_STRAIGHT_KEY
@@ -140,14 +146,21 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define tx_key_line_1   18 // (high = key down/tx on)
     #define sidetone_line   26 //26 connect a passive buzzer for sidetone
     #define audio_enable     4  // audio amp enable = LOW for this display (only?)
-    #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-    #define ptt_tx_1        22 // PTT ("push to talk") lines RED LED
-    #define tx_inhibit_pin   0  //13 
-    #define tx_pause_pin     0  //14
+    #define potentiometer   35 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+    #define ptt_tx_1        22 // 23 for PTT ("push to talk") lines, GPIO22 is RED LED
+    #define tx_inhibit_pin   19 
+    #define tx_pause_pin     21
     #ifdef FEATURE_STRAIGHT_KEY
-      #define pin_straight_key 16 //TXD0 - GREEN LED
+      #define pin_straight_key 39 //TXD0 - GREEN LED
     #endif //FEATURE_STRAIGHT_KEY
-    // 25 and 32 are external i2c or GPIO - good for I2C port expander with pin 35 for IRQ input.
+    // 4 connectors for IO. | 23, 19, 18, 21 || 35, 39 || 32, 25, 3.3V, GND |
+    // 25/32/3.3/GND and 39 used for I2C for port expander if used.  
+    // 25/32 and 39 used for paddles and key if no port expander
+    // 35 is speed pot if used fo both
+    // 18/23  is Tx #1 Tx_Key_line and PTT out
+    // 22 is RED LED, 17 is BLUE LED, and 16 is GREEN LED
+    // --->   that leaves onboard pins 19 21 free  in both cases  <-----
+
 #else // ESP-WROOM-32, 27, 5 33
   #define bt_keyboard_LED   2 //2  // indicates BT keyboard connection status
   #define paddle_left       25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201

@@ -26,6 +26,7 @@ extern "C" {
 #include "esp_gap_ble_api.h"
 #include "esp_gap_bt_api.h"
 }
+#include "esp_log.h"
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -33,7 +34,11 @@ extern "C" {
 #include <memory>
 #include <ostream>
 
-#define SCAN            1
+static esp_bd_addr_t last_device_addr = {0};
+static bool has_last_device = false;
+static bool reconnecting = false;
+
+#define SCAN  1
 
 #define SIZEOF_ARRAY(a) (sizeof(a) / sizeof(*a))
 
@@ -852,7 +857,11 @@ void BTKeyboard::ble_gap_event_handler(esp_gap_ble_cb_event_t  event,
   switch (event) {
 
       // SCAN
-
+    case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
+      {
+        ESP_LOGI(TAG, "Scan started");
+          break;
+      }
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT:
       {
         ESP_LOGD(TAG, "BLE GAP EVENT SCAN_PARAM_SET_COMPLETE");
@@ -1148,7 +1157,6 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
         if ((r->bt.cod.major == 5 /* PERIPHERAL */) &&
             (r->bt.cod.minor & ESP_HID_COD_MIN_KEYBOARD)) {
           cr = r.get();
-          std::cout << ", BT Keyboard Found " << std::endl;
         }
         else
         {
@@ -1159,7 +1167,7 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
       std::cout << std::dec;
 
       if (!r->name.empty()) {
-        std::cout << ", NAME: " << r->name << std::endl;
+        std::cout << ", NAME: " << r->name;
       } else {
         std::cout << std::endl;
       }
@@ -1168,14 +1176,17 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
     }
 
     if (cr) {
+      std::cout << ", BT keyboard Found " << std::endl;
       // open the selected entry
-      esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type);
-      std::cout << "Open BLE/BT Entry for this Keyboard\n" << std::endl;
+      if (esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type) == ESP_OK)
+        std::cout << "Open BLE/BT Entry for this Keyboard";
+      else 
+        std::cout << "FAILED to Open BLE/BT Entry for this Keyboard";
     }
     else  {
-      std::cout << "No Valid BLE/BT Keyboard Entry Found\n" << std::endl;
+      std::cout << "No Valid BLE/BT Keyboard Entry Found";
     }
-
+    std::cout << std::endl;
     // free the results
     results.clear();
   }
@@ -1209,12 +1220,17 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
         if (param->open.status == ESP_OK) {
           const uint8_t *bda = esp_hidh_dev_bda_get(param->open.dev);
           if (bda) {
+            std::cout << "OPEN Device\n";
             ESP_LOGD(TAG, ESP_BD_ADDR_STR " OPEN: %s", ESP_BD_ADDR_HEX(bda),
                      esp_hidh_dev_name_get(param->open.dev));
             esp_hidh_dev_dump(param->open.dev, stdout);
             bt_keyboard_->set_connected(true);
+            memcpy(last_device_addr, bda, sizeof(esp_bd_addr_t));
+            has_last_device = true;
+            reconnecting = false;
           }
         } else {
+          std::cout << "OPEN failed!" << std::endl;
           ESP_LOGE(TAG, " OPEN failed!");
           bt_keyboard_->set_connected(false);
         }
@@ -1260,6 +1276,17 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
           ESP_LOGD(TAG, ESP_BD_ADDR_STR " CLOSE: %s", ESP_BD_ADDR_HEX(bda),
                    esp_hidh_dev_name_get(param->close.dev));
           bt_keyboard_->set_connected(false);
+          
+          if (has_last_device && !reconnecting) {
+                reconnecting = true;                
+                esp_hidh_dev_open(last_device_addr, ESP_HID_TRANSPORT_BLE, 1);
+                ESP_LOGI(TAG, ESP_BD_ADDR_STR "Set Flag to Reconnect...%s", ESP_BD_ADDR_HEX(bda));
+          } else {
+                //bt_keyboard_->devices_scan(5);  // anydevice
+                //bt_keyboard_->retrieve_bonded_devices(); // last device                
+                ESP_LOGI(TAG, "Maybe Choose to Restart Scanning on CLOSE? ...");
+                bt_keyboard_->set_connected(false);
+          }
         }
         break;
       }

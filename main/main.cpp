@@ -12250,7 +12250,7 @@ void service_winkey(byte action) {
 void service_command_line_interface(PRIMARY_SERIAL_CLS * port_to_use) {
  
   static byte cli_wait_for_cr_flag = 0; 
-  
+
   if (serial_backslash_command == 0) {
     incoming_serial_byte = uppercase(incoming_serial_byte);
     if ((incoming_serial_byte != 92) && (incoming_serial_byte != 27)) { // we do not have a backslash or ESC
@@ -12375,15 +12375,13 @@ void check_serial(){
   
   #ifdef DEBUG_LOOP
     debug_serial_port->println(F("loop: entering check_serial")); 
-  #endif 
-    
+  #endif
 
   #ifdef FEATURE_WINKEY_EMULATION
     if (primary_serial_port_mode == SERIAL_WINKEY_EMULATION) {
       service_winkey(WINKEY_HOUSEKEEPING);
     }
   #endif
-
 
   while (primary_serial_port->available() > 0) {
     vTaskDelay(1 / portTICK_PERIOD_MS);
@@ -12468,7 +12466,6 @@ void check_serial(){
     } //  while (secondary_serial_port->available() > 0)  
   #endif //FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
 
-
 }
 #endif //defined(FEATURE_SERIAL)
 
@@ -12476,14 +12473,12 @@ void check_serial(){
 
 #if defined(FEATURE_SERIAL_HELP) && defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE)
 void serial_page_pause(PRIMARY_SERIAL_CLS * port_to_use,byte seconds_timeout){
-
   
   unsigned long pause_start_time = millis();
 
   port_to_use->println(F("\r\nPress enter..."));
   while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){vTaskDelay(1 / portTICK_PERIOD_MS);}
   while (port_to_use->available()){vTaskDelay(1 / portTICK_PERIOD_MS); port_to_use->read();}
-
 
 }
 #endif //defined(FEATURE_SERIAL_HELP) && defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE)
@@ -17516,13 +17511,15 @@ void init_ESP32_GPIO_key_pins(void) {
     // Setup CPU side GPIO interrupts for paddle pins
     gpio_install_isr_service(0);
     gpio_set_direction((gpio_num_t) paddle_left, GPIO_MODE_INPUT);
-    gpio_set_pull_mode((gpio_num_t) paddle_left, GPIO_PULLUP_ONLY);  // no pullup on pin 35
+    gpio_set_pull_mode((gpio_num_t) paddle_left, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
     gpio_set_intr_type((gpio_num_t) paddle_left, GPIO_INTR_ANYEDGE);
-    gpio_set_direction((gpio_num_t) paddle_right, GPIO_MODE_INPUT);
-    gpio_set_pull_mode((gpio_num_t) paddle_right, GPIO_PULLUP_ONLY);  // no pullup on pin 35
-    gpio_set_intr_type((gpio_num_t) paddle_right, GPIO_INTR_ANYEDGE);
     gpio_isr_handler_add((gpio_num_t) paddle_left, left_paddle_intr_handler, (void *)(gpio_num_t) paddle_left);
+
+    gpio_set_direction((gpio_num_t) paddle_right, GPIO_MODE_INPUT);
+    gpio_set_pull_mode((gpio_num_t) paddle_right, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
+    gpio_set_intr_type((gpio_num_t) paddle_right, GPIO_INTR_ANYEDGE);
     gpio_isr_handler_add((gpio_num_t) paddle_right, right_paddle_intr_handler, (void *)(gpio_num_t) paddle_right);
+
     #ifdef FEATURE_STRAIGHT_KEY
       // Setup CPU side GPIO interrupt for straight key 
       gpio_set_direction((gpio_num_t) pin_straight_key, GPIO_MODE_INPUT);
@@ -19020,15 +19017,18 @@ void create_buttons() {
 }
 
 void clear_holds_key() {
+  #ifdef FEATURE_TOUCH_DISPLAY
   for (int t = 0; t < NUM_KEYS; t++) {   // clear any button in hold state
     //if (key[t].hold) {
       //debug_serial_port->print(F("ESC: Btn was in HOLD: "));debug_serial_port->println(key[t].text_off);
     //}
     key[t].hold = false;  
   }
+  #endif
 }
 
 void generic_popup_key(uint16_t key_ID, const char* msg_text) {
+  #ifdef FEATURE_TOUCH_DISPLAY
   if (BtnX_active == 0) { //}  || BtnX_active == key_ID) {       // another keyboard queue key is active until canceled  
   
     //debug_serial_port->print(F("Generic PopUp Key ID= ")); debug_serial_port->print(key_ID);
@@ -19051,10 +19051,12 @@ void generic_popup_key(uint16_t key_ID, const char* msg_text) {
       //  Do something different
     }
   }
+  #endif
 }
 
 // Send memory #X on press, repeats memeory #X on long press
 void memX_key(uint16_t key_ID, uint8_t memory_number) {  
+  #ifdef FEATURE_TOUCH_DISPLAY
   if (BtnX_active != 0) return;       // another keyboard queue key is active until canceled                   
   
   //debug_serial_port->print(F("Memory Key ID= ")); debug_serial_port->print(key_ID);
@@ -19070,21 +19072,25 @@ void memX_key(uint16_t key_ID, uint8_t memory_number) {
     queueadd(PS2_F1_ALT + memory_number - 1);   // add char to the queue              
   }
   refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
+  #endif
 }
 
 void pause_btn_toggle_key(uint16_t key_ID) {
+  #ifdef FEATURE_TOUCH_DISPLAY
   queueadd(PS2_TAB);   // Pause/Resume
   if (!pause_sending_buffer) {
     debug_serial_port->println(F("PAUSE"));
     key[key_ID].hold = true;      
   } else {
-    debug_serial_port->println(F("RESUME"));   
+    debug_serial_port->println(F("RESUME"));
     key[key_ID].hold = false;           
   }
   refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window
+  #endif
 }
 
 void list_memory_key(uint16_t key_ID, uint8_t memory_number) {
+  #ifdef FEATURE_TOUCH_DISPLAY
   char mem_string[LCD_COLUMNS*LCD_ROWS] = {};
 
   if (BtnX_active == 0 || BtnX_active == key_ID) {      // another keyboard queue key is active until canceled , allow if Button 2     
@@ -19102,6 +19108,7 @@ void list_memory_key(uint16_t key_ID, uint8_t memory_number) {
       memory_number = 0;
     }
   }
+  #endif
 }
 
 // Processes the button press, looks up the key it is assigned to for the current row
@@ -23852,7 +23859,7 @@ void update_time(){
                 BTKeyboard::KeyInfo inf;
                 mydelay(5);
                 #ifdef USE_BT_TASK
-                  bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  bt_keyboard.wait_for_low_event(inf);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                 #else
                   bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                   //bt_keyboard.get_ascii_char();
@@ -24949,7 +24956,6 @@ void main_loop(void)
 //void loop()
 
 #if defined(PROJECT_ESP32_COMPILER)
-#undef USE_MAIN_H
 extern "C" { void app_main (void) 
 #else
 void app_main(void)

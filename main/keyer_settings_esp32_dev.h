@@ -37,7 +37,7 @@
 //#define default_pot_full_scale_reading 1023 //For AVR boards
 #define default_pot_full_scale_reading 4095 //SP5IOU 20180329 FOR stm32 and esp32 Boards.
 #define default_weighting 50             // 50 = weighting factor of 1 (normal)
-#define default_ptt_hang_time_wordspace_units 0.0
+#define default_ptt_hang_time_wordspace_units 1.0
 #define winkey_c0_wait_time 1            // the number of milliseconds to wait to send 0xc0 byte after send buffer has been sent
 #define winkey_command_timeout_ms 5000
 #define winkey_discard_bytes_startup 3   // this is used if OPTION_WINKEY_DISCARD_BYTES_AT_STARTUP is enabled above
