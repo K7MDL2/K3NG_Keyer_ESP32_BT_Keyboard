@@ -45,7 +45,7 @@
 #define winkey_xon_threshold 10          // the number of chars in the buffer below which we deactivate XOFF
 #define default_memory_repeat_time 3000  // time in milliseconds
 
-#ifdef FEATURE_TFT_HOSYOND_320x480_LCD   // for 480px wide display
+#ifdef RES_320_480   // for 480px wide display
   #define LCD_COLUMNS 30  // sets the char per line in cw text scroll box
   #define LCD_ROWS 5      // number of rows in teh CW Scroill Box
 #elif defined(FEATURE_TFT_DISPLAY)  // all 320px wideTFT displays
@@ -284,7 +284,7 @@
 
 #endif
 
-#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (TFT_HOSYOND_320x480_LCD)           // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (TFT_HOSYOND_320x480_LCD) || defined(TFT_320x480_CAP_LCD)  // For TFT with touch controller         // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
   #define tx_key_line_active_state HIGH
   #define tx_key_line_inactive_state LOW
 #else
@@ -293,7 +293,7 @@
 #endif
 
 
-#if defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(TFT_HOSYOND_320x480_LCD)
+#if defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(TFT_HOSYOND_320x480_LCD) || defined(TFT_320x480_CAP_LCD)  // For TFT with touch controller
   #define bt_keyboard_LED_pin_active_state LOW
   #define bt_keyboard_LED_pin_inactive_state HIGH
 #else

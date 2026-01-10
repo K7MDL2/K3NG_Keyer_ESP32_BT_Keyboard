@@ -2,7 +2,7 @@
 #define ESP_CONFIG_H
 
 #if !defined(PROJECT_ESP32_COMPILER)
-#include "../build/config/sdkconfig.h"
+//#include "../build/config/sdkconfig.h"
 #endif
 
 // compile time features and options - comment or uncomment to add or delete features
@@ -44,15 +44,6 @@
 // IO pins assigments
 // A new USer_Setup.h file in the TFT_e_SPI_Custom_Config folder
 // Edit the Components/TFT_eSPI/User_Select.h to add a new #elif to point to the new User_Setup.h.  Clone the existing definitions
-// InMain, near the top of the file where FEATURE_TFT_DISPLAY and FEATURE_TFT_DISPLAY are defined, add new display to the 2 lines. See example below
-
-/// Example lines in main.cpp
-/// #if defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(M5STACK_CORE2) || defined(TFT_HOSYOND_320x480_LCD)
-///  #define FEATURE_TFT_DISPLAY
-/// #endif
-/// #if !defined(FEATURE_IDEASPARK_LCD) && !defined(FEATURE_TFT7789_3_2inch_240x320_LCD) && !defined(M5STACK_CORE2) && !defined(TFT_HOSYOND_320x480_LCD)
-///  #define FEATURE_TFT_DISPLAY_NOT
-/// #endif
 
 // These are for build automation.  Precompiled files will be renamed for each display type at each build.
 #define NO_DISPLAY             0
@@ -61,6 +52,7 @@
 #define TFT_3_2_DIYMALLS_LCD   3
 #define M5STACK_CORE2_LCD      4
 #define TFT_HOSYOND_320x480_LCD 5
+#define TFT_320x480_CAP_LCD    6
 
 // Choose one of the display types by uncommenting it.  
 // If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
@@ -68,9 +60,10 @@
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
-#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // 320x480 
+//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // The Setup file is then automatically selected.  When the TFT_eSPI library is updated, it will overwrite the changes in the User_Setup_Select.h file.
@@ -91,10 +84,11 @@
 #if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
     #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
-    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define FEATURE_TOUCH_DISPLAY
-    #define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
+    //#define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
+    #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
@@ -108,15 +102,28 @@
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
     ///#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
+    #define RES_320_480
     #define TOUCH_BUTTON_16
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
     ////#define USE_TASK // runs main loop in a task
     ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     ////#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
+#endif
+#if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
+    //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
+    #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    //#define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
+    #define FEATURE_TFT_DISPLAY
+    #define RES_320_480
+    #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
+    #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
+    #define TOUCH_BUTTON_16
+    //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
 #endif
 
 //#define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library

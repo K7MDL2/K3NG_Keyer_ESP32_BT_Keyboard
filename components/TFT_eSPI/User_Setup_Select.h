@@ -34,15 +34,17 @@
      //#define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
      #include <../TFT_e_SPI_Custom_Config/User_Setup_DIYMalls_240x320.h>
 #elif (DISPLAY_TYPE == M5STACK_CORE2_LCD || CONFIG_DISPLAY_TYPE == M5STACK_CORE2_LCD)
-     //#define FEATURE_M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+     //#define FEATURE_M5STACK_CORE2 // NOT working yet.
      #include <../TFT_e_SPI_Custom_Config/User_Setup_M5Stack_Core2.h>
 #elif (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD || CONFIG_DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD)
-     //#define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+     //#define FEATURE_TFT_HOSYOND_320x480_LCD   
      #include <../TFT_e_SPI_Custom_Config/User_Setup_Hosyond_320x480.h>
+#elif (DISPLAY_TYPE == TFT_320x480_CAP_LCD || CONFIG_DISPLAY_TYPE == TFT_320x480_CAP_LCD)
+     //#define FEATURE_TFT_320x480_CAP_LCD     
+     #include <../TFT_e_SPI_Custom_Config/User_Setup_ST7796_320x480_Cap.h>
 #else
      #include <User_Setup.h>           // Default setup is root library folder
 #endif
-
 
 //#include <User_Setups/Setup1_ILI9341.h>  // Setup file for ESP8266 configured for my ILI9341
 //#include <User_Setups/Setup2_ST7735.h>   // Setup file for ESP8266 configured for my ST7735

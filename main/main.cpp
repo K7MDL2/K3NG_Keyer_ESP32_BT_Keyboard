@@ -1658,7 +1658,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define COLUMN_WIDTH 15         // width of mono-spaced scroll box font in pixels
   #define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
 
-  #ifdef FEATURE_TFT_HOSYOND_320x480_LCD
+  //#ifdef FEATURE_TFT_HOSYOND_320x480_LCD
+  #ifdef RES_320_480   // 320x480 display
     // Define handle to receive return value
     //SemaphoreHandle_t xMutex = NULL;  // coordinate access to SPI bus since touch and display share it.
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
@@ -1674,7 +1675,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define WPM_ANCHOR (278)
     #define ICON_ANCHOR (378)
     #define STATUS_BAR_X_CURSOR (8)
-  #else
+  #else   // 240x320 and 170x320
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
     #define SCREEN_HEIGHT (TFT_WIDTH-1)
     #define SCROLL_BOX_LEFT_SIDE 3
@@ -1692,6 +1693,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define ICON_ANCHOR (250)
     #define STATUS_BAR_X_CURSOR (6)
   #endif
+
   #define SCROLL_BOX_WIDTH (TFT_HEIGHT-(2*SCROLL_BOX_LEFT_SIDE)) // pixel width of scroll box area
   #define SCROLL_BOX_HEIGHT (SCREEN_BOX_HEIGHT-SCROLL_BOX_TOP-3)  // pixel height of scroll box area inside borders
   #define SCROLL_TEXT_TOP_LINE (SCROLL_BOX_TOP+20)   // stat of first row of text
@@ -18757,14 +18759,14 @@ void mydelay(uint32_t _ms)
 //--------------------------------------------------------------------- 
 
 #ifdef FEATURE_TOUCH_DISPLAY
-  #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD
+  #ifdef TOUCH_GT911_BUTTONS
     #include "TAMC_GT911.h"
     TAMC_GT911 tp = TAMC_GT911(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, TOUCH_WIDTH, TOUCH_HEIGHT);
   #endif
 #endif
 
 // Text associated with touch buttons
-// Text content sized to fit in teh window.  Later desire to make scrllable with button and/or touch gesture
+// Text content sized to fit in the window.  Later desire to make scrollable with button and/or touch gesture
 const char btn2_text[] = {"This is even longer test text Msg #2"};
 const char btn3_text[] = {"This is for Button Msg #3"};
 const char btn4_text[] = {"This is test text Msg #4"};
@@ -18781,7 +18783,7 @@ void initialize_display() {
       #endif
 
       #ifdef FEATURE_TOUCH_DISPLAY
-        #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD
+        #ifdef TOUCH_GT911_BUTTONS
           tp.begin();  // does a Wire.begin() on 1st I2C bus 0
           tp.setRotation(ROTATION_LEFT);
           debug_serial_port->println(F("Completed setup on 2nd i2c bus for GT911 Touch Sensor"));
@@ -19244,7 +19246,7 @@ void process_buttons() { // (uint8_t button_ID) {
           if (millis() - scanTime >= 50) {  // check every 50ms for any activity
             scanTime = millis();
 
-            #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD          
+            #ifdef TOUCH_GT911_BUTTONS          
               tp.read();
               pressed = tp.isTouched;
               if (pressed) {           
@@ -19278,7 +19280,7 @@ void process_buttons() { // (uint8_t button_ID) {
                   while (pressed) {  // measure duration of button press
                     mydelay(20);
                     
-                    #ifdef FEATURE_TFT7789_3_2inch_240x320_LCD  
+                    #ifdef TOUCH_GT911_BUTTONS 
                       tp.read();
                       pressed = tp.isTouched;
                     #endif
@@ -24637,7 +24639,7 @@ void initialize_st7789_lcd()
             #ifdef CAL_TOUCH
               lcd.calibrateTouch(calibrationData, TFT_WHITE, TFT_RED, 15);
             #endif
-            debug_serial_port->printf("Cal data - x:%d x1:%d y:%d y1:%d bits=0x%X\n", calibrationData[0], calibrationData[1], calibrationData[2], calibrationData[3], calibrationData[4]);
+            //debug_serial_port->printf("Cal data - x:%d x1:%d y:%d y1:%d bits=0x%X\n", calibrationData[0], calibrationData[1], calibrationData[2], calibrationData[3], calibrationData[4]);
             lcd.setTouch(calibrationData);              
           #endif
         #endif

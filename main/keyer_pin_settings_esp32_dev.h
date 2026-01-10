@@ -54,7 +54,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define SD_SPI_MOSI_PIN 23
   // 21,22 are i2c shared with touch, 39 is touch int.
 
-  #elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD)     // for DIY Malls 3.2" 320x240 TFT st7789
+  #elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD) || defined (FEATURE_TFT_320x480_CAP_LCD)    // for DIY Malls 3.2" 320x240 TFT st7789
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
     #ifdef FEATURE_MCP23017_EXPANDER
       #ifdef FEATURE_STRAIGHT_KEY
@@ -68,8 +68,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #define I2CDEV_SDA_PIN  21   // for extrnal i2c modules
       #define I2CDEV_SCL_PIN  22
     #else
-      #define paddle_left     21 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-      #define paddle_right    22 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_left     18 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_right    19 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  25 //TXD0
       #endif //FEATURE_STRAIGHT_KEY
@@ -80,7 +80,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_RST  25
     #define TOUCH_WIDTH  320  
     #define TOUCH_HEIGHT 240
-    #define tx_key_line_1   16 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
+    #define tx_key_line_1   22 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
     #define sidetone_line   26 // connect a speaker for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
