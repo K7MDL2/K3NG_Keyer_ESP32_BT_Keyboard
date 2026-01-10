@@ -3681,7 +3681,7 @@ void lcd_scroll_box_clear() {
     #ifdef FEATURE_TFT_DISPLAY
       #ifdef FEATURE_TOUCH_DISPLAY
         if (popup_active) {
-          debug_serial_port->println(F("Skipping Popup while in lcd_scroll_clear()")); 
+          //debug_serial_port->println(F("Skipping Popup while in lcd_scroll_clear()")); 
           return;  // skip this when a popup window is up, else will corrupt popup window content
         }
       #endif
@@ -4117,7 +4117,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
   #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
   #ifdef FEATURE_TOUCH_DISPLAY
     if (popup_active) {
-      debug_serial_port->println(F("Skipping Popup while in Timed Message")); 
+      //debug_serial_port->println(F("Skipping Popup while in Timed Message")); 
       return;  // skip this when a popup window is up, else will corrupt popup window content
     }
   #endif
@@ -19040,14 +19040,14 @@ void generic_popup_key(uint16_t key_ID, const char* msg_text) {
       key[key_ID].hold = false;
       refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window       
       strcpy(popup_text, msg_text);    
-      debug_serial_port->print(F("Short press for key ")); debug_serial_port->println(key[key_ID].text_on);  
+      //debug_serial_port->print(F("Short press for key ")); debug_serial_port->println(key[key_ID].text_on);  
       popup_toggle();
     } else {  // long press      
       BtnX_active = key_ID;  // Hold button state ON
       key[key_ID].hold = true;
       refresh_button_row(button_row);  // refresh before popup - popup will block writes outside window       
       strcpy(popup_text, msg_text);
-      debug_serial_port->print(F("Long press for key ")); debug_serial_port->println(key[key_ID].text_off);
+      //debug_serial_port->print(F("Long press for key ")); debug_serial_port->println(key[key_ID].text_off);
       //  Do something different
     }
   }
@@ -19128,19 +19128,21 @@ void process_buttons() { // (uint8_t button_ID) {
     for (int t = 0; t < NUM_KEYS; t++) {
       if (btn[key[t].btn_idx].p_btn.isPressed() && (key[t].row == button_row || key[t].row == 255))  {  // Only look at current button row keys or CW_BOX
         key_ID = t;  // flag the latest touched button, converted to key #
-        debug_serial_port->print(F("\nKey_ID:")); debug_serial_port->print(key_ID);
+        //debug_serial_port->print(F("\nKey_ID:")); debug_serial_port->print(key_ID);
         if (btn[key[key_ID].btn_idx].len == 0 || btn[key[key_ID].btn_idx].len == 2) {
-          debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[key_ID].btn_idx].len); 
-          debug_serial_port->print(F("  Invalid Duration: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].duration);
+          //debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[key_ID].btn_idx].len); 
+          //debug_serial_port->print(F("  Invalid Duration: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].duration);
           return;
         }
-        debug_serial_port->print(F("  Row:" )); debug_serial_port->print(key[key_ID].row);
-        debug_serial_port->print(F("  Column:" )); debug_serial_port->print(key[key_ID].btn_idx);
-        debug_serial_port->print(F("  Label: ")); debug_serial_port->print(key[key_ID].text_off);
-        debug_serial_port->print(F("  Hold: ")); debug_serial_port->print(key[key_ID].hold);
-        debug_serial_port->print(F("  Window: ")); debug_serial_port->print(key[key_ID].window);
-        debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[key_ID].btn_idx].len); 
-        debug_serial_port->print(F("  Press Duration: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].duration);
+        #ifdef DEBUG_KEY
+          debug_serial_port->print(F("  Row:" )); debug_serial_port->print(key[key_ID].row);
+          debug_serial_port->print(F("  Column:" )); debug_serial_port->print(key[key_ID].btn_idx);
+          debug_serial_port->print(F("  Label: ")); debug_serial_port->print(key[key_ID].text_off);
+          debug_serial_port->print(F("  Hold: ")); debug_serial_port->print(key[key_ID].hold);
+          debug_serial_port->print(F("  Window: ")); debug_serial_port->print(key[key_ID].window);
+          debug_serial_port->print(F("  Type(NIL=0,S=1,L=2,V=3: ")); debug_serial_port->print(btn[key[key_ID].btn_idx].len); 
+          debug_serial_port->print(F("  Press Duration: ")); debug_serial_port->println(btn[key[key_ID].btn_idx].duration);
+        #endif
         btn[key[key_ID].btn_idx].p_btn.press(false);   // reset state after assigning Button_ID        
         break;        
       }      
@@ -19202,7 +19204,7 @@ void process_buttons() { // (uint8_t button_ID) {
 
       case CW_BOX:
       default: 
-        debug_serial_port->println(F("Button: CW Box or Default"));
+        //debug_serial_port->println(F("Button: CW Box or Default"));
         if (popup_active) popup(false);
         clear_holds_key();  // reset key[].hold for all keys
         mem_number = 0;
