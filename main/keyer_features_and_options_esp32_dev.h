@@ -116,7 +116,7 @@
     ////#define USE_TASK // runs main loop in a task
     ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
-    //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
+    ////#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
 #endif
 
 //#define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
