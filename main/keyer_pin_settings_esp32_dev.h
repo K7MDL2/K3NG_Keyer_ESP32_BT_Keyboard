@@ -185,8 +185,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_SCL  32
     #define TOUCH_INT  21  // not actually used because R25 is not installed on DIYMalls 3.2" display and 21 is for i2c
     #define TOUCH_RST  25
-    #define TOUCH_WIDTH  320  
-    #define TOUCH_HEIGHT 240
+    #define TOUCH_WIDTH  480  
+    #define TOUCH_HEIGHT 320
     #define tx_key_line_1   22 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
     #define sidetone_line   26 // connect a speaker for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display
