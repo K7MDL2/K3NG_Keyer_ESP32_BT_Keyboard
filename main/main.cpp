@@ -1658,10 +1658,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define COLUMN_WIDTH 15         // width of mono-spaced scroll box font in pixels
   #define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
 
-  //#ifdef FEATURE_TFT_HOSYOND_320x480_LCD
   #ifdef RES_320_480   // 320x480 display
     // Define handle to receive return value
-    //SemaphoreHandle_t xMutex = NULL;  // coordinate access to SPI bus since touch and display share it.
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
     #define SCREEN_HEIGHT (TFT_WIDTH-1)
     #define SCROLL_BOX_LEFT_SIDE 3
