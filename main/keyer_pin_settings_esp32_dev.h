@@ -5,6 +5,9 @@ See pin assignment and limitations: https://circuits4you.com/2018/12/31/esp32-de
 ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used for ADC inputs:
 25, 26, 27, 14, 12, 13, 21, 22, 24, but can be used as digital i/o or PWM, interrupts etc.
 */
+/* Pins - you must review these and configure ! */
+#ifndef keyer_pin_settings_esdp32_dev_h
+#define keyer_pin_settings_esdp32_dev_h
 
 #ifdef FEATURE_MCP23017_EXPANDER
   // Add 100 o actual pin. 100 i sused o indicate an expansion pin and is subtracted in use
@@ -27,9 +30,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define MCP23017_PIN15    15  // spare
 #endif 
 
-/* Pins - you must review these and configure ! */
-#ifndef keyer_pin_settings_esdp32_dev_h
-#define keyer_pin_settings_esdp32_dev_h
+#define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
 
 // M5Stack Core2
 //#define M5STACK_CORE2 // provides sound and LCD touchscreen in one module
@@ -39,6 +40,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define paddle_left     27//32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
   #define paddle_right    33 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
   #define tx_key_line_1   26  // (high = key down/tx on)
+  #define tx_key_line_2    0  
   #define sidetone_line    0 //23         // connect a speaker for sidetone
   #define audio_enable     0 // Only for 3.5" Hoysond Display
   #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
@@ -81,6 +83,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_WIDTH  320  
     #define TOUCH_HEIGHT 240
     #define tx_key_line_1   16 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
+    #define tx_key_line_2   16 
     #define sidetone_line   26 // connect a speaker for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
@@ -93,6 +96,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define paddle_left     25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
     #define tx_key_line_1   16 // 16 aka RX2   (high = key down/tx on)
+    #define tx_key_line_2    0 
     #define sidetone_line   17 // aka TX2   connect a passive buzzer for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
@@ -144,6 +148,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_Y1  3549    // y1 3600 default
     #define TOUCH_BITS  (0x01) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
     #define tx_key_line_1   18 // (high = key down/tx on)
+    #define tx_key_line_2   16 
     #define sidetone_line   26 //26 connect a passive buzzer for sidetone
     #define audio_enable     4  // audio amp enable = LOW for this display (only?)
     #define potentiometer   35 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
@@ -188,6 +193,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_WIDTH  480  
     #define TOUCH_HEIGHT 320
     #define tx_key_line_1   22 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
+    #define tx_key_line_2   16 
     #define sidetone_line   26 // connect a speaker for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
@@ -204,6 +210,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define audio_enable      0 // Only for 3.5" Hoysond Display
   #define potentiometer     36 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
   #define ptt_tx_1          16             // PTT ("push to talk") lines
+  #define tx_key_line_2     0 
   #define tx_inhibit_pin    0
   #define tx_pause_pin      0
   #ifdef FEATURE_STRAIGHT_KEY
@@ -212,13 +219,12 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #endif
 
 //  common pins
-#define tx_key_line_2 0 
 #define tx_key_line_3 0
 #define tx_key_line_4 0
 #define tx_key_line_5 0
 #define tx_key_line_6 0
 
-#define ptt_tx_2 0              //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
+#define ptt_tx_2 0             //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
 #define ptt_tx_3 0              //   These are optional - set to 0 if unused
 #define ptt_tx_4 0
 #define ptt_tx_5 0

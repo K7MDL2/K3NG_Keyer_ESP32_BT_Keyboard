@@ -60,10 +60,10 @@
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
+#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD
 //#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
-#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
+//#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // The Setup file is then automatically selected.  When the TFT_eSPI library is updated, it will overwrite the changes in the User_Setup_Select.h file.
@@ -170,6 +170,7 @@
 // #define OPTION_WINKEY_SEND_WORDSPACE_AT_END_OF_BUFFER
 //#define OPTION_WINKEY_STRICT_HOST_OPEN               // require an admin host open Winkey command before doing any other commands
 #define OPTION_WINKEY_2_SUPPORT                      // comment out to revert to Winkey version 1 emulation
+#define OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE
 #define OPTION_WINKEY_INTERRUPTS_MEMORY_REPEAT
 //#define OPTION_WINKEY_UCXLOG_9600_BAUD              // use this only with UCXLog configured for Winkey 9600 baud mode
 //#define OPTION_WINKEY_2_HOST_CLOSE_NO_SERIAL_PORT_RESET  // (Required for Win-Test to function)
@@ -215,6 +216,7 @@
 // #define OPTION_WORDSWORTH_CZECH
 // #define OPTION_WORDSWORTH_DEUTSCH
 // #define OPTION_WORDSWORTH_NORSK
+// #define OPTION_WORDSWORTH_POLISH
 
 //#define OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS
 

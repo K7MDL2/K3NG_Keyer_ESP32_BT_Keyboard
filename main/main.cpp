@@ -1338,25 +1338,53 @@ Recent Update History
       Added pins pin_sending_mode_automatic and pin_sending_mode_manual which go HIGH for automatica and manual sending modes
 
     2022.02.01 //SP5IOU
-    Added support for ESP32_DEV board (Beta) Compile using ESP32 SDK ver 2.0.1 on newer ver 2.0.2 Sidetone doesn't work - bug in SDK
-    Need to update arduino with library Tone32 available at https://github.com/lbernstone/Tone32 
-    Added Wifi connectivity for ESP32_DEV board and integrated it with FEATURE_WEB_SERVER
-   Files modified - k3ng_keyer.ino, keyer_hardware.h, keyer_debug.h 
-   Files added: keyer_features_and_options_ESP32_dev.h, keyer_settings_esp32_dev.h, keyer_pin_settings_esp32_dev.h, keyer_esp32_dev.h
-   Added CLI extended command wifi <ssid> <password> .
+      Added support for ESP32_DEV board (Beta) Compile using ESP32 SDK ver 2.0.1 on newer ver 2.0.2 Sidetone doesn't work - bug in SDK
+      Need to update arduino with library Tone32 available at https://github.com/lbernstone/Tone32 
+      Added Wifi connectivity for ESP32_DEV board and integrated it with FEATURE_WEB_SERVER
+      Files modified - k3ng_keyer.ino, keyer_hardware.h, keyer_debug.h 
+      Files added: keyer_features_and_options_ESP32_dev.h, keyer_settings_esp32_dev.h, keyer_pin_settings_esp32_dev.h, keyer_esp32_dev.h
+      Added CLI extended command wifi <ssid> <password> .
      
+
+    -> Ported these select changes from original K3NG repo that came after this 2022 vintage ESP32 port
+    2023.09.28.1624
+      Put OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE back into all hardware profiles and enabling by default.  Not having it activated makes N1MM CQ Repeat paddle sending deactivation not work.
+
+    2023.09.29.2043
+      FEATURE_WINKEY_EMULATION: corrected pot_full_scale_reading  
+
+    2023.10.06.1053
+      FEATURE_INTERNET_LINK: Fix lock up related to initialization order (Thanks, SM3GSJ Roger)
+    
+    2023.10.09.2308
+      FEATURE_WINKEY_EMULATION: Now expect three parameters from deprecated Paddle A2D command
+      
+    2024.02.17.1400
+      Fixed issues found by swalberg ( https://github.com/k3ng/k3ng_cw_keyer/commit/e79277672f4c04dfeeef5bfb9c82e384b59f32c4#r134909644 ).  Thanks!
+
+    2024.02.17.1600
+      OPTION_WORDSWORTH_POLISH - Polish CW training text from Piotr, SP2BPD.  Thanks!
+      Straight key capability for CW training Piotr, SP2BPD.  Thanks!
+
+    2024.03.15.1354
+      FEATURE_WINKEY_EMULATION: Changed potentiometer behavior to work correctly with N1MM+ pot settings
+
+    2024.03.20.2239
+      tx_inhibit: unkey PTT when tx_inhibit goes active
+
+    -> These are new changes for ESP32 port after 2022.02.01
     2025.10.03 //K7MDL 
-    Modified slightly SP5IOU ESP32 changes to run on current (2025) ESP32-WROOM-32 dev board.  
-    Added BT_Keyboard Class, slightly modified from https://github.com/turgu1/bt-keyboard and converted to an Arduino library
-    Tested on Rii i8+ mini BT keyboard (BLE) and Logitech BT Classic K380 keyboard
-    Build creates precompiled images.
+      Modified slightly SP5IOU ESP32 changes to run on current (2025) ESP32-WROOM-32 dev board.  
+      Added BT_Keyboard Class, slightly modified from https://github.com/turgu1/bt-keyboard and converted to an Arduino library
+      Tested on Rii i8+ mini BT keyboard (BLE) and Logitech BT Classic K380 keyboard
+      Build creates precompiled images.
 
     2025.12.23 //K7MDL
-    Added TFT displays of various sizes including optional rows of Touch buttons with GT911 touch controller
-    Changed ESP32 to use GPIO interrupts for paddles and key for more accurate high speed chars
-    Added support for MCP23017 port expander using interrupt and single read of all 16 ports for speed
-    Button 2 cycles through all 10 CW memories with each tap and displays teh txt in each memory.
-    All other buttons only have test text, no roles are assigned yet.
+      Added TFT displays of various sizes including optional rows of Touch buttons with GT911 touch controller
+      Changed ESP32 to use GPIO interrupts for paddles and key for more accurate high speed chars
+      Added support for MCP23017 port expander using interrupt and single read of all 16 ports for speed
+      Button 2 cycles through all 10 CW memories with each tap and displays teh txt in each memory.
+      All other buttons only have test text, no roles are assigned yet.
 
   Documentation: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
@@ -1383,7 +1411,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.4"
+#define CODE_VERSION "K7MDL-2026.1.12"
 #define eeprom_magic_number 48             // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1944,7 +1972,7 @@ void setup_esp();
 enum button_ID{
   BUTTON_F1 = 0,
   BUTTON_PAUSE,
-  BUTTON_PTT_ENABLE,
+  BUTTON_TX_ENABLE,
   BUTTON_WPM_UP,
   BUTTON_WPM_DN,
   BUTTON_F2,
@@ -1959,9 +1987,11 @@ enum button_ID{
   BUTTON_MEM_8,
   BUTTON_F4,
   BUTTON_MEM_LIST,
+  BUTTON_SIDETONE_EN, //  Toggle Sidetone On/Off
+  BUTTON_TUNE,
+  BUTTON_TX_SELECT,
   BUTTON_POPUP_2,
   BUTTON_POPUP_3,
-  BUTTON_POPUP_4,
   CW_BOX,
   BUTTON_last_button
 };
@@ -2006,59 +2036,59 @@ enum button_ID{
     const uint8_t btn_idx;  // button array index - 0-5 for 6 buttons in a row
     const uint8_t row;  // store which row this key bleongs to.
     bool hold;   // this is a long duration key - can be used to highlight a key when displays
-    bool block;  // block other keys while active
+    bool skip;  // Do not clear the hold state when ESC is pressed
     bool window;  // used to keep popup window up during successive key presses.
-    const char text_off[6]; // key text when not highlighted
-    const char text_on[6];  // key label text when highlighted
+    char text_off[7]; // key text when not highlighted
+    char text_on[7];  // key label text when highlighted
   } key[NUM_KEYS] = 
   #ifdef TOUCH_BUTTON_16
   { 
     // 1st row
-    {BUTTON_PAUSE,      0,  0, false, false, false, "WAIT\0", "WAIT\0"}, 
-    {BUTTON_PTT_ENABLE, 1,  0, false, false, false, "PTTE\0", "PTTD\0"},
-    {BUTTON_WPM_UP,     2,  0, false, false, false, "W-U\0",  "W-U\0" }, 
-    {BUTTON_WPM_DN,     3,  0, false, false, false, "W-D\0",  "W-D\0" },    
-    {BUTTON_POPUP_2,    4,  0, false, false, false, "MSG2\0", "MSG2\0"},
-    {BUTTON_POPUP_3,    5,  0, false, false, false, "MSG3\0", "MSG3\0"},
-    {BUTTON_POPUP_4,    6,  0, false, false, false, "MSG4\0", "MSG4\0"},
-    {BUTTON_MEM_LIST,   7,  0, false, false, false, "MEM\0",  "MEM\0" }, 
+    {BUTTON_PAUSE,      0,  0, false, false, false, "Pause", "Pause"}, 
+    {BUTTON_TX_ENABLE,  1,  0, false, false, false, "TXen", "TXen"},
+    {BUTTON_WPM_UP,     2,  0, false, false, false, "Wpm+", "Wpm+"}, 
+    {BUTTON_WPM_DN,     3,  0, false, false, false, "Wpm-", "Wpm-"},    
+    {BUTTON_TUNE,       4,  0, false, false, false, "Tune", "Tune"},
+    {BUTTON_TX_SELECT,  5,  0, false, false, false, "Tx#1", "Tx#1"},
+    {BUTTON_SIDETONE_EN,6,  0, false, false, false, "Tone", "Tone"},
+    {BUTTON_MEM_LIST,   7,  0, false, false, false, "Mem",  "Mem" }, 
     //2nd row
-    {BUTTON_MEM_1,      8,  0, false, false, false, "M1\0",   "M1-R\0"},
-    {BUTTON_MEM_2,      9 , 0, false, false, false, "M2\0",   "M2-R\0"},
-    {BUTTON_MEM_3,      10, 0, false, false, false, "M3\0",   "M3-R\0"},
-    {BUTTON_MEM_4,      11, 0, false, false, false, "M4\0",   "M4-R\0"},
-    {BUTTON_MEM_5,      12, 0, false, false, false, "M5\0",   "M5-R\0"},
-    {BUTTON_MEM_6,      13, 0, false, false, false, "M6\0",   "M6-R\0"},
-    {BUTTON_MEM_7,      14, 0, false, false, false, "M7\0",   "M7-R\0"},
-    {BUTTON_MEM_8,      15, 0, false, false, false, "M8\0",   "M8-R\0"},
+    {BUTTON_MEM_1,      8,  0, false, false, false, "M1",   "M1-R"},
+    {BUTTON_MEM_2,      9 , 0, false, false, false, "M2",   "M2-R"},
+    {BUTTON_MEM_3,      10, 0, false, false, false, "M3",   "M3-R"},
+    {BUTTON_MEM_4,      11, 0, false, false, false, "M4",   "M4-R"},
+    {BUTTON_MEM_5,      12, 0, false, false, false, "M5",   "M5-R"},
+    {BUTTON_MEM_6,      13, 0, false, false, false, "M6",   "M6-R"},
+    {BUTTON_MEM_7,      14, 0, false, false, false, "M7",   "M7-R"},
+    {BUTTON_MEM_8,      15, 0, false, false, false, "M8",   "M8-R"},
     
     {CW_BOX,            16,255, false, false, false, "",       ""      }
   };
   #else
   { 
-    {BUTTON_F1,         0, 0, false, false, false, "F1",        "F1"},
-    {BUTTON_PAUSE,      1, 0, false, false, false, "WAIT\0","WAIT\0"}, 
-    {BUTTON_PTT_ENABLE, 2, 0, false, false, false, "PTTE\0","PTTD\0"},
-    {BUTTON_WPM_UP,     3, 0, false, false, false, "W-U\0",  "W-U\0"}, 
-    {BUTTON_WPM_DN,     4, 0, false, false, false, "W-D\0",  "W-D\0"},
+    {BUTTON_F1,         0, 0, false, false, false, "F1",      "F1"},
+    {BUTTON_PAUSE,      1, 0, false, false, false, "Pause","Pause"}, 
+    {BUTTON_TX_ENABLE,  2, 0, false, false, false, "TXen",  "TXen"},
+    {BUTTON_WPM_UP,     3, 0, false, false, false, "Wpm+",  "Wpm+"}, 
+    {BUTTON_WPM_DN,     4, 0, false, false, false, "Wpm-",  "Wpm-"},
 
-    {BUTTON_F2,         0, 1, false, false, false, "F2\0",    "F2\0"},
-    {BUTTON_MEM_1,      1, 1, false, false, false, "M1\0",  "M1-R\0"},
-    {BUTTON_MEM_2,      2, 1, false, false, false, "M2\0",  "M2-R\0"},
-    {BUTTON_MEM_3,      3, 1, false, false, false, "M3\0",  "M3-R\0"},
-    {BUTTON_MEM_4,      4, 1, false, false, false, "M4\0",  "M4-R\0"},
+    {BUTTON_F2,         0, 1, false, false, false, "F2",      "F2"},
+    {BUTTON_MEM_1,      1, 1, false, false, false, "M1",    "M1-R"},
+    {BUTTON_MEM_2,      2, 1, false, false, false, "M2",    "M2-R"},
+    {BUTTON_MEM_3,      3, 1, false, false, false, "M3",    "M3-R"},
+    {BUTTON_MEM_4,      4, 1, false, false, false, "M4",    "M4-R"},
     
-    {BUTTON_F3,         0, 2, false, false, false, "F3\0",    "F3\0"},
-    {BUTTON_MEM_5,      1, 2, false, false, false, "M5\0",  "M5-R\0"},
-    {BUTTON_MEM_6,      2, 2, false, false, false, "M6\0",  "M6-R\0"},
-    {BUTTON_MEM_7,      3, 2, false, false, false, "M7\0",  "M7-R\0"},
-    {BUTTON_MEM_8,      4, 2, false, false, false, "M8\0",  "M8-R\0"},
+    {BUTTON_F3,         0, 2, false, false, false, "F3",      "F3"},
+    {BUTTON_MEM_5,      1, 2, false, false, false, "M5",    "M5-R"},
+    {BUTTON_MEM_6,      2, 2, false, false, false, "M6",    "M6-R"},
+    {BUTTON_MEM_7,      3, 2, false, false, false, "M7",    "M7-R"},
+    {BUTTON_MEM_8,      4, 2, false, false, false, "M8",    "M8-R"},
 
-    {BUTTON_F4,         0, 3, false, false, false, "F4\0",    "F4\0"},
-    {BUTTON_MEM_LIST,   1, 3, false, false, false, "MEM\0",  "MEM\0"},   
-    {BUTTON_POPUP_2,    2, 3, false, false, false, "MSG2\0","MSG2\0"}, 
-    {BUTTON_POPUP_3,    3, 3, false, false, false, "MSG3\0","MSG3\0"},
-    {BUTTON_POPUP_4,    4, 3, false, false, false, "MSG4\0","MSG4\0"},
+    {BUTTON_F4,         0, 3, false, false, false, "F4",      "F4"},
+    {BUTTON_MEM_LIST,   1, 3, false, false, false, "Mem",    "Mem"},   
+    {BUTTON_TUNE,       2, 3, false, false, false, "Tune",  "Tune"}, 
+    {BUTTON_TX_SELECT,  3, 3, false, false, false, "Tx#1",  "Tx#1"},
+    {BUTTON_SIDETONE_EN,4, 3, false, false, false, "Tone",  "Tone"},
     
     {CW_BOX,            5,255, false, false, false, "",      ""     }             // 
   };
@@ -2639,6 +2669,8 @@ unsigned long millis_rollover = 0;
     #include "keyer_training_text_deutsch.h"
   #elif defined(OPTION_WORDSWORTH_NORSK)
     #include "keyer_training_text_norsk.h"  
+  #elif defined(OPTION_WORDSWORTH_POLISH)
+    #include "keyer_training_text_polish.h"    
   #else
     #include "keyer_training_text_english.h"
   #endif
@@ -2784,6 +2816,7 @@ byte service_tx_inhibit_and_pause(){
           }
         #endif
       }
+      ptt_unkey();
     }
   }
 
@@ -3752,7 +3785,7 @@ void update_icons(void) {
     #ifdef FEATURE_TOUCH_DISPLAY
       if (popup_active) return;  // bail, these screen writes below are outside the popup window
     #endif
-    static char GridSq[12] = "CN87xs\0";
+    static char GridSq[12] = "CN87xs";
     static char last_GridSq[12] = "\0";
     const int32_t row = STATUS_BAR_X_CURSOR;
 
@@ -4646,7 +4679,7 @@ void check_ps2_keyboard()
                                 } else if (configuration.sidetone_mode == SIDETONE_ON) {
                                     configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
                                     beep();
-                                    mydelay(200);
+                                    mydelay(400);
                                     beep();
                                     #ifdef FEATURE_DISPLAY
                                     if (LCD_COLUMNS < 9){
@@ -5348,15 +5381,27 @@ void check_potentiometer()
         debug_serial_port->print(F(" analog read: "));
         debug_serial_port->println(analogRead(potentiometer));
       #endif
-      if (keyer_machine_mode == KEYER_COMMAND_MODE) command_speed_set(pot_value_wpm_read);
-      else speed_set(pot_value_wpm_read);
-      last_pot_wpm_read = pot_value_wpm_read;
+
       #ifdef FEATURE_WINKEY_EMULATION
+        if (keyer_machine_mode == KEYER_COMMAND_MODE) {
+          command_speed_set(pot_value_wpm_read);
+        } else {
+          if (!winkey_host_open){
+            speed_set(pot_value_wpm_read);
+          }
+        }
         if ((primary_serial_port_mode == SERIAL_WINKEY_EMULATION) && (winkey_host_open)) {
           winkey_port_write(((pot_value_wpm_read-pot_wpm_low_value)|128),0);
           winkey_last_unbuffered_speed_wpm = configuration.wpm;
+        }        
+      #else
+        if (keyer_machine_mode == KEYER_COMMAND_MODE) {
+          command_speed_set(pot_value_wpm_read);
+        } else {
+          speed_set(pot_value_wpm_read);
         }
       #endif
+      last_pot_wpm_read = pot_value_wpm_read;
       #ifdef FEATURE_SLEEP
         last_activity_time = millis(); 
       #endif //FEATURE_SLEEP
@@ -5375,13 +5420,15 @@ byte pot_value_wpm()
   // int pot_read = analogRead(potentiometer);
   // byte return_value = map(pot_read, 0, pot_full_scale_reading, pot_wpm_low_value, pot_wpm_high_value);
   // return return_value;
-
-
   static int last_pot_read = 0;
   static byte return_value = 0;
   int pot_read = analogRead(potentiometer);
   if (abs(pot_read - last_pot_read) > potentiometer_reading_threshold ) {
-    return_value = map(pot_read, 0, pot_full_scale_reading, pot_wpm_low_value, pot_wpm_high_value);
+    #if defined(default_pot_full_ccw_reading)
+      return_value = map(pot_read, default_pot_full_ccw_reading, pot_full_scale_reading, pot_wpm_low_value, pot_wpm_high_value);
+    #else
+      return_value = map(pot_read, 0, pot_full_scale_reading, pot_wpm_low_value, pot_wpm_high_value);
+    #endif
     last_pot_read = pot_read;
   }
   return return_value;
@@ -6124,7 +6171,12 @@ void check_ptt_tail()
 //-------------------------------------------------------------------------------------------------------
 void write_settings_to_eeprom(int initialize_eeprom) {
 
-#if !defined(ARDUINO_SAM_DUE) || (defined(ARDUINO_SAM_DUE) && defined(FEATURE_EEPROM_E24C1024))
+  #if (!defined(ARDUINO_SAM_DUE) && \
+   !defined(ARDUINO_ARCH_MBED) && \
+   !defined(ARDUINO_RASPBERRY_PI_PICO_W) && \
+   !defined(ARDUINO_RASPBERRY_PI_PICO)) || \
+   (defined(ARDUINO_SAM_DUE) && \
+   defined(FEATURE_EEPROM_E24C1024))
 
     if (initialize_eeprom) {
         //configuration.magic_number = eeprom_magic_number;
@@ -6143,9 +6195,20 @@ void write_settings_to_eeprom(int initialize_eeprom) {
       EEPROM.commit();;
       #endif       
 
-      async_eeprom_write = 1;  // initiate an asyncrhonous eeprom write
+      async_eeprom_write = 1;  // initiate an asynchronous eeprom write
   
   #endif //!defined(ARDUINO_SAM_DUE) || (defined(ARDUINO_SAM_DUE) && defined(FEATURE_EEPROM_E24C1024))
+
+    #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+      #if defined(DEBUG_EEPROM)
+        debug_serial_port->println(F("write_settings_to_eeprom: ARDUINO_RASPBERRY_PI_PICO"));
+      #endif
+      EEPROM.write(0,eeprom_magic_number);
+      EEPROM.commit();
+      EEPROM.put(1, configuration);
+      EEPROM.commit();
+    #endif
+
     config_dirty = 0;
   }
 
@@ -6219,34 +6282,35 @@ int read_settings_from_eeprom() {
     return 1;
   #endif
   
-
-
   #if !defined(ARDUINO_SAM_DUE) || (defined(ARDUINO_SAM_DUE) && defined(FEATURE_EEPROM_E24C1024))
 
     #if defined(DEBUG_EEPROM_READ_SETTINGS)
       debug_serial_port->println(F("read_settings_from_eeprom: start"));
     #endif
-    #if defined(DEBUG_SETUP)
-    Serial.println(F("went here 8"));
-    #endif
 
     if (EEPROM.read(0) == eeprom_magic_number){
-    #if defined(DEBUG_SETUP)
-    Serial.println(F("went here 9"));
-    #endif
-      byte* p = (byte*)(void*)&configuration;
-      unsigned int i;
-      int ee = 1; // starting point of configuration struct
-      for (i = 0; i < sizeof(configuration); i++){
+
+      #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+
         #if defined(DEBUG_EEPROM_READ_SETTINGS)
-          debug_serial_port->print(F("read_settings_from_eeprom: read: i:"));
-          debug_serial_port->print(i);
-          debug_serial_port->print(F(":"));
-          debug_serial_port->print(EEPROM.read(ee));
-          debug_serial_port->println();
+          debug_serial_port->println(F("read_settings_from_eeprom: ARDUINO_RASPBERRY_PI_PICO"));
         #endif
-        *p++ = EEPROM.read(ee++);  
-      }
+        EEPROM.get(1, configuration);
+      #else
+        byte* p = (byte*)(void*)&configuration;
+        unsigned int i;
+        int ee = 1; // starting point of configuration struct
+        for (i = 0; i < sizeof(configuration); i++){
+          #if defined(DEBUG_EEPROM_READ_SETTINGS)
+            debug_serial_port->print(F("read_settings_from_eeprom: read: i:"));
+            debug_serial_port->print(i);
+            debug_serial_port->print(F(":"));
+            debug_serial_port->print(EEPROM.read(ee));
+            debug_serial_port->println();
+          #endif
+          *p++ = EEPROM.read(ee++);
+        }
+      #endif
     
       #ifndef FEATURE_SO2R_BASE
         switch_to_tx_silent(configuration.current_tx);
@@ -8849,7 +8913,6 @@ void send_tx() {
 //------------------------------------------------------------------
 
 void switch_to_tx_silent(byte tx) {
-
   switch (tx) {
    case 1: if ((ptt_tx_1) || (tx_key_line_1)) { configuration.current_ptt_line = ptt_tx_1; current_tx_key_line = tx_key_line_1; configuration.current_tx = 1; config_dirty = 1; } break;
    case 2: if ((ptt_tx_2) || (tx_key_line_2)) { configuration.current_ptt_line = ptt_tx_2; current_tx_key_line = tx_key_line_2; configuration.current_tx = 2; config_dirty = 1; } break;
@@ -8864,7 +8927,6 @@ void switch_to_tx_silent(byte tx) {
 //------------------------------------------------------------------
 void switch_to_tx(byte tx)
 {
-
   #ifdef FEATURE_MEMORIES
   repeat_memory = 255;
   #endif
@@ -10514,7 +10576,7 @@ void winkey_set_pot_parm3_command (byte incoming_serial_byte) {
 
   #ifdef FEATURE_POTENTIOMETER
     #ifdef OPTION_WINKEY_2_SUPPORT
-      pot_full_scale_reading = 1031;
+      pot_full_scale_reading = 1022;
     #else //OPTION_WINKEY_2_SUPPORT
       if (incoming_serial_byte == 255) {
         pot_full_scale_reading = 1031;
@@ -11968,7 +12030,11 @@ void service_winkey(byte action) {
             #ifdef DEBUG_WINKEY
               debug_serial_port->println(F("service_winkey:ADMIN_CMD hostclose"));
             #endif //DEBUG_WINKEY                  
-            beep_boop();
+            #if defined(OPTION_WINKEY_BLINK_PTT_ON_HOST_OPEN)
+              blink_ptt_dits_and_dahs("--");
+            #else
+              boop_beep();
+            #endif
             config_dirty = 1;
             #if defined(OPTION_WINKEY_2_SUPPORT) && !defined(OPTION_WINKEY_2_HOST_CLOSE_NO_SERIAL_PORT_RESET)
               primary_serial_port->end();
@@ -11983,7 +12049,8 @@ void service_winkey(byte action) {
             break;
           case 0x05: // paddle A2D
             winkey_port_write(WINKEY_RETURN_THIS_FOR_ADMIN_PADDLE_A2D,0);
-            winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
+            // winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
+            winkey_status = WINKEY_ADMIN_PADDLE_A2D_PARM_1;
             #ifdef DEBUG_WINKEY
               debug_serial_port->println(F("service_winkey:ADMIN_CMD paddleA2D"));
             #endif //DEBUG_WINKEY              
@@ -12008,11 +12075,15 @@ void service_winkey(byte action) {
             #endif //DEBUG_WINKEY              
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             break;  
-          case 0x09: // get cal
+          case 0x09: // get cal on WK1, unimplemented on WK2, getMajorVersion on WK3
             #ifdef DEBUG_WINKEY
               debug_serial_port->println(F("service_winkey:ADMIN_CMDgetcal"));
-            #endif //DEBUG_WINKEY           
-            winkey_port_write(WINKEY_RETURN_THIS_FOR_ADMIN_GET_CAL,0);
+            #endif //DEBUG_WINKEY                    
+            #if defined(OPTION_WINKEY_2_SUPPORT)
+              winkey_port_write(WINKEY_RETURN_THIS_FOR_ADMIN_GET_CAL_WK2, 1); // Docs say this should be 0, but this is a hack for compatibility
+            #else
+              winkey_port_write(WINKEY_RETURN_THIS_FOR_ADMIN_GET_CAL_WK1, 1);
+            #endif
             winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
             break;
           #ifdef OPTION_WINKEY_2_SUPPORT
@@ -12237,6 +12308,26 @@ void service_winkey(byte action) {
         winkey_sidetone_freq_command(incoming_serial_byte);
         winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
       }
+       if (winkey_status ==  WINKEY_ADMIN_PADDLE_A2D_PARM_3) {
+        #ifdef DEBUG_WINKEY
+          debug_serial_port->println("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_3 byte");
+        #endif //DEBUG_WINKEY         
+        winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
+      }    
+
+      if (winkey_status ==  WINKEY_ADMIN_PADDLE_A2D_PARM_2) {
+        #ifdef DEBUG_WINKEY
+          debug_serial_port->println("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_2 byte");
+        #endif //DEBUG_WINKEY                
+        winkey_status = WINKEY_ADMIN_PADDLE_A2D_PARM_3;
+      }
+
+      if (winkey_status ==  WINKEY_ADMIN_PADDLE_A2D_PARM_1) {
+        winkey_status = WINKEY_ADMIN_PADDLE_A2D_PARM_2;
+        #ifdef DEBUG_WINKEY
+          debug_serial_port->println("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_1 byte");
+        #endif //DEBUG_WINKEY        
+      }      
 
     } // else (winkey_status == WINKEY_NO_COMMAND_IN_PROGRESS)
   }  // if (action == SERVICE_SERIAL_BYTE
@@ -14769,6 +14860,17 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
           paddle_hit = 0;
           // TODO - print it to serial and lcd
         }
+
+        // code from Piotr, SP2BPD
+        #if defined(FEATURE_STRAIGHT_KEY)
+          long ext_key = service_straight_key();
+          if (ext_key != 0){
+            incoming_char = convert_cw_number_to_ascii(ext_key);
+            user_sent_cw.concat(incoming_char);
+            cw_char = 0;
+          }
+        #endif
+        // ------
 
         // do we have all the characters from the user? - if so, get out of user_send_loop
         if ((user_sent_cw.length() >= cw_to_send_to_user.length()) || ((progressive_step_counter < 255) && (user_sent_cw.length() == progressive_step_counter))) {
@@ -18387,15 +18489,21 @@ void initialize_watchdog(){
 //--------------------------------------------------------------------- 
 
 void check_eeprom_for_initialization(){
-    #if defined(HARDWARE_GENERIC_STM32F103C)
+  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO) 
+    EEPROM.begin(4096);
+  #endif
+
+  #if defined(HARDWARE_GENERIC_STM32F103C)
 //      EEPROM.PageBase0 = 0x801F000; //SP5IOU 20210802
 //      EEPROM.PageBase1 = 0x801F800; //SP5IOU 20210802
 //      EEPROM.PageSize  = 0x800;     //SP5IOU 20210802 Increasinng size of eeprom emulation x2
 //      EEPROM.init(); //sp5iou 20180328 to reinitialize / initialize EEPROM
-    #endif
-   #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
+  #endif
+  
+  #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
     EEPROM.begin(1024);
-   #endif
+  #endif
+  
   // do an eeprom reset to defaults if paddles are squeezed
   if (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {
     while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {vTaskDelay(1 / portTICK_PERIOD_MS);}
@@ -18992,7 +19100,7 @@ void create_buttons() {
     btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
     btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size    
     #ifndef TOUCH_BUTTON_16
-    btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 2);  // library modified to ignore text size
     #else
     // These keys are only created if a larger display is used with room for more keys
     btn[5].p_btn.initButtonUL(&lcd,  ba+(5*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
@@ -19008,7 +19116,7 @@ void create_buttons() {
     btn[13].p_btn.initButtonUL(&lcd, ba+(5*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
     btn[14].p_btn.initButtonUL(&lcd, ba+(6*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
     btn[15].p_btn.initButtonUL(&lcd, ba+(7*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[16].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+    btn[16].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 2);  // library modified to ignore text size
     #endif
 
     refresh_button_row(0);
@@ -19022,7 +19130,10 @@ void clear_holds_key() {
     //if (key[t].hold) {
       //debug_serial_port->print(F("ESC: Btn was in HOLD: "));debug_serial_port->println(key[t].text_off);
     //}
-    key[t].hold = false;  
+    lcd.setFreeFont(TFT_FONT_SMALL);
+    if (!key[t].skip) // Do not clear buttons marked with skip == true
+      key[t].hold = false;
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
   }
   #endif
 }
@@ -19111,6 +19222,39 @@ void list_memory_key(uint16_t key_ID, uint8_t memory_number) {
   #endif
 }
 
+void TX_enable_key(uint16_t key_ID) {
+  #ifdef FEATURE_TOUCH_DISPLAY
+    queueflush(); 
+    queueadd(PS2_I_CTRL);
+    check_ps2_keyboard();
+    if (key_tx) {
+      key[key_ID].hold = false;
+    } else {
+      key[key_ID].hold = true;  // highlight button and use 'On' state text
+    }
+    key[key_ID].skip = true;  // do not clear the hold when ESC pressed.
+    refresh_button_row(button_row);
+  #endif
+}
+
+void TX_select_key(uint16_t key_ID) {
+  #ifdef FEATURE_TOUCH_DISPLAY
+    uint8_t tx_number;
+    char tx_msg[10];
+
+    tx_number = configuration.current_tx;
+    tx_number++;
+    if (tx_number > MAX_TX_PORTS) tx_number = 1; // cycle back to 1   
+    switch_to_tx(tx_number);
+    if (tx_number != configuration.current_tx) {
+      debug_serial_port->println("Configuration Error: No TX_Line or PTT_line defined"); 
+    }
+    sprintf(tx_msg, "Tx#%1d", configuration.current_tx);
+    strcpy(key[key_ID].text_off, tx_msg);
+    refresh_button_row(button_row);
+  #endif
+}
+
 // Processes the button press, looks up the key it is assigned to for the current row
 // Pressing the FUNC button increments the button row counter
 // The button row counter is reset to 0 if it exceeds the number of button rows.
@@ -19185,28 +19329,18 @@ void process_buttons() { // (uint8_t button_ID) {
       case BUTTON_MEM_7: memX_key(key_ID, 7); break;  // Memory 7
       case BUTTON_MEM_8: memX_key(key_ID, 8); break;  // Memory 8
 
-      case BUTTON_PTT_ENABLE:
-        if (configuration.ptt_disabled){
-          configuration.ptt_disabled = 0;
-          key[key_ID].hold = false;
-        } else {
-          configuration.ptt_disabled = 1;
-          ptt_unkey();
-          key[key_ID].hold = true;
-        }
-        config_dirty = 1;
-        refresh_button_row(button_row);
-        break;
-        
-      case BUTTON_POPUP_2: generic_popup_key(key_ID, btn2_text); break;
-      case BUTTON_POPUP_3: generic_popup_key(key_ID, btn3_text); break;
-      case BUTTON_POPUP_4: generic_popup_key(key_ID, btn4_text); break;
+      case BUTTON_TX_SELECT:   TX_select_key(key_ID); break;
+      case BUTTON_TX_ENABLE:   TX_enable_key(key_ID); break; // TX_enable_key(key_ID); break;
+      case BUTTON_TUNE:        queueflush(); queueadd(PS2_T_CTRL); break;  // Toggle TUNE
+      case BUTTON_SIDETONE_EN: queueflush(); queueadd(PS2_O_CTRL); break; //  Toggle Sidetone On/Off
+      case BUTTON_POPUP_2:     generic_popup_key(key_ID, btn2_text); break;
+      case BUTTON_POPUP_3:     generic_popup_key(key_ID, btn3_text); break;
 
       case CW_BOX:
       default: 
         //debug_serial_port->println(F("Button: CW Box or Default"));
         if (popup_active) popup(false);
-        clear_holds_key();  // reset key[].hold for all keys
+        clear_holds_key();    // reset key[].hold for all keys
         mem_number = 0;
         BtnX_active = 0;
         refresh_button_row(button_row);
@@ -24743,6 +24877,9 @@ void setup_esp()
     initialize_ethernet();
     initialize_udp();
     initialize_web_server();
+    //initialize_display();
+    //create_buttons();
+    //update_icons();
     initialize_sd_card();  
     initialize_debug_startup();
 }
