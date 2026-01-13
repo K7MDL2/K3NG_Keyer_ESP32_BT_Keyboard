@@ -53,11 +53,11 @@ Check out the latest changes on this Wiki page https://github.com/K7MDL2/K3NG_Ke
 
 See the Wiki Pages for more information about parts supported and configuration. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
-This is a 3.5" 480x320 TFT with a single panel of 16 keys.  Here a blue message window is diplaying the contents of memory #3 which is using the Insert Memory macro '\Ix' to insert memories 7 and 8 which happen to be programmed with my callsign and grid square.
+This is a 3.5" 480x320 TFT with a single panel of 16 keys.  If you press the Mem key, a blue message window pops up diplaying the contents of each memory.  You can use Insert Memory macro '\Ix' to insert memories (1-9 only).  For example I have memeories 7 and 8 programmed with my callsign and grid square.
 
-![20260103_004828](https://github.com/user-attachments/assets/2b84576d-e6be-43b1-b7e4-6095e2f6b35f)
+<img width="762" height="433" alt="image" src="https://github.com/user-attachments/assets/6fe568ab-11aa-40ff-be7d-16ad6caa34ff" />
 
-This is a 3.2" 320x240 TFT with 4 rows of 4 keys (not counting the Fx key to change rows).  has identical 16 keys on each.
+This is a 3.2" 320x240 TFT with 4 rows of 4 keys (not counting the Fx key to change rows).  Has the identical 16 key assignments.
 
 <img width="1146" height="610" alt="image" src="https://github.com/user-attachments/assets/b4512298-544b-4bc3-94d5-6bd83fdc7d14" />
 
