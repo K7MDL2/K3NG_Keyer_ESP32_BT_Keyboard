@@ -71,15 +71,13 @@ I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboa
 
 I am using ESP-IDF to compile.  Arduino32 is added as a component.  I first tried Arduino IDE but I was not able to get a BT classic keyboard (Logitech K380) to fully connect after it was discovered.  My BLE Rii i8+ keyboard worked fine though.  My BT_Keyboard test programs behaved the same.   I ported it to esp-idf and BT classic works proper as does the Rii. The K380s BLE keyboard works but does not reconnect and required re-pairing after each disocnnect/powerup/reset.  You can compile this under Arduino IDE but see this page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE for current functionality restrictions.
 
-I was getting RTOS WDT warnings while dits and dahs were being sent, competing with the BT service task.   I put the main program loop and check_bt_keyboard() into their own RTOS tasks and the problem seems to be solved for now. Seem OK at 30WPM and 13WPM.  More testing required.
-
 The BT keyboard translates BT key codes to match the PS2 keycodes and calls into the slightly modified PS2 keyboard function.  See the K3NG docs for USB\PS2 Keyboard commands. I have a copy of the BT keyboard commands on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/BT-Keyboard-Key-Assignments.   Not all keys on a PS2/USB keyboard are present on these compact BT keyboards.   I may alter some of the key assignments over time.
 
-Tested with BLE K380s and Rii i8+ mini keyboards, and the Logitech K380 which happens to use BT classic.
+Tested with BLE K380s and Rii i8+ mini keyboards, and the Logitech K380, which happens to use BT classic.
 
-I plan to fork the original K3NG repo then merge my changes into it so that this benefit from the updates to the original.  Since this version is currently compiled under esp-idf framework, it is not likely to be accepted into the main repo.  - As of 11/6/2025, can compile under Arduino but BT keyboards do not work yet.
+I plan to fork the original K3NG repo then merge my changes into it so that this benefit from the updates to the original.  Since this version is currently compiled under esp-idf framework, it is not likely to be accepted into the main repo.  - you can compile under Arduino but all BT keyboards do not work yet.
 
-I hav e several WIKI pages to show how I set up the IDE Tool options.  The TFT_eSPI and BT_keyboard files are included as a component so there should be no need to find and download libraries and components unlike in Arduino.  When someone does a clean install and compile this can be verified.
+I have several WIKI pages to show how I set up the IDE Tool options.  The TFT_eSPI and BT_keyboard files are included as a component so there should be no need to find and download libraries and components unlike in Arduino.
 
 I provide precompiled firmware files for your compatible CPU board using either of 2 tools so you do not have to compile the code, just upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmware: 
 
