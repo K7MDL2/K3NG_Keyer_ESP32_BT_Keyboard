@@ -2149,6 +2149,9 @@ bool BT_Keyboard_Lost = false;
 bool Keyboard_Disconnected_signal = false;
 bool Keyboard_Connected_signal = false;
 void BT_Keyboard_Status(void);
+void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration_ms = 0UL);
+void s_noTone(uint8_t sidetone_line_pin_num);
+
 
 //#define USE_BT_TASK // for BT check in a task
 #ifdef USE_BT_TASK
@@ -6807,7 +6810,7 @@ void tx_and_sidetone_key (int state)
                 #ifdef FEATURE_M5STACK_CORE2
                     M5.Speaker.tone(700, configuration.hz_sidetone);
                 #else
-                    tone(sidetone_line,configuration.hz_sidetone,0);
+                    s_tone(sidetone_line,configuration.hz_sidetone,0);
                 #endif                                            // generate a tone on the speaker pin
             #endif
         #else
@@ -6837,7 +6840,7 @@ void tx_and_sidetone_key (int state)
                       M5.Speaker.stop();
                   }
               #else
-                  noTone(sidetone_line);
+                  s_noTone(sidetone_line);
               #endif
             #else
             if (sidetone_line) {
@@ -6868,7 +6871,7 @@ void tx_and_sidetone_key (int state)
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
         #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-          tone(sidetone_line, configuration.hz_sidetone,0);
+          s_tone(sidetone_line, configuration.hz_sidetone,0);
         #else
           if (sidetone_line) {
             digitalWrite(sidetone_line, sidetone_line_active_state);
@@ -6892,7 +6895,7 @@ void tx_and_sidetone_key (int state)
         if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
           #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
             #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-              noTone(sidetone_line);
+              s_noTone(sidetone_line);
             #else
               if (sidetone_line) {
                 digitalWrite(sidetone_line, sidetone_line_inactive_state);
@@ -8361,7 +8364,7 @@ void command_progressive_5_char_echo_practice() {
               unsigned int TONEduration          =   50;                                  // define the duration of each tone element in the tone sequence to drive a speaker
               for (int k=0; k<6; k++) {
                 #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-                  tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
+                  s_tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
                 #else  
                 // a loop to generate some increasing tones
                   tone(sidetone_line,NEWtone);                                              // generate a tone on the speaker pin
@@ -8739,7 +8742,7 @@ void command_sidetone_freq_adj() {
         #ifdef FEATURE_M5STACK_CORE2
           M5.Speaker.tone(700, configuration.hz_sidetone);
         #else
-          tone(sidetone_line,configuration.hz_sidetone,100);                                              // generate a tone on the speaker pin
+          s_tone(sidetone_line,configuration.hz_sidetone,100);                                              // generate a tone on the speaker pin
         #endif
     #else  
         tone(sidetone_line, configuration.hz_sidetone, 0);
@@ -8798,7 +8801,7 @@ void command_sidetone_freq_adj() {
   }
   while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
           #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-            noTone(sidetone_line);
+            s_noTone(sidetone_line);
           #else
             noTone(sidetone_line);
           #endif
@@ -9323,7 +9326,7 @@ void beep()
       #ifdef FEATURE_M5STACK_CORE2a
         M5.Speaker.tone(hz_high_beep, 200);
       #else  
-        tone(sidetone_line, hz_high_beep, 200);
+        s_tone(sidetone_line, hz_high_beep, 200);
       #endif
     #endif
   #else
@@ -9344,7 +9347,7 @@ void boop()
             #ifdef FEATURE_M5STACK_CORE2a
                 M5.Speaker.tone(hz_low_beep, 100);
             #else
-                tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+                s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
             #endif
         #else  
             tone(sidetone_line, hz_low_beep, 0);
@@ -9371,8 +9374,8 @@ void beep_boop()
                 M5.Speaker.tone(hz_high_beep, 100);
                 M5.Speaker.tone(hz_low_beep, 100);
             #else
-                tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
-                tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+                s_tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
+                s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
             #endif
         #else  
             tone(sidetone_line, hz_high_beep);
@@ -9400,8 +9403,8 @@ void boop_beep()
             M5.Speaker.tone(hz_low_beep, 100);
             M5.Speaker.tone(hz_high_beep, 100);
         #else
-            tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
-            tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
+            s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+            s_tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
         #endif
      #else  
         tone(sidetone_line, hz_low_beep);
@@ -11038,124 +11041,6 @@ void winkey_admin_get_values_command() {
 
 }
 #endif
-
-
-/*
-
-Chapter One
-
-It was late on a rainy Sunday evening.  Static crashes on the direct conversion receiver signaled a distant thunderstorm, due to arrive in an hour or so.  Colin knew he would have to disconnect the little microcontroller circuit from the receiver and all the station antennas soon, but it was getting late and he had to get his sleep for work the next day.
-
-The contraption was a tangled mess on his desk, something only a radio amateur or mad scientist could appreciate.  Alligator clips connected the I and Q audio from the simple receiver to the microcontroller.  Colin had been learning about fast Fourier analysis.  This was his first attempt at actually running the code in an effort to decode RTTY signals.   The microcontroller probably lacked the horsepower to do it, and Colin knew expecting any sort of performance from his creation was a long shot.
-
-Colin tuned to some RTTY signals but couldn't copy anything, despite carefully and slowly tuning the receiver in hopes of hitting that sweet spot where perhaps the microcontroller would blurt out some intelligence, some discernable word or text.  Just one recognizable snippet would give him the feeling of accomplishment or even victory, even if his design never proved to be usable in his nightly hobby.
-
-The static crashes grew stronger and more frequent.  Colin had resigned himself to the fact that success would not be achieved this evening.  The approaching storm along with his growing fatigue convinced him to shut things down and head upstairs to bed.  Just then a burst of noise, different from the thunderstorm static crashes, but a type that you normally hear on 80 meters each night blurted out.  The microcontroller sent out its serial port a string of random characters, in a vain attempt to decode the sounds:
-
-GEHZCVFNOVTZBEBA
-
-Colin went about the process of disconnecting the power to everything and disconnecting antennas and went to bed.
-
-The next evening after supper with his family, Colin went to his basement radio room again, determined to work again on his project but perhaps less eager than before due to the increasing futility of his efforts.  The microcontroller sat connected to the receiver, and the controller to the computer.  He listened to the receiver in the background while responding to emails.  There was a QSO in progress, an old man talking about his dog itching a lot.  The two old men in the conversation droned on forever, with Colin chuckling to himself, but too caught up in his email to reach over and tune the rig to another frequency in hopes of finding a more interesting conversation.
-
-A burst of noise came through the rig again, much like the night before, though much stronger.  The simple receiver lacked automatic gain control and the strong signal produced a rather loud, annoying noise emanating from the rig, prompting Colin to reach over and turn the volume down.  Colin noticed on his serial terminal program another random string of characters which the microcontroller dutifully decoded:
-
-GEHZCVFNOVTZBEBA
-
-The string looked familiar to Colin.  He copied and pasted the string into search on his computer.  The search produced one hit, the terminal program log from the previous evening.  Colin opened the file and saw the matching string, 16 characters.  "What are the chances of that happening?", he thought.  He looked through his code again, looking for some sort of mistake, pattern in the code algorithm, or some plausible explanation. The receiver belched again:
-
-GEHZCVFNOVTZBEBA
-
-At this point Colin had no plausible explanation why the same random string of characters would be decoded last night and this evening, from mere noise bursts.  Frustrated, he decided to post a message on an Internet group describing the strange behavior and the random characters, and then walked away from his radios to watch TV with the family.  After almost an hour of watching mindless sitcoms, it was time for the kids to go to bed.  After they were tucked into bed, Colin came back to his desk to catch up on email.
-
-The receiver, still powered up with the random noise of the universe coming out of the speaker at a low level, and the connected microcontroller circuit sat idle, waiting for some signal to decode.  An AM roundtable comes up on frequency and he listens awhile, while he continues to web surf, looking for something to occupy his mind.  A static crash comes through the speaks and the microcontroller terminal comes alive again, spewing characters:
-
-COLINMEETME@40-10-45.5&75-10-52.6@SAT1200Z
-
-"Wow" Colin exclaims, almost involuntarily.  He pauses for a moment, hoping his wife in the next room hasn't heard him.  She doesn't respond, continuing to watch TV.  "That's my name....coordinates, and a day and time.  That can't be a coincidence.  What in the world have I stumbled upon?" he thinks.  Nervously he brings up Google Earth and enters  the coordinates.  It's a coffee shop, about an hour and twenty minutes south. " Whoever sent this wants to meet me?"
-
-Chapter Two
-
-Colin barely slept the rest of the nights that week thinking about the message.  He stays out of his radio room which is very unlike him.  His wife is out of town this weekend, and Colin rationalizes that there's no excuse to not go to the coffee shop.  Early Saturday morning he quickly gets up, and nervously gets dressed.  He worries if he's given himself enough time to get there.  It's near the city and the surrounding suburban area where the coffee shop is located is notorious for bad traffic.  He decides to take a toll road and exit where he can take back roads to avoid the main thoroughfares.
-
-He arrived at the coffee with a few minutes to spare, takes an out of the way parking spot towards the rear of the restaurant, backing in so he can see anyone pulling in or out, and the side entrance of the coffee shop.  He sits in the vehicle and surveys the parking lot.   Opening the glove compartment he pulls out a pistol in a holster.  Although licensed for carrying a sidearm, Colin rarely, if ever actual wore it in public.  He strapped it on to his belt and double-checked that his jacket concealed it.  His hands shook nervously, but he reassured himself he was somewhat prepared in case the proverbial "men in black" attempted to swoop down and throw him into a black van and drive off.
-
-Looking up, Colin sees an old man in the parking lot looking his way.  They make eye contact.  Colin looks away but it's clear the old man is has somehow identified him.  Colin sighs.  "Perhaps he saw all the antennas on my vehicle, or my callsign plate."  He gets out of the vehicle, locks it, and walks over to the old man.
-
-"Hello" he says in a somewhat frail voice.  "You Colin?"
-
-"Yes" replies Colin, nervously.
-
-The old man nods and his face lightens up.  "Come inside, let's talk."
-
-They go inside and get in line.  The old man orders a coffee, and Colin, never acquiring a taste for coffee, get a hot chocolate.  They grab a table towards the back, away from everyone else.  The old man looks around to make sure they're out of earshot of others.
-
-The old man leans inward, "So you copied my transmission the other day?"
-
-"Yes."  Colin tells him the story of how he came upon the transmission.
-
-"Well, congratulations.  You've stumbled upon something I think you're going to be very happy about.  You're in amateur radio?"  Colin nods.  "You've come upon a secret society.  We've been around a long time, since World War II.  Some of us are hams, others aren't.  We're everywhere.  You've heard us anytime you've turned on a radio, you just didn't know it.  We're the people you don't normally find on the air....the academics, scientists, progressives, politicians, famous people...activists...introverts...geniuses...people close to world leaders.  We communicate via encrypted messaging.  Those noise bursts you heard were transmissions from me.  Some of our communications are noise bursts.  Sometime we communicate with pure noise, indistinguishable from the normal noise you hear on your receiver everyday.  We hide out in the open."
-
-"But how do you do this?"  Colin's technical curiosity emerges.  "How do you communicate with noise?"
-
-The old man takes a sip from his coffee.  "We use a pseudo-random bit stream and quadrature modulate a digital signal taken from a special alphabet, somewhat like ASCII.  It's amazingly simple but nearly impossible to break without the bit stream.  You were just lucky to receive it.  Apparently the buggy code in your microcontroller digital signal processing generates part of the pseudo random stream under the right conditions.  Everyone thinks 80 meters is noisy.  It's really not, there's just a lot of us talking on it.  You ever turn on your radio and it's S9 noise everywhere?"
-
-"Yes" replies Colin.
-
-"Sometimes that's us.  We sometimes modulate wideband noise when we have a particularly large message to send out, something important.  The technology is really interesting.  It pushes the limits of Shannon's Equation." he pauses.  "You ever hear of long delay echos?"
-
-"I've never experienced one, but I've read about them and heard they're somewhat common." Colin says.
-
-He smiles.  "That's us.  Sometime we communicate by receiving someone's signal on the air, we delay it, modulate the noise on it, and re-transmit it.  We do that for fun.  People seem to get a kick out of it."
-
-"Why does this society exist?"  asks Colin.
-
-"We serve a higher purpose." pointing above, he says.  "It came out of the Resistance in World War II and was originally intended to prevent atrocities like the Holocaust from happening again, but since then it's grown to encompass other things.  Many of us started off as radio amateurs and got bored with it.  We dropped out.  We're the radio guys you don't see at hamfests or on the Internet.  Those of us who are licensed amateurs usually lay low and don't get on the air, at least in a way you can hear us.  Amateur radio is to us as CB is to amateur radio.  Few of us fit in with them. Members communicate about important stuff, like scientific discoveries or secret information from governments that could save lives or change the world.  We've provided information that has ended wars, and started some.  Some say we provided the information that started the fall of the USSR.  We operate without borders or recognition of nationality.   I'm not sure how many of us there are, but it's perhaps in the thousands, worldwide."
-
-Colin asks "Are you spies?"
-
-"We're not spies, we're communicators." he replies.
-
-"Does the government know of this network?" 
-
-"Perhaps, but not at a high level or in any official capacity that we know of.  We definitely have members close to people high up, advisers of sorts.  Undoubtedly there are members in intelligence agencies in various governments.  But they don't dare divulge knowledge of the network.  It's too valuable.  To them it's a tool, and they know they would be denied that tool, purged from the network, should they let others know of it.  But they are free to use the information they receive, as they see fit.  But they know they have a responsibility to use it for the greater good."
-
-The old man clears his throat and takes another gulp of coffee.  "Communications is a weapon, more powerful than any weapon you can carry.  That phone," he said, pointing to my iPhone lying on the table, " is just as powerful as the weapon you have on your belt, just in a different way."
-
-Colin tries to hide a puzzled look, wondering how the old man knew of his weapon.  Changing the subject, he asks "How do people get into this?"
-
-"Membership is by invitation only.  We have 16 character identity strings.  You received mine.  An identity string is what you would call a callsign in amateur radio.  You're the first person I've ever heard of receiving the signal without knowledge of the code.  There's no process for someone like you to join.  But I'm getting old and I need to hand off my encryption stream to someone before I die, to keep it going.  You seem to be a nice enough guy, qualified to join, from what I have seen and heard about you."
-
-"But.... this sounds like a network of rather smart and powerful people.  I'm just an ordinary guy who likes to play with radios and occasionally build something.  I'm not a scientist or someone powerful.  Is there some role I will have, something I need to do?" Colin asks.
-
-"Some members just have fun with this, somewhat like a hobby.  They don't have roles, for now.  You will have a role, you just don't know what it is yet.  Do not seek out a role.  Do not try to make yourself important or identify some great thing to do.  Those who invent things to do, create crises, or give themselves power get purged from the network.  Your role will become known in due time and you will know it when you encounter it.  Trust me." 
-
-He goes on, "You're going to receive more information.  It will explain the encryption algorithm.  You know how to program, so with a little bit of work you should be able to write the software for a transceiver that will work reliably.  I'll also give you an identity string.  It's derived from mine and you'll eventually be able to trace it back mathematically to previous identity strings and others in the hierarchy.  The more you communicate, your identity string will establish a trust relationship with other identity strings, other operators.  The more operators you gain trust with, you will get more of the algorithm and more of the bit stream.  With more of the algorithm and bit stream, the more signals you will be able to receive and you will be able to communicate with more people in the network hierarchy.  With perseverance and patience you'll get to know some high level members, perhaps even people you see on the news."
-
-"I said before that there are thousands of operators.  The truth is I don't know how many operators there are.  No one does.  As more of the bit stream is revealed, more members appear.  For all we know there could be millions of members.  There could be extra-terrestrials in the network."  He chuckles.  "Some have theorized that some of the noise we receive from outer space could be actually intelligence encrypted in the noise, like we do.  We just don't have the information or computing power yet to decode it."
-
-The smile leaves old man's face.  "You have to keep this a secret.  If you reveal this to the wrong people, the results would be disastrous.  Those who reveal the code of the noise are purged from the network, sometimes not seen again."
-Before Colin could ask his next question, the old man got up, handed him a card with characters written in bold black marker:
-
-8^fGwq9(:lLDPu6$
-
-"Congratulations.  This is your identity string.  Memorize it.  Guard it with your life."  He offers his right hand and they shake hands.
-
-Colin follows the old man out the door, wanting to ask more questions. "Where will I would get the information on the algorithm, how do I build a transceiver?"  he frantically asks.
-
-"You have to listen to the noise."  he said as he walked to his car, got in, and drove off.
-
-Colin drove home in somewhat of a daze, not sure what to make of all this.  Was the old man crazy, or was all this real?  Colin went about my business for a few days, thinking about the old man and wondering what would be next.  "Would I get something in the mail?  Perhaps an email?  Would he contact me again?"
-
-A few days later while watching the local news, a story came on about the death of a prominent researcher.  Colin was shocked to see a grainy photo of the old man he had met at the coffee shop, the photo perhaps from the 60s as he looked younger, more Colin's age today.  Walter was his name.  He had worked at Bell Labs in New Jersey as a physicist and had made many discoveries in communications which were patented in the 60s and 70s.  Walter was a quiet man but was known for his community work.  He fled Germany with his family as a young boy prior to World War II breaking out.  His father was a poor potato farmer who later helped the allies in cryptography after he devised a code based on the patterns of eyes on potatoes.  His wife had passed before him several years earlier.  Walter died alone at his home, of unknown causes and his death was under investigation.  Investigators doubted there was foul play, but there was a rather odd paper he was writing with codes on it found next to him.  He was survived by two children and some grandchildren residing in Florida.  Colin thought perhaps he could contact his family, but he knew he couldn't risk revealing what he had heard from the man if what he said was true.  Colin sat dumbfounded, wondering if he had lost his one connection to the secret network.
-
-Later that night Colin once again turned on his receiver to 80 meters.  The little circuit sat idle with alligator clips connecting the rig audio to it.  His original goal of copying a RTTY signal now seemed pointless and insignificant in the grand scheme of things with the new knowledge he had.  He wanted to write more code and figure out the algorithm, all of it.  But Colin had no idea what next step to take, no clue what the algorithm was that would grant him access to a whole new world.  He pulled the card out of his wallet with his identity string and stared at the seemingly random 16 characters.  It contained uppercase, lowercase, numbers, symbols, just about everything.  Perhaps it was a base 64 character set?  What secrets were in it?  His thoughts were a disorganized jumble, and feeling a headache coming on he stopped himself from thinking further about it.
-
-He was no longer interested in listening to Morse code signals or voice conversations.  That was merely just meaningless noise, a distraction from what he was really looking for.  Every little pop and crackle on the receiver caught his attention.  Was it just random atmospheric noise leftover from the Big Bang or some noisy electrical appliance, or was there intelligence in each seemingly random sounds?  For hours he scanned through the band, hoping to catch the right signal in hopes that his little contraption might pick up some clue that would lead him to the next step, perhaps someone else in the network since his contact had passed away.  BZZZZZT bursts from the receiver and the microcontroller terminal screen came alive:
-
- 8^fGwq9(:lLDPu6$ : KEEP LISTENING TO THE NOISE AND AWAIT FURTHER INFO.
-
-*/
 
 
 //-------------------------------------------------------------------------------------------------------
@@ -14924,7 +14809,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
                     #ifdef FEATURE_M5STACK_CORE2a
                         M5.Speaker.tone(NEWtone, TONEduration);
                     #else
-                        tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
+                        s_tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
                     #endif
                 #else  
                     tone(sidetone_line,NEWtone);                                            // generate a tone on the speaker pin
@@ -23413,6 +23298,17 @@ void so2r_command() {
 
 //-------------------------------------------------------------------------------------------------------
 
+// eventually replace tone() with a better adjustable volume version
+void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration_ms)
+{
+  tone(sidetone_line_pin_num, frequency, duration_ms);
+}
+
+ void s_noTone(uint8_t sidetone_line_pin_num)
+ {
+    noTone(sidetone_line_pin_num);
+ }
+
 
 // DL2DBG contributed code (adapted into code by Goody K3NG)
 // Based on https://forum.arduino.cc/index.php?topic=446209.15
@@ -24138,7 +24034,7 @@ void update_time(){
                                 {   
                                     switch (ch) 
                                     {
-                                        //case 0x04 : ch = 0; tone(sidetone_line,configuration.hz_sidetone,0); break; // Alt-b
+                                        //case 0x04 : ch = 0; s_tone(sidetone_line,configuration.hz_sidetone,0); break; // Alt-b
                                         //case 0x05 : ch = 0; noTone(sidetone_line); break;  // Alt-b                                        
                                         case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
                                         case 0x29 : ch = PS2_ESC; 
