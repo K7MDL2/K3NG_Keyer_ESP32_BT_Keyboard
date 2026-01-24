@@ -1411,7 +1411,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.24"
+#define CODE_VERSION "K7MDL-2026.1.24.1"
 #define eeprom_magic_number 53            // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -3806,6 +3806,7 @@ void update_icons(void) {
       if (popup_active) return;  // bail, these screen writes below are outside the popup window
     #endif
     static char last_GridSq[grid_len_max] = "";
+    static byte last_key_tx = false;
     char tx_str[7] = "";
     static uint8_t last_tx = 0;
     const int32_t row = STATUS_BAR_X_CURSOR;
@@ -3814,17 +3815,19 @@ void update_icons(void) {
     //lcd.setFreeFont(STATUS_BAR_FONT);
     lcd.setTextFont(STATUS_BAR_FONT);
     
-    if (configuration.current_tx != last_tx) // grid changed, update display
+    if (configuration.current_tx != last_tx || last_key_tx != key_tx) // TX state changed, update display
     {
       sprintf(tx_str, "T%d", last_tx);
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
       lcd.drawString(tx_str, TX_NUM_ANCHOR, row);   // blank out space 
 
       sprintf(tx_str, "T%d", configuration.current_tx);
-      lcd.setTextColor(TFT_CYAN, TFT_BLACK);
+      if (!key_tx) lcd.setTextColor(TFT_RED, TFT_BLACK);  // enabled
+      else lcd.setTextColor(TFT_GREEN, TFT_BLACK); // disabled
       lcd.drawString(tx_str, TX_NUM_ANCHOR, row); // update display
 
-      last_tx = configuration.current_tx;  // write grid square
+      last_tx = configuration.current_tx;  // remember last state
+      last_key_tx = key_tx;
     }
 
     if (strcmp(configuration.GridSq, last_GridSq) != 0)  // grid changed, update display
@@ -3833,7 +3836,7 @@ void update_icons(void) {
       lcd.drawString(last_GridSq, GRID_ANCHOR, row);   // blank out space 
 
       if (!configuration.ignore_gps) {
-        lcd.setTextColor(TFT_GREEN, TFT_BLACK);
+        lcd.setTextColor(TFT_GREENYELLOW, TFT_BLACK);
         lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
       }
       strcpy(last_GridSq, configuration.GridSq);  // write grid square
@@ -19174,6 +19177,7 @@ void TX_enable_key(uint16_t key_ID) {
     }
     key[key_ID].skip = true;  // do not clear the hold when ESC pressed.
     refresh_button_row(button_row);
+    update_icons();
   #endif
 }
 
@@ -24730,7 +24734,7 @@ void initialize_st7789_lcd()
     lcd.fillScreen(TFT_BLACK);  
     lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
     // Set up new screen and draw status bar and icons in it
-    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+    lcd.setTextColor(TFT_GREY, TFT_BLACK);
     //lcd.setFreeFont(FM9);
     lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)
     lcd.drawString("00:00:00", SCROLL_TEXT_LEFT_SIDE, STATUS_BAR_X_CURSOR);  
@@ -24740,7 +24744,6 @@ void initialize_st7789_lcd()
     lcd.drawFastHLine(0,SCROLL_BOX_TOP-1, SCREEN_WIDTH, TFT_RED);
     //lcd.setTextWrap(false, false);                         // turn off text wrap, else will overwrite the borders
     lcd.setTextWrap(true, true);                         // turn off text wrap, else will overwrite the borders
-    //update_icons();
     lcd.setTextColor(TFT_WHITE,TFT_BLACK);
     // now updae scroll box area with satus messages and eventually CW text to send
     //lcd.drawCentreString("Searching for BT Keyboard ...", SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 2);
