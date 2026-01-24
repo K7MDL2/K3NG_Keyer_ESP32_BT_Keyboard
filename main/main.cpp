@@ -1412,7 +1412,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 */
 
 #define CODE_VERSION "K7MDL-2026.1.24"
-#define eeprom_magic_number 52            // you can change this number to have the unit re-initialize EEPROM
+#define eeprom_magic_number 53            // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
 #include "keyer_hardware.h"
@@ -1895,7 +1895,8 @@ struct config_t {  // 120 bytes total
 #ifdef FEATURE_TFT_DISPLAY
   uint8_t grid_digits;  // length of gridsquare to display
   char GridSq[grid_len_max];  // typically 9 bytes
-    // 1+9 bytes
+  bool ignore_gps;  // set to true if we shoudl not use GPS info
+    // 2+9 bytes
 #endif
 
 #if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
@@ -1974,7 +1975,7 @@ void initialize_tonsin();
 void mydelay(uint32_t _ms);
 void setup_esp();
 int print_memory(byte memory_number, char *mem_string);
-void check_gps(bool force_update);
+void check_gps(bool force_update, bool ignore_gps);
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
@@ -3830,8 +3831,11 @@ void update_icons(void) {
     {
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
       lcd.drawString(last_GridSq, GRID_ANCHOR, row);   // blank out space 
-      lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-      lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
+
+      if (!configuration.ignore_gps) {
+        lcd.setTextColor(TFT_GREEN, TFT_BLACK);
+        lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
+      }
       strcpy(last_GridSq, configuration.GridSq);  // write grid square
     }
 
@@ -4886,13 +4890,13 @@ void check_ps2_keyboard()
                                       lcd_center_print_timed("GRID LENGTH = 4 ", 0, default_display_msg_delay);
                                     #endif
                                   }
-                                  check_gps(true);  // force a memory update                  
+                                  check_gps(true, false);  // force a memory update                  
                                 }
                                 break;
 
                                 case PS2_F10_CTRL :   // clear out stored GPS grid sqaure value                              
                                   strcpy(grid_sq_str, "");
-                                  check_gps(true);  // force a memory update                                             
+                                  check_gps(true, true);  // force a memory update                                             
                                 break;
 
                                 #ifdef FEATURE_AUTOSPACE
@@ -24786,12 +24790,22 @@ void initialize_st7789_lcd()
 
 #ifdef FEATURE_GPS
 // insert GPS grid square and time/date functions here.
-void check_gps(bool force_update) {
+void check_gps(bool force_update, bool ignore_gps) {
   static char last_grid_sq_str[12] = "";
   int memory_number = GRID_MEMORY-1;
   int x;
 
-  if (strlen(grid_sq_str) == 0) { // if no input then allow manually programmed grid to be used, do not overwrite, bail.
+  if (ignore_gps) {
+    if (!configuration.ignore_gps) {
+      configuration.ignore_gps = true;   // toggle gps usage off
+    } else {
+      configuration.ignore_gps = false;  // toggle gps usage back on
+    }
+    config_dirty = 1;
+    debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
+  }  
+  
+  if (strlen(grid_sq_str) == 0 || configuration.ignore_gps) { // if no input then allow manually programmed grid to be used, do not overwrite, bail.
     strcpy(configuration.GridSq, ""); // zero out stored grid used for icon row
     return;
   } else {
@@ -24975,7 +24989,7 @@ void main_loop(void)
         #endif
         
         #ifdef FEATURE_GPS
-            check_gps(false);
+            check_gps(false, false);
         #endif
         
         #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
