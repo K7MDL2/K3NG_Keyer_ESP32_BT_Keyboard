@@ -1411,8 +1411,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.12"
-#define eeprom_magic_number 48             // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "K7MDL-2026.1.24"
+#define eeprom_magic_number 52            // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
 #include "keyer_hardware.h"
@@ -1651,6 +1651,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_TFT_DISPLAY)
+  const uint8_t grid_len_max = 9;
   #define CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION
   //#define TFT_VIEWPORT
   #ifdef M5STACK_CORE2a
@@ -1696,9 +1697,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
     #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
-    #define ICON_SPACING (ICON_COLUMN_WIDTH+4)   
-    #define GRID_ANCHOR (178)
-    #define WPM_ANCHOR (278)
+    #define ICON_SPACING (ICON_COLUMN_WIDTH+4)
+    #define TX_NUM_ANCHOR (126)
+    #define GRID_ANCHOR (168)
+    #define WPM_ANCHOR (280)
     #define ICON_ANCHOR (378)
     #define STATUS_BAR_X_CURSOR (8)
   #else   // 240x320 and 170x320
@@ -1714,6 +1716,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define ICON_COLUMN_WIDTH 12    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
     #define ICON_SPACING (ICON_COLUMN_WIDTH+2)
+    #define TX_NUM_ANCHOR (80)
     #define GRID_ANCHOR (110)
     #define WPM_ANCHOR (180)
     #define ICON_ANCHOR (250)
@@ -1888,6 +1891,13 @@ struct config_t {  // 120 bytes total
 
   int sidetone_volume;
     // 2 bytes
+
+#ifdef FEATURE_TFT_DISPLAY
+  uint8_t grid_digits;  // length of gridsquare to display
+  char GridSq[grid_len_max];  // typically 9 bytes
+    // 1+9 bytes
+#endif
+
 #if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
   char wifissid[20]=WIFI_SSID;//Initialize configuration.wifissid with default set in keyer_settings...h file
   char wifipassword[20]=WIFI_PASSWORD;//Initialize configuration.wifipassword with default set in keyer_settings...h file
@@ -1963,6 +1973,8 @@ void initialize_sinewave_generator();
 void initialize_tonsin();
 void mydelay(uint32_t _ms);
 void setup_esp();
+int print_memory(byte memory_number, char *mem_string);
+void check_gps(bool force_update);
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
@@ -2197,6 +2209,11 @@ byte zero = 0;
 byte iambic_flag = 0;
 unsigned long last_config_write = 0;
 uint16_t memory_area_end = 0;
+#ifdef DEFAULT_GRID
+  char grid_sq_str[12] = DEFAULT_GRID;
+#else
+  char grid_sq_str[12] = {};
+#endif
 
 #ifdef FEATURE_SLEEP
   unsigned long last_activity_time = 0;
@@ -3782,26 +3799,40 @@ int touch_button_available() {
   #endif
 }
 
-
 void update_icons(void) {
 #ifdef FEATURE_TFT_DISPLAY    
     #ifdef FEATURE_TOUCH_DISPLAY
       if (popup_active) return;  // bail, these screen writes below are outside the popup window
     #endif
-    static char GridSq[12] = "CN87xs";
-    static char last_GridSq[12] = "\0";
+    static char last_GridSq[grid_len_max] = "";
+    char tx_str[7] = "";
+    static uint8_t last_tx = 0;
     const int32_t row = STATUS_BAR_X_CURSOR;
 
     lcd.setTextDatum(MY_DATUM);
     //lcd.setFreeFont(STATUS_BAR_FONT);
     lcd.setTextFont(STATUS_BAR_FONT);
-    lcd.setTextColor(TFT_BLUE, TFT_BLACK);
-    if (strncmp(GridSq, last_GridSq, 6))  // grid changed. update display
+    
+    if (configuration.current_tx != last_tx) // grid changed, update display
     {
-      lcd.setTextColor(TFT_DARKCYAN, TFT_BLACK);
-      //lcd.drawString("           ", GRID_ANCHOR-1, row;  // 8 digit grid square
-      lcd.drawString(GridSq,        GRID_ANCHOR, row);   // blank out space 
-      strncpy(last_GridSq, GridSq, 6);  // write grid square
+      sprintf(tx_str, "T%d", last_tx);
+      lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+      lcd.drawString(tx_str, TX_NUM_ANCHOR, row);   // blank out space 
+
+      sprintf(tx_str, "T%d", configuration.current_tx);
+      lcd.setTextColor(TFT_CYAN, TFT_BLACK);
+      lcd.drawString(tx_str, TX_NUM_ANCHOR, row); // update display
+
+      last_tx = configuration.current_tx;  // write grid square
+    }
+
+    if (strcmp(configuration.GridSq, last_GridSq) != 0)  // grid changed, update display
+    {
+      lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+      lcd.drawString(last_GridSq, GRID_ANCHOR, row);   // blank out space 
+      lcd.setTextColor(TFT_GREEN, TFT_BLACK);
+      lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
+      strcpy(last_GridSq, configuration.GridSq);  // write grid square
     }
 
 //    GRID_ANCHOR (SCREEN_WIDTH/4)
@@ -3885,7 +3916,6 @@ void update_icons(void) {
       last_pause_sending_buffer = pause_sending_buffer;
     }
 
-    
     #if defined (FEATURE_BT_KEYBOARD) 
     static bool last_BT_Connected = 0;
       if (last_BT_Connected != bt_keyboard.is_connected())
@@ -4843,6 +4873,27 @@ void check_ps2_keyboard()
                                 }
                                 break;
                                 #endif //OPTION_SAVE_MEMORY_NANOKEYER
+
+                                case PS2_F9_CTRL : {  // tell GPS how many grid digits to save to memory location
+                                  if (configuration.grid_digits == 4) {
+                                    configuration.grid_digits = 6;
+                                    #ifdef FEATURE_DISPLAY
+                                      lcd_center_print_timed("GRID LENGTH = 6 ", 0, default_display_msg_delay);
+                                    #endif
+                                  } else {
+                                    configuration.grid_digits = 4;
+                                    #ifdef FEATURE_DISPLAY
+                                      lcd_center_print_timed("GRID LENGTH = 4 ", 0, default_display_msg_delay);
+                                    #endif
+                                  }
+                                  check_gps(true);  // force a memory update                  
+                                }
+                                break;
+
+                                case PS2_F10_CTRL :   // clear out stored GPS grid sqaure value                              
+                                  strcpy(grid_sq_str, "");
+                                  check_gps(true);  // force a memory update                                             
+                                break;
 
                                 #ifdef FEATURE_AUTOSPACE
                                 case PS2_Z_CTRL:
@@ -18777,7 +18828,7 @@ void initialize_display() {
         #ifdef TOUCH_GT911_BUTTONS
           tp.begin();  // does a Wire.begin() on 1st I2C bus 0
           tp.setRotation(ROTATION_LEFT);
-          debug_serial_port->println(F("Completed setup on 2nd i2c bus for GT911 Touch Sensor"));
+          //debug_serial_port->println(F("Completed setup on 2nd i2c bus for GT911 Touch Sensor"));
         #endif
       #endif
     #endif
@@ -24678,7 +24729,7 @@ void initialize_st7789_lcd()
     lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
     //lcd.setFreeFont(FM9);
     lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)
-    lcd.drawString("K7MDL Keyer", SCROLL_TEXT_LEFT_SIDE, STATUS_BAR_X_CURSOR);  
+    lcd.drawString("00:00:00", SCROLL_TEXT_LEFT_SIDE, STATUS_BAR_X_CURSOR);  
     lcd.setTextColor(TFT_RED);
     lcd.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_BOX_HEIGHT, 6, TFT_RED);
     lcd.drawFastHLine(0, SCROLL_BOX_TOP-2, SCREEN_WIDTH, TFT_RED);
@@ -24733,6 +24784,45 @@ void initialize_st7789_lcd()
   }
 #endif
 
+#ifdef FEATURE_GPS
+// insert GPS grid square and time/date functions here.
+void check_gps(bool force_update) {
+  static char last_grid_sq_str[12] = "";
+  int memory_number = GRID_MEMORY-1;
+  int x;
+
+  if (strlen(grid_sq_str) == 0) { // if no input then allow manually programmed grid to be used, do not overwrite, bail.
+    strcpy(configuration.GridSq, ""); // zero out stored grid used for icon row
+    return;
+  } else {
+    strcpy(configuration.GridSq, grid_sq_str);  // store valid GPS grid into EEPROM
+  }
+  
+  if (configuration.grid_digits == 0)
+    configuration.grid_digits = 4;
+  
+  // Store grid square into the designated memory location
+  if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || force_update) {  // grid or digits changed, store new value
+    strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
+    //debug_serial_port->print("Grid=");debug_serial_port->println(configuration.GridSq);
+
+    for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
+      EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(configuration.GridSq[x]));
+      if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
+        x = configuration.grid_digits;
+      }
+    }
+
+    EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
+    //debug_serial_port->print(F("\nWrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+    strcpy(last_grid_sq_str, grid_sq_str);
+    config_dirty = 1;
+    update_icons();
+    beep();
+  }  // end memory changed
+}
+#endif
+
 void setup_esp()
 {
     static bool setup_called = false;
@@ -24760,7 +24850,7 @@ void setup_esp()
     check_for_beacon_mode();
     check_for_debug_modes();
     initialize_analog_button_array();
-    #if !defined(DEBUG_EEPROM_READ_SETTINGS)
+    #if defined(DEBUG_EEPROM_READ_SETTINGS)
         initialize_serial_ports();
     #endif 
     initialize_ps2_keyboard();
@@ -24882,6 +24972,10 @@ void main_loop(void)
 
         #if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD)
             check_ps2_keyboard();
+        #endif
+        
+        #ifdef FEATURE_GPS
+            check_gps(false);
         #endif
         
         #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)

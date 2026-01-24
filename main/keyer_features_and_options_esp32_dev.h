@@ -8,6 +8,7 @@
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
+//  Use empty string ("") if there is no GPS active.  No grid will display on status row.
 //#define FEATURE_BUTTONS
 //#define FEATURE_COMMAND_MODE
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
@@ -39,7 +40,6 @@
 // #define FEATURE_LCD1602_N07DH      // http://linksprite.com/wiki/index.php5?title=16_X_2_LCD_Keypad_Shield_for_Arduino
 //#define FEATURE_LCD_SAINSMART_I2C
 
-
 // Using TST_eSPI libary for TFT displays.  To add a new display, edits in several places are required
 // IO pins assigments
 // A new USer_Setup.h file in the TFT_e_SPI_Custom_Config folder
@@ -59,9 +59,9 @@
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
-//#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
-//#define DISPLAY_TYPE M5STACK_CORE2_LCD
+#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
+//#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
 //#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
@@ -80,6 +80,8 @@
     #define FEATURE_IDEASPARK_LCD  // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
     #define FEATURE_STRAIGHT_KEY   // This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
+    #define FEATURE_GPS  // if enabled adn not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define DEFAULT_GRID "CN87"  // substitute for GPS supplied grid square. This and GPS will display on status row.
 #endif
 #if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
@@ -92,6 +94,8 @@
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
+    #define FEATURE_GPS  // if enabled adn not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define DEFAULT_GRID "CN87xs67"  // substitute for GPS supplied grid square. This and GPS will display on status row.
 #endif
 #if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
     //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
@@ -102,7 +106,7 @@
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
+    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
     ///#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
@@ -112,6 +116,8 @@
     ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     ////#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
+    #define FEATURE_GPS  // if enabled adn not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define DEFAULT_GRID "CN87ts"  // substitute for GPS supplied grid square. This and GPS will display on status row.
 #endif
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
@@ -123,6 +129,8 @@
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define TOUCH_BUTTON_16
+    #define FEATURE_GPS  // if enabled adn not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define DEFAULT_GRID "CN88"  // substitute for GPS supplied grid square. This and GPS will display on status row.
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
 #endif
 
