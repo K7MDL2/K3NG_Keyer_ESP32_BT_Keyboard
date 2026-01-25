@@ -23,7 +23,7 @@
 
 # K3NG CW Keyer (Modified for ESP32)
 
-Based on a 2022 version, modifed to run on ESP32-WROOM32 with BT keyboards and TFT and LCD displays and compiled under ESP-IDF, or with some limitations Arduino.
+Based on a 2022 version modifed to run on ESP32-WROOM32.  Select updates since 2025 have been applied.  Added BT keyboards, TFT and LCD displays. Compiles under ESP-IDF, or with some limitations Arduino.
 To build under ESP-IDF (preferred) see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
 To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE
 
