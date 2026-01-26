@@ -1411,7 +1411,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.26"
+#define CODE_VERSION "K7MDL-2026.1.26.1"
 #define eeprom_magic_number 53            // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
