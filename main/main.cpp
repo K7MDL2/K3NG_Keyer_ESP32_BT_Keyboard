@@ -1698,9 +1698,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
     #define ICON_SPACING (ICON_COLUMN_WIDTH+4)
-    #define TX_NUM_ANCHOR (126)
-    #define GRID_ANCHOR (164)
-    #define WPM_ANCHOR (296)
+    #define TX_NUM_ANCHOR (112)
+    #define GRID_ANCHOR (148)
+    #define WPM_ANCHOR (285)
     #define ICON_ANCHOR (378)
     #define STATUS_BAR_X_CURSOR (8)
   #else   // 240x320 and 170x320
@@ -3902,7 +3902,7 @@ void update_icons(void) {
     {
       lcd.setTextColor(TFT_CYAN, TFT_BLACK);
       itoa(configuration.wpm, WPM, 10);
-      strncat(WPM, "WPM", 6);
+      strncat(WPM, "wpm", 6);
       lcd.drawString("       ", WPM_ANCHOR, row);  // erase old
       lcd.drawString(WPM,       WPM_ANCHOR, row);  // WPM rate
       last_WPM = configuration.wpm;
@@ -24785,7 +24785,7 @@ void initialize_st7789_lcd()
     lcd.setTextColor(TFT_GREY, TFT_BLACK);
     //lcd.setFreeFont(FM9);
     lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)
-    lcd.drawString("00:00:00", SCROLL_TEXT_LEFT_SIDE, STATUS_BAR_X_CURSOR);  
+    lcd.drawString("00:00:00", SCROLL_TEXT_LEFT_SIDE-6, STATUS_BAR_X_CURSOR);  
     lcd.setTextColor(TFT_RED);
     lcd.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_BOX_HEIGHT, 6, TFT_RED);
     lcd.drawFastHLine(0, SCROLL_BOX_TOP-2, SCREEN_WIDTH, TFT_RED);
