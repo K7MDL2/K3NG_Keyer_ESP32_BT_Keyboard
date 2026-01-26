@@ -43,7 +43,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define tx_key_line_2    0  
   #define sidetone_line    0 //23         // connect a speaker for sidetone
   #define audio_enable     0 // Only for 3.5" Hoysond Display
-  #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+  //#define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
   #define ptt_tx_1         0     //27   PTT ("push to talk") lines
   #define tx_inhibit_pin  13   //9
   #define tx_pause_pin    14  //10
@@ -75,6 +75,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  25 //TXD0
       #endif //FEATURE_STRAIGHT_KEY
+      #define GPS_RX_PIN      35 // will conflict with NCP23017 if used
     #endif
     #define TOUCH_SDA  33  // intenral bus for i2c touch controller GT911 pins
     #define TOUCH_SCL  32
@@ -82,6 +83,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_RST  25
     #define TOUCH_WIDTH  320  
     #define TOUCH_HEIGHT 240
+    #define potentiometer    0 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define tx_key_line_1   16 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
     #define tx_key_line_2   16 
     #define sidetone_line   26 // connect a speaker for sidetone
@@ -99,7 +101,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define tx_key_line_2    0 
     #define sidetone_line   17 // aka TX2   connect a passive buzzer for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display
-    #define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+    #define GPS_RX_PIN      35 // will conflict pot if used
+    #define potentiometer    0 //35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         5 // PTT ("push to talk") lines 
     #define tx_inhibit_pin   0  //13 
     #define tx_pause_pin     0  //14
@@ -141,20 +144,21 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  39
       #endif //FEATURE_STRAIGHT_KEY
+      #define GPS_RX_PIN      35 // will conflict with NCP23017 if used      
     #endif
-    #define TOUCH_X   300     // x  300 default
-    #define TOUCH_X1  3598    // x1 3600 default
-    #define TOUCH_Y   345     // y  300 default
-    #define TOUCH_Y1  3549    // y1 3600 default
-    #define TOUCH_BITS  (0x01) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
+    #define TOUCH_X         300     // x  300 default
+    #define TOUCH_X1        3598    // x1 3600 default
+    #define TOUCH_Y         345     // y  300 default
+    #define TOUCH_Y1        3549    // y1 3600 default
+    #define TOUCH_BITS      (0x01) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
+    #define potentiometer    0 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define tx_key_line_1   18 // (high = key down/tx on)
     #define tx_key_line_2   16 
     #define sidetone_line   26 //26 connect a passive buzzer for sidetone
     #define audio_enable     4  // audio amp enable = LOW for this display (only?)
-    #define potentiometer   35 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1        22 // 23 for PTT ("push to talk") lines, GPIO22 is RED LED
-    #define tx_inhibit_pin   19 
-    #define tx_pause_pin     23
+    #define tx_inhibit_pin  19 
+    #define tx_pause_pin    23
     #ifdef FEATURE_STRAIGHT_KEY
       #define pin_straight_key 39 //TXD0 - GREEN LED
     #endif //FEATURE_STRAIGHT_KEY
@@ -185,6 +189,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  25 //TXD0
       #endif //FEATURE_STRAIGHT_KEY
+      #define GPS_RX_PIN      35 // will conflict with NCP23017 if used     
     #endif
     #define TOUCH_SDA  33  // intenral bus for i2c touch controller GT911 pins
     #define TOUCH_SCL  32
@@ -216,6 +221,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #ifdef FEATURE_STRAIGHT_KEY
     #define pin_straight_key 27 //TXD0
   #endif //FEATURE_STRAIGHT_KEY
+  #define GPS_RX_PIN        35 // will conflict with NCP23017 if used     
 #endif
 
 //  common pins

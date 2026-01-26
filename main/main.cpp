@@ -1700,7 +1700,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define ICON_SPACING (ICON_COLUMN_WIDTH+4)
     #define TX_NUM_ANCHOR (126)
     #define GRID_ANCHOR (168)
-    #define WPM_ANCHOR (280)
+    #define WPM_ANCHOR (296)
     #define ICON_ANCHOR (378)
     #define STATUS_BAR_X_CURSOR (8)
   #else   // 240x320 and 170x320
@@ -6385,7 +6385,7 @@ int read_settings_from_eeprom() {
       return 0;
     } else {
     #if defined DEBUG_SETUP
-    Serial.println(F("Went here 10"));
+    debug_serial_port->println(F("Went here 10"));
     #endif
       #if defined(DEBUG_EEPROM_READ_SETTINGS)
         debug_serial_port->println(F("read_settings_from_eeprom: eeprom needs initialized"));
@@ -6399,7 +6399,7 @@ int read_settings_from_eeprom() {
     debug_serial_port->println(F("read_settings_from_eeprom: bypassed read - no eeprom"));
   #endif
      #if defined DEBUG_SETUP
-    Serial.println(F("went here 11"));
+    debug_serial_port->println(F("went here 11"));
     #endif
  
   return 1;
@@ -24792,9 +24792,242 @@ void initialize_st7789_lcd()
 #endif
 
 #ifdef FEATURE_GPS
+// Process NMEA data to extract position an time, calculates grid sqaure
+// Using TinyGPSPlus_ESP32 library to get lat, lon and time
+// Additional functions to calculate maidenhead grid square
+#include <TimeLib.h>
+#include "TinyGPSPlus.h"
+#include <string>
+
+SECONDARY_SERIAL_CLS * gps_serial_port;
+
+/* Global variables for handling GPS conversion to Maindernhead grid square  */
+#define NMEA_MAX_LENGTH  (120)
+#define GRIDSQUARE_LEN  (9u)
+struct position {
+    double latitude;
+    double longitude;
+} pos;
+struct position *p = &pos;
+
+void reverse(char *str, int len);
+void ftoa(float n, char *res, int afterpoint);
+int positionToMaidenhead(char m[]);
+int Convert_to_MH(void);
+void ConvertToMinutes(char _gps_msg[]);
+tmElements_t tm;
+TinyGPSPlus gps; // The TinyGPSPlus object
+bool UTC = false;    // 0 local time, 1 UTC time
+int hr_off;  // time offsets to apply to UTC time
+int min_off;
+int shift_dir;  // + or -
+
+// reverses a string 'str' of length 'len' 
+void reverse(char *str, int len) 
+{ 
+    int i=0, j=len-1, temp; 
+    while (i<j) 
+    { 
+        temp = str[i]; 
+        str[i] = str[j]; 
+        str[j] = temp; 
+        i++; j--; 
+    } 
+} 
+
+// Converts a given integer x to string str[].  d is the number 
+// of digits required in output. If d is more than the number 
+// of digits in x, then 0s are added at the beginning. 
+int intToStr(int x, char str[], int d) 
+{ 
+    int i = 0; 
+    while (x) 
+    { 
+        str[i++] = (x%10) + '0'; 
+        x = x/10; 
+    } 
+  
+    // If number of digits required is more, then 
+    // add 0s at the beginning 
+    while (i < d) 
+        str[i++] = '0'; 
+  
+    reverse(str, i); 
+    str[i] = '\0'; 
+    return i; 
+} 
+
+// Converts a floating point number to string. 
+void ftoa(float n, char *res, int afterpoint) 
+{ 
+    // Extract integer part 
+    int ipart = (int)n; 
+  
+    // Extract floating part 
+    float fpart = n - (float)ipart; 
+  
+    // convert integer part to string 
+    int i = intToStr(ipart, res, 0); 
+  
+    // check for display option after point 
+    if (afterpoint != 0) 
+    { 
+        res[i] = '.';  // add dot 
+  
+        // Get the value of fraction part upto given no. 
+        // of points after dot. The third parameter is needed 
+        // to handle cases like 233.007 
+        fpart = fpart * pow(10, afterpoint); 
+  
+        intToStr((int)fpart, res + i + 1, afterpoint); 
+    } 
+}
+
+/*
+* The algorithm is fairly straightforward. The scaling array provides divisors to divide up the space into the required number of sections,
+* which is 18 for for the field, 10 for the square, 24 for the subsquare, 10 for the extended square, then 24, then 10. 
+* The limit is 6 pairs which is 2 more than is used even in the most detailed versions (8 characters in all). 
+* The divisor is also used in the fmod function to narrow down the range to the next highest order square that we’re dividing up.
+* The scaling array could be precalculated, but I figure the optimizing compiler would take care of that. 
+* I also thought the values could be scaled up at the beginning of the function, then use integer arithmetic to do the conversion. 
+* It might be a bit faster.
+*
+*/
+
+/*
+To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN03gx09
+*/
+
+/*  Parse the GPS NMEA ASCII GPGGA string for the time, latitude and longitude  */
+
+//---------------------------------------------------------------------------------------------------------
+
+int positionToMaidenhead(char m[])
+{
+
+    const int pairs=4;
+    const double scaling[]={360.,360./18.,(360./18.)/10., \
+    ((360./18.)/10.)/24.,(((360./18.)/10.)/24.)/10., \
+    ((((360./18.)/10.)/24.)/10.)/24., \
+    (((((360./18.)/10.)/24.)/10.)/24.)/10.};
+    int i;
+    int index;
+
+    for (i=0;i<pairs;i++)
+    {
+        index = (int)floor(fmod((180.0+p->longitude), scaling[i])/scaling[i+1]); 
+        m[i*2] = (i&1) ? 0x30+index : (i&2) ? 0x61+index : 0x41+index;
+        index = (int)floor(fmod((90.0+p->latitude), (scaling[i]/2))/(scaling[i+1]/2));
+        m[i*2+1] = (i&1) ? 0x30+index : (i&2) ? 0x61+index : 0x41+index;
+    }
+    m[pairs*2]=0;
+    return 1;  // success
+}
+
+//  Convert Lat and Lon to MH Grid Sqaure
+int Convert_to_MH(void)
+{
+    char m[9];
+
+   // if(GPS_Status == GPS_STATUS_LOCK_INVALID || msg_Complete == 0)   
+   //     return 1;  /* if we are here with invalid data then exit.  LAt and LOnwill have text which cannot be computered of cour     */
+    /*  Get from GPS Serial input later */
+    p->latitude = gps.location.lat();
+    p->longitude = gps.location.lng();
+
+    if (positionToMaidenhead(m))
+    {   
+        strncpy(grid_sq_str,m,8);
+        return 1;  // Success               
+    }
+    else
+    {
+        strcpy(grid_sq_str,"");
+        return 0; // fail      /*  Can use later to skip displaying anything when have invalid or no GPS input   */
+    }
+}
+
+#ifdef GPS_TEST
+#include "nmea.h"  // has simulated NMEA strings for testing
+void displayInfo()
+{
+  debug_serial_port->print(F("Location: ")); 
+
+  //if (gps.location.isUpdated())
+  if (gps.location.isValid())
+  {
+    Convert_to_MH();
+    debug_serial_port->print(F("Grid Square = "));
+    debug_serial_port->println(grid_sq_str);
+    debug_serial_port->print(gps.location.lat(), 6);
+    debug_serial_port->print(F(","));
+    debug_serial_port->println(gps.location.lng(), 6);
+    debug_serial_port->print(F("LOCATION   Fix Age="));
+    debug_serial_port->print(gps.location.age());
+    debug_serial_port->print(F("ms Raw Lat="));
+    debug_serial_port->print(gps.location.rawLat().negative ? "-" : "+");
+    debug_serial_port->print(gps.location.rawLat().deg);
+    debug_serial_port->print("[+");
+    debug_serial_port->print(gps.location.rawLat().billionths);
+    debug_serial_port->print(F(" billionths],  Raw Long="));
+    debug_serial_port->print(gps.location.rawLng().negative ? "-" : "+");
+    debug_serial_port->print(gps.location.rawLng().deg);
+    debug_serial_port->print("[+");
+    debug_serial_port->print(gps.location.rawLng().billionths);
+    debug_serial_port->print(F(" billionths],  Lat="));
+    debug_serial_port->print(gps.location.lat(), 6);
+    debug_serial_port->print(F(" Long="));
+    debug_serial_port->println(gps.location.lng(), 6);
+  }
+  else
+  {
+    debug_serial_port->print(F("INVALID"));
+  }
+
+  debug_serial_port->print(F("  Date/Time: "));
+  //if (gps.date.isUpdated())
+  if (gps.date.isValid())
+  {
+    debug_serial_port->print(gps.date.month());
+    debug_serial_port->print(F("/"));
+    debug_serial_port->print(gps.date.day());
+    debug_serial_port->print(F("/"));
+    debug_serial_port->print(gps.date.year());
+  }
+  else
+  {
+    debug_serial_port->print(F("INVALID"));
+  }
+
+  debug_serial_port->print(F(" "));
+  //if (gps.time.isUpdated())
+  if (gps.time.isValid())
+  {
+    if (gps.time.hour() < 10) debug_serial_port->print(F("0"));
+    debug_serial_port->print(gps.time.hour());
+    debug_serial_port->print(F(":"));
+    if (gps.time.minute() < 10) debug_serial_port->print(F("0"));
+    debug_serial_port->print(gps.time.minute());
+    debug_serial_port->print(F(":"));
+    if (gps.time.second() < 10) debug_serial_port->print(F("0"));
+    debug_serial_port->print(gps.time.second());
+    debug_serial_port->print(F("."));
+    if (gps.time.centisecond() < 10) debug_serial_port->print(F("0"));
+    debug_serial_port->print(gps.time.centisecond());
+  }
+  else
+  {
+    debug_serial_port->print(F("INVALID"));
+  }
+  debug_serial_port->println();
+}
+#endif
+
+#endif  // FEATURE_GPS
+
 // insert GPS grid square and time/date functions here.
 void check_gps(bool force_update, bool ignore_gps) {
-  static char last_grid_sq_str[12] = "";
+  static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
   int memory_number = GRID_MEMORY-1;
   int x;
 
@@ -24805,9 +25038,49 @@ void check_gps(bool force_update, bool ignore_gps) {
       configuration.ignore_gps = false;  // toggle gps usage back on
     }
     config_dirty = 1;
-    debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
+    //debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
   }  
-  
+
+  #ifdef FEATURE_GPS
+    static bool stop_msg = false;
+    #ifdef GPS_TEST
+    // choose one of the 2 below to simulate NMEA data from either grid square
+    //auto gpsStream = gpsStream_EM10;
+    auto gpsStream = gpsStream_CN87;
+
+    while (*gpsStream) {
+      if (gps.encode(*gpsStream++)) {
+        //displayInfo();
+        if (gps.location.isValid()) {
+          Convert_to_MH();
+          debug_serial_port->print(F("Grid Square = "));
+          debug_serial_port->println(grid_sq_str);
+          stop_msg = false;
+        }
+      }
+    }
+    #else
+    while (Serial2.available() > 0) {
+      //debug_serial_port->print((char) Serial2.read());
+      gps.encode(Serial2.read());
+      stop_msg = false;
+    }
+    if (gps.location.isValid() && gps.location.isUpdated()) {
+    //if (gps.location.isValid()) {
+        Convert_to_MH();
+        debug_serial_port->print(F("Grid Square = "));
+        debug_serial_port->println(grid_sq_str);      
+    }
+    #endif
+
+    if (!stop_msg && millis() > 5000 && gps.charsProcessed() < 10)
+    {
+      debug_serial_port->println(F("No GPS detected: Check wiring."));
+      stop_msg = true;
+    }
+  #endif
+
+  // see if there is any valid gps info we can use/  If not use config grid square if not blank
   if (strlen(grid_sq_str) == 0 || configuration.ignore_gps) { // if no input then allow manually programmed grid to be used, do not overwrite, bail.
     strcpy(configuration.GridSq, ""); // zero out stored grid used for icon row
     return;
@@ -24838,7 +25111,6 @@ void check_gps(bool force_update, bool ignore_gps) {
     beep();
   }  // end memory changed
 }
-#endif
 
 void setup_esp()
 {
@@ -24885,6 +25157,7 @@ void setup_esp()
     //update_icons();
     initialize_sd_card();  
     initialize_debug_startup();
+    Serial2.begin(4800, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
 }
 
 //#define USE_TASK     // for main program in a task

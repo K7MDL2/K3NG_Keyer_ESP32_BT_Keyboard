@@ -81,7 +81,10 @@
     #define FEATURE_STRAIGHT_KEY   // This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_GPS  // if enabled adn not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
-    #define DEFAULT_GRID "CN87"  // substitute for GPS supplied grid square. This and GPS will display on status row.
+    #define GPS_BAUD_RATE 4800    // for the hardware serial port for GPS copnnection if used.
+    #define GPS_SERIAL_INVERT 1   // invert the RX_pin signal if needed.  Common if connecting without buffers.
+    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
+    #define DEFAULT_GRID "CN87xs67"  // substitute for GPS supplied grid square. This and GPS will display on status row.
 #endif
 #if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
@@ -95,6 +98,9 @@
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     #define FEATURE_GPS  // if enabled adn not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define GPS_BAUD_RATE 4800    // for the hardware serial port for GPS copnnection if used.
+    #define GPS_SERIAL_INVERT 1   // invert the RX_pin signal if needed.  Common if connecting without buffers.
+    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87xs67"  // substitute for GPS supplied grid square. This and GPS will display on status row.
 #endif
 #if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
@@ -106,7 +112,7 @@
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
     ///#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
@@ -117,6 +123,9 @@
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     ////#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
     #define FEATURE_GPS  // if enabled adn not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define GPS_BAUD_RATE 4800    // for the hardware serial port for GPS copnnection if used.
+    #define GPS_SERIAL_INVERT 1   // invert the RX_pin signal if needed.  Common if connecting without buffers.
+    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87ts"  // substitute for GPS supplied grid square. This and GPS will display on status row.
 #endif
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
@@ -130,7 +139,10 @@
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define TOUCH_BUTTON_16
     #define FEATURE_GPS  // if enabled adn not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
-    #define DEFAULT_GRID "CN88"  // substitute for GPS supplied grid square. This and GPS will display on status row.
+    #define GPS_BAUD_RATE 4800    // for the hardware serial port for GPS copnnection if used.
+    #define GPS_SERIAL_INVERT 1   // invert the RX_pin signal if needed.  Common if connecting without buffers.
+    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids   
+    #define DEFAULT_GRID "CN88ss"  // substitute for GPS supplied grid square. This and GPS will display on status row.
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
 #endif
 
