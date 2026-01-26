@@ -1716,9 +1716,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define ICON_COLUMN_WIDTH 12    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
     #define ICON_SPACING (ICON_COLUMN_WIDTH+2)
-    #define TX_NUM_ANCHOR (80)
-    #define GRID_ANCHOR (110)
-    #define WPM_ANCHOR (180)
+    #define TX_NUM_ANCHOR (78)
+    #define GRID_ANCHOR (104)
+    #define WPM_ANCHOR (186)
     #define ICON_ANCHOR (250)
     #define STATUS_BAR_X_CURSOR (6)
   #endif
@@ -4945,8 +4945,7 @@ void check_ps2_keyboard()
                                 }
                                 break;
 
-                                case PS2_F10_CTRL :   // clear out stored GPS grid sqaure value                              
-                                  strcpy(grid_sq_str, "");
+                                case PS2_F10_CTRL :   // clear out stored GPS grid sqaure value                                                                
                                   check_gps(true, true);  // force a memory update                                             
                                 break;
 
@@ -25057,8 +25056,20 @@ void check_gps(bool force_update, bool ignore_gps) {
   if (ignore_gps) {
     if (!configuration.ignore_gps) {
       configuration.ignore_gps = true;   // toggle gps usage off
+      #ifdef FEATURE_DISPLAY
+        lcd_center_print_timed("Toggle Grid OFF", 0, default_display_msg_delay);
+      #endif
     } else {
       configuration.ignore_gps = false;  // toggle gps usage back on
+      
+      if (strlen(configuration.GridSq) != 0)
+        strcpy(grid_sq_str, configuration.GridSq);
+      else
+        strcpy(grid_sq_str, DEFAULT_GRID);
+      
+      #ifdef FEATURE_DISPLAY
+        lcd_center_print_timed("Toggle Grid ON", 0, default_display_msg_delay);        
+      #endif
     }
     config_dirty = 1;
     //debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
