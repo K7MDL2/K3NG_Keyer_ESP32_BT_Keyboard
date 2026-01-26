@@ -1411,7 +1411,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.25"
+#define CODE_VERSION "K7MDL-2026.1.26"
 #define eeprom_magic_number 53            // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -2210,6 +2210,7 @@ byte zero = 0;
 byte iambic_flag = 0;
 unsigned long last_config_write = 0;
 uint16_t memory_area_end = 0;
+#define GRIDSQUARE_LEN  (9u)
 #ifdef DEFAULT_GRID
   char grid_sq_str[12] = DEFAULT_GRID;
 #else
@@ -2225,7 +2226,7 @@ uint16_t memory_area_end = 0;
 
   /* Global variables for handling GPS conversion to Maindernhead grid square  */
   #define NMEA_MAX_LENGTH  (120)
-  #define GRIDSQUARE_LEN  (9u)
+  
   struct position {
       double latitude;
       double longitude;
@@ -25191,7 +25192,9 @@ void setup_esp()
     //update_icons();
     initialize_sd_card();  
     initialize_debug_startup();
-    Serial2.begin(4800, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
+    #ifdef FEATURE_GPS
+      Serial2.begin(4800, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
+    #endif
 }
 
 //#define USE_TASK     // for main program in a task
