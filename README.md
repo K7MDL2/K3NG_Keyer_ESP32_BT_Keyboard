@@ -57,7 +57,7 @@ See the Wiki Pages for more information about parts supported and configuration.
 
 This is a 3.5" 480x320 TFT with a single panel of 16 keys.  If you press the Mem key, a blue message window pops up diplaying the contents of each memory.  You can use Insert Memory macro '\Ix' to insert memories (1-9 only).  For example I have memeories 7 and 8 programmed with my callsign and grid square.
 
-<img width="762" height="433" alt="image" src="https://github.com/user-attachments/assets/6fe568ab-11aa-40ff-be7d-16ad6caa34ff" />
+<img width="627" height="385" alt="image" src="https://github.com/user-attachments/assets/da19e558-d734-4327-8b30-68130b4608d2" />
 
 This is a 3.2" 320x240 TFT with 4 rows of 4 keys (not counting the Fx key to change rows).  Has the identical 16 key assignments.
 
