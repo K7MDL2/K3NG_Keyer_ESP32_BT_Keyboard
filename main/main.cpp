@@ -1411,7 +1411,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.24.1"
+#define CODE_VERSION "K7MDL-2026.1.25"
 #define eeprom_magic_number 53            // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1699,7 +1699,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define SCROLL_BOX_FONT FMB12   // 4
     #define ICON_SPACING (ICON_COLUMN_WIDTH+4)
     #define TX_NUM_ANCHOR (126)
-    #define GRID_ANCHOR (168)
+    #define GRID_ANCHOR (164)
     #define WPM_ANCHOR (296)
     #define ICON_ANCHOR (378)
     #define STATUS_BAR_X_CURSOR (8)
@@ -2214,6 +2214,38 @@ uint16_t memory_area_end = 0;
   char grid_sq_str[12] = DEFAULT_GRID;
 #else
   char grid_sq_str[12] = {};
+#endif
+
+#ifdef FEATURE_GPS
+  #include <TimeLib.h>
+  #include "TinyGPSPlus.h"
+  #include <string>
+
+  SECONDARY_SERIAL_CLS * gps_serial_port;
+
+  /* Global variables for handling GPS conversion to Maindernhead grid square  */
+  #define NMEA_MAX_LENGTH  (120)
+  #define GRIDSQUARE_LEN  (9u)
+  struct position {
+      double latitude;
+      double longitude;
+  } pos;
+  struct position *p = &pos;
+
+  void reverse(char *str, int len);
+  void ftoa(float n, char *res, int afterpoint);
+  int positionToMaidenhead(char m[]);
+  int Convert_to_MH(void);
+  void ConvertToMinutes(char _gps_msg[]);
+  tmElements_t tm;
+  TinyGPSPlus gps; // The TinyGPSPlus object
+  bool UTC = false;    // 0 local time, 1 UTC time
+  uint8_t hr_off;  // time offsets to apply to UTC time
+  uint8_t min_off;
+  int shift_dir;  // + or -
+  bool stop_msg = false;
+  char time_str[27] = {};
+  bool time_disp_updated = false;
 #endif
 
 #ifdef FEATURE_SLEEP
@@ -3812,9 +3844,24 @@ void update_icons(void) {
     const int32_t row = STATUS_BAR_X_CURSOR;
 
     lcd.setTextDatum(MY_DATUM);
-    //lcd.setFreeFont(STATUS_BAR_FONT);
-    lcd.setTextFont(STATUS_BAR_FONT);
+    //lcd.setFreeFont(STATUS_BAR_FONT);    
+    lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)    
     
+    #ifdef FEATURE_GPS      // if not enabled leave the default grey 00:00:00 printed at init time.
+      if (!time_disp_updated && !stop_msg) {
+        lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+        time_disp_updated = true;
+      } else {
+        lcd.setTextColor(TFT_GREY, TFT_BLACK);
+        time_disp_updated = true;
+      } 
+      
+      if (time_disp_updated) {
+        lcd.drawString(time_str, SCROLL_TEXT_LEFT_SIDE, STATUS_BAR_X_CURSOR);  
+        time_disp_updated = false;
+      }
+    #endif
+
     if (configuration.current_tx != last_tx || last_key_tx != key_tx) // TX state changed, update display
     {
       sprintf(tx_str, "T%d", last_tx);
@@ -24795,32 +24842,6 @@ void initialize_st7789_lcd()
 // Process NMEA data to extract position an time, calculates grid sqaure
 // Using TinyGPSPlus_ESP32 library to get lat, lon and time
 // Additional functions to calculate maidenhead grid square
-#include <TimeLib.h>
-#include "TinyGPSPlus.h"
-#include <string>
-
-SECONDARY_SERIAL_CLS * gps_serial_port;
-
-/* Global variables for handling GPS conversion to Maindernhead grid square  */
-#define NMEA_MAX_LENGTH  (120)
-#define GRIDSQUARE_LEN  (9u)
-struct position {
-    double latitude;
-    double longitude;
-} pos;
-struct position *p = &pos;
-
-void reverse(char *str, int len);
-void ftoa(float n, char *res, int afterpoint);
-int positionToMaidenhead(char m[]);
-int Convert_to_MH(void);
-void ConvertToMinutes(char _gps_msg[]);
-tmElements_t tm;
-TinyGPSPlus gps; // The TinyGPSPlus object
-bool UTC = false;    // 0 local time, 1 UTC time
-int hr_off;  // time offsets to apply to UTC time
-int min_off;
-int shift_dir;  // + or -
 
 // reverses a string 'str' of length 'len' 
 void reverse(char *str, int len) 
@@ -25030,6 +25051,7 @@ void check_gps(bool force_update, bool ignore_gps) {
   static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
   int memory_number = GRID_MEMORY-1;
   int x;
+  static uint32_t lost_gps_timer = 0;
 
   if (ignore_gps) {
     if (!configuration.ignore_gps) {
@@ -25041,8 +25063,11 @@ void check_gps(bool force_update, bool ignore_gps) {
     //debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
   }  
 
-  #ifdef FEATURE_GPS
-    static bool stop_msg = false;
+  #ifdef FEATURE_GPS  
+    uint8_t gps_hour = 0;
+    uint8_t gps_minute = 0;
+    uint8_t gps_second = 0;  
+    
     #ifdef GPS_TEST
     // choose one of the 2 below to simulate NMEA data from either grid square
     //auto gpsStream = gpsStream_EM10;
@@ -25064,19 +25089,28 @@ void check_gps(bool force_update, bool ignore_gps) {
       //debug_serial_port->print((char) Serial2.read());
       gps.encode(Serial2.read());
       stop_msg = false;
+      lost_gps_timer = millis();
     }
     if (gps.location.isValid() && gps.location.isUpdated()) {
-    //if (gps.location.isValid()) {
         Convert_to_MH();
-        debug_serial_port->print(F("Grid Square = "));
-        debug_serial_port->println(grid_sq_str);      
+        //debug_serial_port->print(F("Grid Square = ")); debug_serial_port->println(grid_sq_str);      
+    }
+     
+    if (gps.time.isValid() && gps.time.isUpdated())
+    {
+        gps_hour = gps.time.hour();
+        gps_minute = gps.time.minute();
+        gps_second = gps.time.second();
+        sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
+        //Serial.print(time_str);        
     }
     #endif
 
-    if (!stop_msg && millis() > 5000 && gps.charsProcessed() < 10)
+    if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
     {
       debug_serial_port->println(F("No GPS detected: Check wiring."));
       stop_msg = true;
+      lost_gps_timer = millis();
     }
   #endif
 
