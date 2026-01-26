@@ -25204,7 +25204,7 @@ void setup_esp()
     initialize_sd_card();  
     initialize_debug_startup();
     #ifdef FEATURE_GPS
-      Serial2.begin(4800, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
+      Serial2.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
     #endif
 }
 
