@@ -1716,9 +1716,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define ICON_COLUMN_WIDTH 12    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
     #define ICON_SPACING (ICON_COLUMN_WIDTH+2)
-    #define TX_NUM_ANCHOR (78)
-    #define GRID_ANCHOR (104)
-    #define WPM_ANCHOR (186)
+    #define TX_NUM_ANCHOR (72)
+    #define GRID_ANCHOR (108)
+    #define WPM_ANCHOR (202)
     #define ICON_ANCHOR (250)
     #define STATUS_BAR_X_CURSOR (6)
   #endif
