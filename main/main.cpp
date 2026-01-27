@@ -1697,11 +1697,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
     #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
-    #define ICON_SPACING (ICON_COLUMN_WIDTH+4)
-    #define TX_NUM_ANCHOR (112)
-    #define GRID_ANCHOR (148)
-    #define WPM_ANCHOR (285)
-    #define ICON_ANCHOR (378)
+    #define ICON_SPACING (ICON_COLUMN_WIDTH+5)
+    #define TX_NUM_ANCHOR (122)
+    #define GRID_ANCHOR (167)
+    #define WPM_ANCHOR (307)
+    #define ICON_ANCHOR (382)
     #define STATUS_BAR_X_CURSOR (8)
   #else   // 240x320 and 170x320
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
@@ -3884,7 +3884,7 @@ void update_icons(void) {
       lcd.drawString(last_GridSq, GRID_ANCHOR, row);   // blank out space 
 
       if (!configuration.ignore_gps) {
-        lcd.setTextColor(TFT_GREENYELLOW, TFT_BLACK);
+        lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);
         lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
       }
       strcpy(last_GridSq, configuration.GridSq);  // write grid square
@@ -3908,6 +3908,7 @@ void update_icons(void) {
       last_WPM = configuration.wpm;
     }
 
+    #ifdef NOT_USING_THESE_NOW
     if (last_sending_mode != sending_mode)    // modes are : Auto, Manual, Auto-Interrupted
     {
       switch (last_sending_mode) {
@@ -3922,6 +3923,7 @@ void update_icons(void) {
       }
       last_sending_mode = sending_mode;
     }
+    #endif
 
     static byte last_keyer_machine_mode = 255;
 
