@@ -16006,17 +16006,22 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
   }
 
   port_to_use->print(F("TX Inhibit: O"));
-  if ((digitalRead(tx_inhibit_pin) == tx_inhibit_pin_active_state)){
-    port_to_use->println(F("n"));
-  } else {
-    port_to_use->println(F("ff"));
-  }  
+  if (tx_inhibit_pin) {
+    if (digitalRead(tx_inhibit_pin) == tx_inhibit_pin_active_state){
+      port_to_use->println(F("n"));
+    } else {
+      port_to_use->println(F("ff"));
+    }    
+  }
+
   port_to_use->print(F("TX Pause: O"));
-  if ((digitalRead(tx_pause_pin) == tx_pause_pin_active_state)){
-    port_to_use->println(F("n"));
-  } else {
-    port_to_use->println(F("ff"));
-  }  
+  if (tx_pause_pin) {
+    if (digitalRead(tx_pause_pin) == tx_pause_pin_active_state){
+      port_to_use->println(F("n"));
+    } else {
+      port_to_use->println(F("ff"));
+    }  
+  }
 
   #if defined(FEATURE_BEACON_SETTING)
     port_to_use->print(F("Beacon Mode At Boot Up: O"));
