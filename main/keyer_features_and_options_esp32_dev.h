@@ -89,6 +89,7 @@
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
+    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
 #endif
 #if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
@@ -108,7 +109,9 @@
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87xs"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
+    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
 #endif
+
 #if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
     //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
     #define FEATURE_M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
@@ -134,6 +137,7 @@
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87ts"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
+    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
 #endif
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
@@ -152,6 +156,7 @@
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids   
     #define DEFAULT_GRID "CN88ss"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
+    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
 #endif
 
 //#define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library

@@ -30,8 +30,6 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define MCP23017_PIN15    15  // spare
 #endif 
 
-#define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
-
 // M5Stack Core2
 //#define M5STACK_CORE2 // provides sound and LCD touchscreen in one module
 
