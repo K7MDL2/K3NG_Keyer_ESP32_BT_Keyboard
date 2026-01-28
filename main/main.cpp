@@ -2010,9 +2010,7 @@ enum button_ID{
   CW_BOX,
   BUTTON_last_button
 };
- 
-  char popup_text[(LCD_COLUMNS*LCD_ROWS)+20] = {}; // Text to display in popup
-  bool popup_active = false;
+
   uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
   bool button_active = false;
   uint8_t button_row = 0;  // default to row 1
@@ -2166,7 +2164,8 @@ bool Keyboard_Connected_signal = false;
 void BT_Keyboard_Status(void);
 void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration_ms = 0UL);
 void s_noTone(uint8_t sidetone_line_pin_num);
-
+void generic_popup_key(uint16_t key_ID, const char* msg_text);
+void display_heading(void);
 
 //#define USE_BT_TASK // for BT check in a task
 #ifdef USE_BT_TASK
@@ -2218,6 +2217,10 @@ uint16_t memory_area_end = 0;
 #else
   char grid_sq_str[12] = {};
 #endif
+float heading; // populated by the i2c compass computation
+bool update_heading_display_flag = false;
+char popup_text[(LCD_COLUMNS*LCD_ROWS)+20] = {}; // Text to display in popup
+bool popup_active = false;
 
 #ifdef FEATURE_GPS
   #include <TimeLib.h>
@@ -3768,12 +3771,10 @@ void check_backlight() {
 
 void lcd_scroll_box_clear() {
     #ifdef FEATURE_TFT_DISPLAY
-      #ifdef FEATURE_TOUCH_DISPLAY
         if (popup_active) {
           //debug_serial_port->println(F("Skipping Popup while in lcd_scroll_clear()")); 
           return;  // skip this when a popup window is up, else will corrupt popup window content
         }
-      #endif
       //if (TFT_VIEWPORT_EXISTS) {
       //    debug_serial_port->println("Close Viewport");
           lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
@@ -3837,9 +3838,7 @@ int touch_button_available() {
 
 void update_icons(void) {
 #ifdef FEATURE_TFT_DISPLAY    
-    #ifdef FEATURE_TOUCH_DISPLAY
-      if (popup_active) return;  // bail, these screen writes below are outside the popup window
-    #endif
+    if (popup_active) return;  // bail, these screen writes below are outside the popup window    
     static char last_GridSq[grid_len_max] = "";
     static byte last_key_tx = false;
     char tx_str[7] = "";
@@ -4027,6 +4026,7 @@ void service_display() {
 
   #ifdef FEATURE_TFT_DISPLAY
     update_icons();
+    if (popup_active) return;  // do not overwrite the window
   #endif
 
   if (screen_refresh_status == SCREEN_REFRESH_INIT) {   // active at beginning of an event like pause
@@ -4240,7 +4240,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
   #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
     lcd.backlight();
   #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
-  #ifdef FEATURE_TOUCH_DISPLAY
+  #ifdef FEATURE_TFT_DISPLAY
     if (popup_active) {
       //debug_serial_port->println(F("Skipping Popup while in Timed Message")); 
       return;  // skip this when a popup window is up, else will corrupt popup window content
@@ -4512,6 +4512,14 @@ void check_ps2_keyboard()
                                     queueflush();
                                 #endif
 
+                                #ifdef FEATURE_TFT_DISPLAY
+                                  update_heading_display_flag = false;
+                                  if (popup_active) {
+                                    popup(false);
+                                    popup_active = false;                                    
+                                  }
+                                #endif
+
                                 #ifdef FEATURE_MEMORIES
                                     //clear_memory_button_buffer();
                                     play_memory_prempt = 1;   // should stop playing memory
@@ -4538,7 +4546,6 @@ void check_ps2_keyboard()
                                 case PS2_F3_SHIFT  :
                                     ps2_keyboard_program_memory(2);
                                     break;
-
 
                                 #ifndef OPTION_SAVE_MEMORY_NANOKEYER
                                     case PS2_F4_SHIFT  :
@@ -4932,6 +4939,21 @@ void check_ps2_keyboard()
                                 }
                                 break;
                                 #endif //OPTION_SAVE_MEMORY_NANOKEYER
+
+                                case PS2_F8_CTRL : {  // if compass is enabled, display in a popup window                                  
+                                  #ifdef FEATURE_TFT_DISPLAY
+                                    if (update_heading_display_flag) {
+                                      update_heading_display_flag = false;
+                                      if (popup_active) {
+                                        popup(false);
+                                        popup_active = false;   
+                                      }                          
+                                      return;
+                                    }
+                                    display_heading();        
+                                  #endif                        
+                                }
+                                break;
 
                                 case PS2_F9_CTRL : {  // tell GPS how many grid digits to save to memory location
                                   if (configuration.grid_digits == 4) {
@@ -17606,7 +17628,7 @@ void initialize_i2c(void) {
 IST8310 ist8310;
 
 float convert_to_rad(float declination) { 
-    debug_serial_port->println("Declination in Rad: "); debug_serial_port->println(declination * (M_PI/180));
+    debug_serial_port->print("Declination in Rad: "); debug_serial_port->println(declination * (M_PI/180));
     return (declination * (M_PI/180));
 }
 
@@ -17638,19 +17660,48 @@ void initialize_compass() {
 
 void check_compass() {
     static uint32_t last_measure = 0;
+    int delay_time = 5000;
 
-    if (millis() > last_measure + 10000) {
+    if (update_heading_display_flag)
+        delay_time = 1000;
+    else 
+        delay_time = 5000;
+    
+    if (millis() > last_measure + delay_time) {
         bool success = ist8310.update();
         if (!success)
         {
             debug_serial_port->println(F("Failed to update IST8310"));
         } else {
             Vec3f* mag_latest_val = ist8310.get_magnetometer();
+            heading = ist8310.get_heading_degrees();
             //debug_serial_port->printf("Mag (x, y, z): (%f, %f, %f)\n", mag_latest_val->x, mag_latest_val->y, mag_latest_val->z);
-            debug_serial_port->printf("Heading: %f degrees\n", ist8310.get_heading_degrees());  // 0 degrees at true north (or magnetic north if declination is 0)
+            debug_serial_port->printf("Heading: %f degrees\n", heading);  // 0 degrees at true north (or magnetic north if declination is 0)
+            if (update_heading_display_flag) display_heading();
         }  
         last_measure = millis(); 
     }
+}
+
+// if the comapss and tft is enabled, allow button or keyboard to pop up a window to show heading
+void display_heading(void) {
+  #if defined(FEATURE_TFT_DISPLAY)
+    static char last_heading[20] = {};
+    char h_str[20];
+    
+    popup(true);
+    lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+    sprintf(h_str, "Heading:%f", heading);
+    strcpy(last_heading, h_str);
+
+    //lcd.setCursor(20, 20);
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
+    lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+    lcd.drawString(h_str, 20, 40);
+    lcd.setTextColor(TFT_WHITE, TFT_BLUE);                                    
+    lcd.drawString(h_str, 20, 40);
+    update_heading_display_flag = true;
+  #endif                                  
 }
 #endif  // FEATURE_COMPASS
 
@@ -19080,7 +19131,7 @@ int print_memory(byte memory_number, char *mem_string) {
 }
 
 void popup_toggle() {  // toggle popup on and off
-  #ifdef FEATURE_TOUCH_DISPLAY
+  #ifdef FEATURE_TFT_DISPLAY
     if (!popup_active)
       popup(true);
     else 
@@ -19090,13 +19141,14 @@ void popup_toggle() {  // toggle popup on and off
 
 void popup(bool show)
 {
-  #ifdef FEATURE_TOUCH_DISPLAY 
+  #ifdef FEATURE_TFT_DISPLAY 
     if (!show && popup_active) {  // remove popup window unless it is a repeat key
       lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
       lcd.resetViewport();
       lcd.setFreeFont(TFT_FONT_MEDIUM);
       display_scroll_print_char('~');
       popup_active = false;
+      update_heading_display_flag = false;
       //debug_serial_port->println(F("popup off"));
       return;
     }
@@ -19400,6 +19452,7 @@ void process_buttons() { // (uint8_t button_ID) {
       default: 
         //debug_serial_port->println(F("Button: CW Box or Default"));
         if (popup_active) popup(false);
+        popup_active = false;
         clear_holds_key();    // reset key[].hold for all keys
         mem_number = 0;
         BtnX_active = 0;
