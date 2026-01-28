@@ -13,7 +13,7 @@
 //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
 //#define FEATURE_BUTTONS
 //#define FEATURE_COMMAND_MODE
-#define DECLINATION  (14.83)  // decimal degrees.minutes  Ex: 14.83 is East +14 degrees 58 minutes converted to decimal
+#define DECLINATION  (0.0f) //(14.83)  // decimal degrees.minutes  Ex: 14.83 is East +14 degrees 58 minutes converted to decimal
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
 #define FEATURE_MEMORIES             // on the Arduino Due, you must have FEATURE_EEPROM_E24C1024 and E24C1024 EEPROM hardware in order to compile this
 #define FEATURE_MEMORY_MACROS
