@@ -17691,7 +17691,7 @@ void display_heading(void) {
     
     popup(true);
     lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
-    sprintf(h_str, "Heading:%f", heading);
+    sprintf(h_str, "Heading:%3.1f", heading);
     strcpy(last_heading, h_str);
 
     //lcd.setCursor(20, 20);

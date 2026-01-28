@@ -83,7 +83,7 @@
     #define FEATURE_IDEASPARK_LCD  // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
     #define FEATURE_STRAIGHT_KEY   // This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY    
-//    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
