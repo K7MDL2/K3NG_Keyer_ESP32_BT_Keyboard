@@ -42,10 +42,12 @@ _____________________________________________
 This fork on a ESP32-WROOM32 adds 
  - BT keyboards (Select BLE and BT Classic models)
  - A few different type TFT displays with 320x170, 320,240, and 480x320 resolutions
- - Touch buttons on select touch enabled displays
+ - Touch buttons on touch enabled displays
  - Status Bar with (future) Grid, call, WPM rate, and sevceral satus icons including T/R status.
  - MCP23017 I2C port expander to add IO to the IO starved TFT display boards.  The Paddles and Straight key are on PA0-2 pins.
  - Using interrupts for all paddle and straight key IO pin, both the port expander and local GPIO pins.
+ - Serial GPS can udpate time and grid sqaure to 8 places, and populate a memory with 4 or 6 digits.
+ - I2C compass heading values can display in a popup windows to help point microwave antennas.  Can configure your declination.
 
 Check out the latest changes on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
