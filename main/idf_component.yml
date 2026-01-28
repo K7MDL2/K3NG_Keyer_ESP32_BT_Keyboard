@@ -22,4 +22,4 @@ dependencies:
   #m5stack/m5unified: ^0.2.7
   #espressif/m5stack_core_2: ^3.0.1
   #espressif/esp_bsp_devkit: ^3.0.1
-  esp-idf-lib/mcp23x17: ^1.1.9
+  #esp-idf-lib/mcp23x17: ^1.1.9

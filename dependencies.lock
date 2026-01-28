@@ -49,32 +49,6 @@ dependencies:
     - esp32s2
     - esp32s3
     version: 2.1.1
-  esp-idf-lib/mcp23x17:
-    component_hash: fd1375750167ebd8339a4a49dcb88e78cd81944edc1be1da83a07c2150f22130
-    dependencies:
-    - name: esp-idf-lib/esp_idf_lib_helpers
-      registry_url: https://components.espressif.com
-      require: private
-      version: '*'
-    - name: esp-idf-lib/i2cdev
-      registry_url: https://components.espressif.com
-      require: private
-      version: '*'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    targets:
-    - esp32
-    - esp32c2
-    - esp32c3
-    - esp32c5
-    - esp32c6
-    - esp32c61
-    - esp32h2
-    - esp32p4
-    - esp32s2
-    - esp32s3
-    version: 1.1.9
   esp-idf-lib/pcf8574:
     component_hash: 59283ee5b234c85c3e217c45c4d2bebe6d55b2371d8a85c97d5faefe3943e82f
     dependencies:
@@ -591,12 +565,11 @@ dependencies:
       type: service
     version: 0.0.3
 direct_dependencies:
-- esp-idf-lib/mcp23x17
 - esp-idf-lib/pcf8574
 - espressif/arduino-esp32
 - espressif/spi_bus
 - idf
 - panigrah/esp32-idf-hd44780
-manifest_hash: 677b39dbd3b2a3b01a629dedacd0d170609075a11cf9e73533d785620f703b70
+manifest_hash: b785c7b2a2aa7bab8ea193e87a12b2b210bcee1841b4a73eacfc853b7fb79a56
 target: esp32
 version: 2.0.0

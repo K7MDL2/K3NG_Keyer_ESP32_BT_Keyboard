@@ -1411,7 +1411,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 */
 
-#define CODE_VERSION "K7MDL-2026.1.26.1"
+//#define CODE_VERSION "K7MDL-2026.1.26.1"   // moved to feature and options.h file to make it easier to find
 #define eeprom_magic_number 53            // you can change this number to have the unit re-initialize EEPROM
 #include <Arduino.h>
 #include <stdio.h>
@@ -1763,11 +1763,13 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   volatile bool paddle_right_state = true;
   volatile bool straight_key_state = true;
   static EventGroupHandle_t Key_Events = NULL;
-  #ifdef FEATURE_MCP23017_EXPANDER
-    //#include "i2cdev.h"
-    #include "..\managed_components\esp-idf-lib__mcp23x17\mcp23x17.h"
-    #include <Wire.h>
-    static mcp23x17_t MCP23017 = { MCP23017_I2C_PORT };
+  #ifdef FEATURE_MCP23017_EXPANDER    
+    #include "MCP23017.h"
+    #ifdef USE_WIRE1 
+      MCP23017 mcp23017 = MCP23017(MCP23X17_ADDR, Wire1);
+    #else
+      MCP23017 mcp23017 = MCP23017(MCP23X17_ADDR, Wire);
+    #endif
   #endif
 #endif
 
@@ -3858,7 +3860,7 @@ void update_icons(void) {
       } 
       
       if (time_disp_updated) {
-        lcd.drawString(time_str, SCROLL_TEXT_LEFT_SIDE, STATUS_BAR_X_CURSOR);  
+        lcd.drawString(time_str, SCROLL_TEXT_LEFT_SIDE-6, STATUS_BAR_X_CURSOR);  
         time_disp_updated = false;
       }
     #endif
@@ -17580,6 +17582,78 @@ int memory_end(byte memory_number) {
 }
 #endif
 
+// used for MCP23017 and COMPASS devices
+#if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
+#include <Wire.h>
+void initialize_i2c(void) {   
+  #ifdef USE_WIRE1 
+    Wire1.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
+  #else
+    Wire.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
+  #endif
+}
+#endif
+
+#ifdef FEATURE_COMPASS
+//-----------------------------------------------------------
+// Read I2C compass and temperature
+// Use Memory F12 to store declination to present true north.
+//-----------------------------------------------------------
+#include "IST8310.h"
+#include <math.h>
+#include <Wire.h>
+
+IST8310 ist8310;
+
+float convert_to_rad(float declination) { 
+    debug_serial_port->println("Declination in Rad: "); debug_serial_port->println(declination * (M_PI/180));
+    return (declination * (M_PI/180));
+}
+
+void initialize_compass() {
+    debug_serial_port->println(F("Trying to setup IST8310"));
+    #ifdef USE_WIRE1 
+      bool success = ist8310.setup(&Wire1, debug_serial_port);
+    #else
+      bool success = ist8310.setup(&Wire, debug_serial_port);
+    #endif
+    if (!success) {
+        debug_serial_port->println(F("Failed to setup IST8310"));
+    }
+
+    success = ist8310.calibration();
+    if (!success) {
+        debug_serial_port->println(F("Failed to calibrate IST8310"));
+    } else {
+      debug_serial_port->println(F("Sucessfully calibrated IST8310"));
+    }
+    
+    ist8310.set_flip_x_y(false);
+
+    // +0.2607521902 at Maltby WA (+14deg 58minutes)
+    // -0.1887865056 at College Park, MD, USA. This value gets added to the magnetic heading to report the true heading;
+    // See http://www.magnetic-declination.com/
+    ist8310.set_declination_offset_radians(convert_to_rad(DECLINATION));   // convert in deg min format to rad and apply offset
+}
+
+void check_compass() {
+    static uint32_t last_measure = 0;
+
+    if (millis() > last_measure + 10000) {
+        bool success = ist8310.update();
+        if (!success)
+        {
+            debug_serial_port->println(F("Failed to update IST8310"));
+        } else {
+            Vec3f* mag_latest_val = ist8310.get_magnetometer();
+            //debug_serial_port->printf("Mag (x, y, z): (%f, %f, %f)\n", mag_latest_val->x, mag_latest_val->y, mag_latest_val->z);
+            debug_serial_port->printf("Heading: %f degrees\n", ist8310.get_heading_degrees());  // 0 degrees at true north (or magnetic north if declination is 0)
+        }  
+        last_measure = millis(); 
+    }
+}
+#endif  // FEATURE_COMPASS
+
 //---------------------------------------------------------------------
 // Paddle and Key Interrupt Handlers
 /*-----------------------------------------------------------*/
@@ -17656,12 +17730,12 @@ static void IRAM_ATTR paddle_intr_handler(void *arg)
 IRAM_ATTR void read_io_handler(void *pvParameters)
 {
     //EventBits_t e_bits;
-    uint16_t bits = 0;
+    uint8_t bits = 0;
     mydelay(100);
     while (1)
     {
-        if (xEventGroupWaitBits(Key_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {
-            mcp23x17_port_read(&MCP23017, &bits);  // read all pins                    
+        if (xEventGroupWaitBits(Key_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {            
+            bits = mcp23017.readPort(MCP23017Port::A);
             paddle_left_state = bits & (1 << paddle_left);  // mask left paddle                                    
             paddle_right_state = bits & (1 << paddle_right);  // mask right paddle                         
             #ifdef FEATURE_STRAIGHT_KEY
@@ -17680,24 +17754,16 @@ IRAM_ATTR void read_io_handler(void *pvParameters)
 
     Key_Events = xEventGroupCreate();
     // Set the expander port A pins for the paddles to input with pullup
-    //Wire1.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN, 1000000);   // Touch has 1 instance set in library so we get 2nd
-    ESP_ERROR_CHECK(i2cdev_init());  // on 21, 22.  Use bus num 1 since the TP assumes bus 0.
-    ESP_ERROR_CHECK(mcp23x17_init_desc(&MCP23017, MCP23X17_ADDR, MCP23017_I2C_PORT, (gpio_num_t ) I2CDEV_SDA_PIN, (gpio_num_t ) I2CDEV_SCL_PIN));
-    MCP23017.cfg.master.clk_speed = 1000000;
-    
-    mcp23x17_set_mode(&MCP23017, paddle_left, MCP23X17_GPIO_INPUT);
-    mcp23x17_set_pullup(&MCP23017, paddle_left, true);
-    mcp23x17_set_interrupt(&MCP23017, paddle_left, MCP23X17_INT_ANY_EDGE);
-
-    mcp23x17_set_mode(&MCP23017, paddle_right, MCP23X17_GPIO_INPUT);
-    mcp23x17_set_pullup(&MCP23017, paddle_right, true);
-    mcp23x17_set_interrupt(&MCP23017, paddle_right, MCP23X17_INT_ANY_EDGE);
-    
+    // could be bus 1 if board has a touch controller. else normally bus 0
+    mcp23017.init();
+    mcp23017.interruptMode(MCP23017InterruptMode::Or);  // MCP23017InterruptMode::Separated
+    mcp23017.interrupt(MCP23017Port::A, CHANGE);
+    mcp23017.pinMode(paddle_left, INPUT_PULLUP, false);    
+    mcp23017.pinMode(paddle_right, INPUT_PULLUP, false);    
     #ifdef FEATURE_STRAIGHT_KEY
-        mcp23x17_set_mode(&MCP23017, pin_straight_key, MCP23X17_GPIO_INPUT);
-        mcp23x17_set_pullup(&MCP23017, pin_straight_key, true);
-        mcp23x17_set_interrupt(&MCP23017, pin_straight_key, MCP23X17_INT_ANY_EDGE);
+        mcp23017.pinMode(pin_straight_key, INPUT_PULLUP, false);
     #endif
+    mcp23017.clearInterrupts();
 
     // create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.
     xReturned = xTaskCreate(read_io_handler, "read_io_handler", 4096, NULL, 0, NULL);
@@ -17709,13 +17775,9 @@ IRAM_ATTR void read_io_handler(void *pvParameters)
     gpio_install_isr_service(0);
     gpio_isr_handler_add((gpio_num_t) MCP23017_INTA_GPIO, paddle_intr_handler, (void *)(gpio_num_t) MCP23017_INTA_GPIO);
     
-    uint16_t val;
-    if (ESP_OK == mcp23x17_port_read(&MCP23017, &val)) {
-      debug_serial_port->print("Completed MCP23017 Init for Paddle Lines val=");
-    } else {
-      debug_serial_port->print("Paddle Lines Monitoring Init on MCP23017 FAILED val=");
-    }
-    debug_serial_port->println(val, HEX);
+    //uint16_t val;
+    mcp23017.readPort(MCP23017Port::A);
+    //debug_serial_port->print("MCP23107 Port A read:"); debug_serial_port->println(val, HEX);
     // Now any pin state change will call the handler.
   }
 #endif
@@ -18879,7 +18941,7 @@ void initialize_display() {
   #ifdef FEATURE_DISPLAY    
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU fix for nothing on serial port for ESP32_dev
       #ifdef FEATURE_LCD_LIQUIDCRYSTAL_I2C
-        Wire.begin(21, 22, 100000); // SDA = GPIO 25, SCL = GPIO 26 for ESp32-WROOM32 Dev Module
+        Wire.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN); // , 1000000); // SDA = GPIO 25, SCL = GPIO 26 for ESp32-WROOM32 Dev Module
       #endif
       #ifdef FEATURE_TFT_DISPLAY
         initialize_TFT_display();
@@ -19377,7 +19439,7 @@ void process_buttons() { // (uint8_t button_ID) {
             scanTime = millis();
 
             #ifdef TOUCH_GT911_BUTTONS          
-              tp.read();
+              tp.read();              
               pressed = tp.isTouched;
               if (pressed) {           
                 t_x = tp.points[0].x;
@@ -25173,6 +25235,9 @@ void setup_esp()
     setup_called = true;
     
     initialize_serial_ports();        // Goody - this is available for testing startup issues  
+    #if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
+      initialize_i2c();
+    #endif
     initialize_pins();
     initialize_display();
     create_buttons();
@@ -25205,13 +25270,14 @@ void setup_esp()
     initialize_ethernet();
     initialize_udp();
     initialize_web_server();
-    //initialize_display();
-    //create_buttons();
-    //update_icons();
     initialize_sd_card();  
     initialize_debug_startup();
     #ifdef FEATURE_GPS
+      pinMode(GPS_RX_PIN, INPUT);
       Serial2.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
+    #endif
+    #ifdef FEATURE_COMPASS
+      initialize_compass();  //  ist8310 compass
     #endif
 }
 
@@ -25321,6 +25387,10 @@ void main_loop(void)
         
         #ifdef FEATURE_GPS
             check_gps(false, false);
+        #endif
+
+        #ifdef FEATURE_COMPASS
+          check_compass();
         #endif
         
         #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)

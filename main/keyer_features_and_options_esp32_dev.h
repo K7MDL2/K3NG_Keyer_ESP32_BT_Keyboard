@@ -5,12 +5,15 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
+#define CODE_VERSION "K7MDL-2026.1.27"
+
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
 //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
 //#define FEATURE_BUTTONS
 //#define FEATURE_COMMAND_MODE
+#define DECLINATION  (14.83)  // decimal degrees.minutes  Ex: 14.83 is East +14 degrees 58 minutes converted to decimal
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
 #define FEATURE_MEMORIES             // on the Arduino Due, you must have FEATURE_EEPROM_E24C1024 and E24C1024 EEPROM hardware in order to compile this
 #define FEATURE_MEMORY_MACROS
@@ -59,8 +62,8 @@
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
-//#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
+#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
 //#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
@@ -79,29 +82,32 @@
                                                          // TFT_eSPI User_Select.h choice of file to match this display
     #define FEATURE_IDEASPARK_LCD  // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
     #define FEATURE_STRAIGHT_KEY   // This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
-    #define FEATURE_TFT_DISPLAY
+    #define FEATURE_TFT_DISPLAY    
+    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
-    #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
+    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
-    #define DEFAULT_GRID "CN87xs67"  // substitute for GPS supplied grid square. This and GPS will display on status row.
+    #define DEFAULT_GRID "CN87"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
 #endif
 #if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
-    #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     #define FEATURE_TOUCH_DISPLAY
-    //#define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
+    //#define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
     #define FEATURE_TFT_DISPLAY
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
+    #define USE_WIRE1 // used to avoid confilcit with i2c touch wich grabs i2c bus 0 first.
+    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
-    #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
+    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
-    #define DEFAULT_GRID "CN87xs67"  // substitute for GPS supplied grid square. This and GPS will display on status row.
+    #define DEFAULT_GRID "CN87xs"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
 #endif
 #if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
     //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
@@ -112,7 +118,6 @@
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
     ///#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
@@ -122,27 +127,30 @@
     ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     ////#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
-    #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
+    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.    
     #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
-    #define DEFAULT_GRID "CN87ts"  // substitute for GPS supplied grid square. This and GPS will display on status row.
+    #define DEFAULT_GRID "CN87ts"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
 #endif
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
-    #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     //#define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
     #define RES_320_480
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define TOUCH_BUTTON_16
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids   
-    #define DEFAULT_GRID "CN88ss"  // substitute for GPS supplied grid square. This and GPS will display on status row.
+    #define DEFAULT_GRID "CN88ss"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
 #endif
 
