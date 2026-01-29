@@ -1899,6 +1899,7 @@ struct config_t {  // 120 bytes total
   char GridSq[grid_len_max];  // typically 9 bytes
   bool ignore_gps;  // set to true if we shoudl not use GPS info
   float declination; // store the declination stored in memory 12 from config, or from a user entered overriding value in memory 12
+  uint32_t gps_baud; // store the last known GPS serial baud rate
     // 2+9 bytes
 #endif
 
@@ -3850,9 +3851,16 @@ void update_icons(void) {
     if (popup_active) return;  // bail, these screen writes below are outside the popup window    
     static char last_GridSq[grid_len_max] = "";
     static byte last_key_tx = false;
+    static bool last_stop_msg = false;
+    static bool stop_msg_changed = false;
     char tx_str[7] = "";
     static uint8_t last_tx = 0;
     const int32_t row = STATUS_BAR_X_CURSOR;
+
+    if (last_stop_msg != stop_msg) {
+      stop_msg_changed = true;
+      last_stop_msg = stop_msg;
+    }
 
     lcd.setTextDatum(MY_DATUM);
     //lcd.setFreeFont(STATUS_BAR_FONT);    
@@ -3888,7 +3896,7 @@ void update_icons(void) {
       last_key_tx = key_tx;
     }
 
-    if (strcmp(configuration.GridSq, last_GridSq) != 0)  // grid changed, update display
+    if (stop_msg_changed || strcmp(configuration.GridSq, last_GridSq) != 0)  // connect status and/or grid changed, update display
     {
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
       lcd.drawString(last_GridSq, GRID_ANCHOR, row);   // blank out space 
@@ -4005,6 +4013,7 @@ void update_icons(void) {
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);   // set back to normal size and color
     lcd.setFreeFont(TFT_FONT_MEDIUM);
     lcd.setTextDatum(MY_DATUM);
+    stop_msg_changed = false;
 #endif
 }
 
@@ -4899,6 +4908,31 @@ void check_ps2_keyboard()
                                     config_dirty = 1;
                                 }
                                 break;
+
+                                #ifdef FEATURE_GPS
+                                case PS2_Y_CTRL : {  // cyc;le thogh GPS serial port baud rates and restart comms                                  
+                                  static uint32_t next_baud = GPS_BAUD_RATE;
+                                  
+                                  switch (next_baud) {
+                                    case 4800: next_baud = 9600; break;
+                                    case 9600: next_baud = 19200; break;
+                                    case 19200: next_baud = 38400; break;
+                                    case 38400: next_baud = 57600; break;
+                                    case 57600: next_baud = 115200; break;
+                                    default: next_baud = 4800; break;
+                                  }                                   
+                                  
+                                  debug_serial_port->print("New Serial Port Baud Rate is "); debug_serial_port->println(next_baud);
+                                  Serial2.updateBaudRate(next_baud);   // serial processing resumes after a few seconds delay
+                                  configuration.gps_baud = next_baud;                                  
+                                  Serial2.read();  // similar to flush
+                                  #ifdef FEATURE_DISPLAY
+                                    lcd_center_print_timed("Serial Baud " + String(next_baud), 0, default_display_msg_delay); 
+                                  #endif
+                                  check_gps(true, false);
+                                }
+                                break;
+                                #endif
 
                                 case PS2_F1_CTRL :
                                 switch_to_tx_silent(1);
@@ -25349,10 +25383,18 @@ void check_gps(bool force_update, bool ignore_gps) {
       }
     #else
       while (Serial2.available() > 0) {
-        //debug_serial_port->print((char) Serial2.read());
-        gps.encode(Serial2.read());
-        stop_msg = false;
-        lost_gps_timer = millis();
+        char c;
+        int d;
+        c = d = Serial2.peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout  
+        if (isAlphaNumeric(c) || ispunct(c) || c == '\r' || c == '\n') {  // valid data at correct baud rate
+          gps.encode(Serial2.read());
+          stop_msg = false;
+          lost_gps_timer = millis();
+        } else {
+          Serial2.read();
+          stop_msg = true;
+          return;
+        }
       }
 
       if (gps.location.isValid() && gps.location.isUpdated()) {
@@ -25465,7 +25507,11 @@ void setup_esp()
     initialize_debug_startup();
     #ifdef FEATURE_GPS
       pinMode(GPS_RX_PIN, INPUT);
-      Serial2.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
+      if (configuration.gps_baud == 0) configuration.gps_baud = GPS_BAUD_RATE;
+      Serial2.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
+      lcd_center_print_timed("GPS Baud = " + String(configuration.gps_baud), 1, default_display_msg_delay);
+      Serial2.flush();  // move the read string queue char ptr to the front so the next read works      
+      stop_msg = false;
     #endif
     #ifdef FEATURE_COMPASS
       initialize_compass();  //  ist8310 compass

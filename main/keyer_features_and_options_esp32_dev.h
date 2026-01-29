@@ -6,7 +6,7 @@
 #endif
 
 #define CODE_VERSION "K7MDL-2026.1.29"
-#define eeprom_magic_number 29          // you can change this number to have the unit re-initialize EEPROM
+#define eeprom_magic_number 30          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -86,7 +86,7 @@
     #define FEATURE_TFT_DISPLAY    
     #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
-    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
+    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used. Valid values are 4800, 9600, 38400, 57600, 115200
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
