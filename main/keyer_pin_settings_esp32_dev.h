@@ -91,6 +91,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         0 //4 // PTT ("push to talk") lines   (4 on 3.2" DIY malls st7789 TFT, red LED)
+    #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
     #define tx_pause_pin     0 //14 
 
@@ -102,17 +103,18 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #define I2CDEV_SCL_PIN  22
     #endif
 
-    #define paddle_left     25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-    #define paddle_right    26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-    #define tx_key_line_1   16 // 16 aka RX2   (high = key down/tx on)
-    #define tx_key_line_2    0 
-    #define sidetone_line   17 // aka TX2   connect a passive buzzer for sidetone
-    #define audio_enable     0 // Only for 3.5" Hoysond Display
-    #define GPS_RX_PIN      36 
-    #define potentiometer    0 //35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+    #define paddle_left     25 // pin must have internal pullup
+    #define paddle_right    26 // pin must have internal pullup
+    #define tx_key_line_1   19 // (high = key down/tx on)
+    #define tx_key_line_2   14 
+    #define sidetone_line   12 // connect a passive buzzer for sidetone
+    #define audio_enable     0 // 0.  Only set for 3.5" Hoysond Display
+    #define GPS_RX_PIN      16 // 16 is RX2, 17 is TX2
+    #define potentiometer   35 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         5 // PTT ("push to talk") lines 
-    #define tx_inhibit_pin   0  //13 
-    #define tx_pause_pin     0  //14
+    #define ptt_tx_2        33 // Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
+    #define tx_inhibit_pin   0
+    #define tx_pause_pin     0
     #ifdef FEATURE_STRAIGHT_KEY
       #define pin_straight_key 27
     #endif //FEATURE_STRAIGHT_KEY
@@ -167,8 +169,9 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define sidetone_line   26 //26 connect a passive buzzer for sidetone
     #define audio_enable     4  // audio amp enable = LOW for this display (only?)
     #define ptt_tx_1        22 // 23 for PTT ("push to talk") lines, GPIO22 is RED LED
-    #define tx_inhibit_pin  0 //19 
-    #define tx_pause_pin    0 //23
+    #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
+    #define tx_inhibit_pin   0 
+    #define tx_pause_pin     0 
     #ifdef FEATURE_STRAIGHT_KEY
       #define pin_straight_key 39 //TXD0 - GREEN LED
     #endif //FEATURE_STRAIGHT_KEY
@@ -216,6 +219,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define audio_enable     0 // Only for 3.5" Hoysond Display
     #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         4 // PTT ("push to talk") lines   (4 on 3.2" DIY malls st7789 TFT, red LED)
+    #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
     #define tx_pause_pin     0 //14 
 
@@ -228,6 +232,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define audio_enable      0 // Only for 3.5" Hoysond Display
   #define potentiometer     36 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
   #define ptt_tx_1          16             // PTT ("push to talk") lines
+  #define ptt_tx_2          0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
   #define tx_key_line_2     0 
   #define tx_inhibit_pin    0
   #define tx_pause_pin      0
@@ -243,7 +248,6 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #define tx_key_line_5 0
 #define tx_key_line_6 0
 
-#define ptt_tx_2 0             //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
 #define ptt_tx_3 0              //   These are optional - set to 0 if unused
 #define ptt_tx_4 0
 #define ptt_tx_5 0

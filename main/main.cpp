@@ -1412,7 +1412,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 */
 
 //#define CODE_VERSION "K7MDL-2026.1.26.1"   // moved to feature and options.h file to make it easier to find
-#define eeprom_magic_number 53            // you can change this number to have the unit re-initialize EEPROM
+//#define eeprom_magic_number 56            // moved also
 #include <Arduino.h>
 #include <stdio.h>
 #include "keyer_hardware.h"
@@ -1898,6 +1898,7 @@ struct config_t {  // 120 bytes total
   uint8_t grid_digits;  // length of gridsquare to display
   char GridSq[grid_len_max];  // typically 9 bytes
   bool ignore_gps;  // set to true if we shoudl not use GPS info
+  float declination; // store the declination stored in memory 12 from config, or from a user entered overriding value in memory 12
     // 2+9 bytes
 #endif
 
@@ -1978,6 +1979,8 @@ void mydelay(uint32_t _ms);
 void setup_esp();
 int print_memory(byte memory_number, char *mem_string);
 void check_gps(bool force_update, bool ignore_gps);
+void check_compass(void);
+void process_compass(bool force_update, bool ignore_dec);
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
@@ -2166,6 +2169,7 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 void s_noTone(uint8_t sidetone_line_pin_num);
 void generic_popup_key(uint16_t key_ID, const char* msg_text);
 void display_heading(void);
+int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]);
 
 //#define USE_BT_TASK // for BT check in a task
 #ifdef USE_BT_TASK
@@ -2216,6 +2220,11 @@ uint16_t memory_area_end = 0;
   char grid_sq_str[12] = DEFAULT_GRID;
 #else
   char grid_sq_str[12] = {};
+#endif
+#ifdef DECLINATION
+  float declination = DECLINATION;
+#else
+  float declination = 0.0f;
 #endif
 float heading; // populated by the i2c compass computation
 bool update_heading_display_flag = false;
@@ -3848,9 +3857,9 @@ void update_icons(void) {
     lcd.setTextDatum(MY_DATUM);
     //lcd.setFreeFont(STATUS_BAR_FONT);    
     lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)    
-    
+  
     #ifdef FEATURE_GPS      // if not enabled leave the default grey 00:00:00 printed at init time.
-      if (!time_disp_updated && !stop_msg) {
+      if (!time_disp_updated && !configuration.ignore_gps && !stop_msg) {
         lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
         time_disp_updated = true;
       } else {
@@ -3884,10 +3893,14 @@ void update_icons(void) {
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
       lcd.drawString(last_GridSq, GRID_ANCHOR, row);   // blank out space 
 
-      if (!configuration.ignore_gps) {
+      if (!configuration.ignore_gps && !stop_msg) {
         lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);
         lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
+      } else {
+        lcd.setTextColor(TFT_GREY, TFT_BLACK);
+        lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
       }
+
       strcpy(last_GridSq, configuration.GridSq);  // write grid square
     }
 
@@ -4939,9 +4952,31 @@ void check_ps2_keyboard()
                                 }
                                 break;
                                 #endif //OPTION_SAVE_MEMORY_NANOKEYER
+                                
+                                #ifdef FEATURE_GPS
+                                case PS2_F9_CTRL : {  // tell GPS how many grid digits to save to memory location                                  
+                                  if (configuration.grid_digits == 4) {
+                                    configuration.grid_digits = 6;
+                                    #ifdef FEATURE_DISPLAY
+                                      lcd_center_print_timed(F("GRID LENGTH = 6 "), 0, default_display_msg_delay);
+                                    #endif
+                                  } else {
+                                    configuration.grid_digits = 4;
+                                    #ifdef FEATURE_DISPLAY
+                                      lcd_center_print_timed(F("GRID LENGTH = 4 "), 0, default_display_msg_delay);
+                                    #endif
+                                  }
+                                  check_gps(true, false);  // force a memory update                  
+                                }                                
+                                break;
 
-                                case PS2_F8_CTRL : {  // if compass is enabled, display in a popup window                                  
-                                  #ifdef FEATURE_TFT_DISPLAY
+                                case PS2_F10_CTRL :   // ignore stored GPS grid square and declination values
+                                  check_gps(true, true);  // force a memory update                                             
+                                break;
+                                #endif //FEATURE_GPS
+
+                                #ifdef FEATURE_COMPASS
+                                case PS2_F11_CTRL : {  // if compass is enabled, display in a popup window                                                                   
                                     if (update_heading_display_flag) {
                                       update_heading_display_flag = false;
                                       if (popup_active) {
@@ -4950,30 +4985,28 @@ void check_ps2_keyboard()
                                       }                          
                                       return;
                                     }
-                                    display_heading();        
-                                  #endif                        
+                                    display_heading();                                                      
                                 }
                                 break;
-
-                                case PS2_F9_CTRL : {  // tell GPS how many grid digits to save to memory location
-                                  if (configuration.grid_digits == 4) {
-                                    configuration.grid_digits = 6;
-                                    #ifdef FEATURE_DISPLAY
-                                      lcd_center_print_timed("GRID LENGTH = 6 ", 0, default_display_msg_delay);
-                                    #endif
-                                  } else {
-                                    configuration.grid_digits = 4;
-                                    #ifdef FEATURE_DISPLAY
-                                      lcd_center_print_timed("GRID LENGTH = 4 ", 0, default_display_msg_delay);
-                                    #endif
-                                  }
-                                  check_gps(true, false);  // force a memory update                  
+                                  
+                                case PS2_F12_CTRL : {   // enter new declination in memory x and store it in config structure
+                                  char tmp_str[40];
+                                  #ifdef FEATURE_DISPLAY                              
+                                    sprintf(tmp_str, "Mem %d = Declination", DECLINATION_MEMORY);
+                                    //debug_serial_port->println(tmp_str); 
+                                    lcd_center_print_timed(tmp_str, 3, default_display_msg_delay);
+                                  #endif
+                                  ps2_keyboard_program_memory(DECLINATION_MEMORY-1);                                                                                        
+                                  // store user entered memory x value into config structure, overrides defaults
+                                  char  memory_str[LCD_COLUMNS] = {};
+                                  int len = read_memory(DECLINATION_MEMORY-1, memory_str);
+                                  memory_str[len] = '\0';  // replace the 255 with null
+                                  debug_serial_port->print("Read memory str = "); debug_serial_port->println(memory_str);  
+                                  debug_serial_port->print("Read memory len = "); debug_serial_port->println(len);       
+                                  process_compass(true, false);  // force a memory update 
                                 }
                                 break;
-
-                                case PS2_F10_CTRL :   // clear out stored GPS grid sqaure value                                                                
-                                  check_gps(true, true);  // force a memory update                                             
-                                break;
+                                #endif  // FEATURE_COMPASS
 
                                 #ifdef FEATURE_AUTOSPACE
                                 case PS2_Z_CTRL:
@@ -4982,9 +5015,9 @@ void check_ps2_keyboard()
                                     config_dirty = 1;
                                     #ifdef FEATURE_DISPLAY
                                     if (LCD_COLUMNS < 9){
-                                        lcd_center_print_timed("AutoSOff", 0, default_display_msg_delay);
+                                        lcd_center_print_timed(F("AutoSOff"), 0, default_display_msg_delay);
                                     } else {
-                                        lcd_center_print_timed("Autospace Off", 0, default_display_msg_delay);
+                                        lcd_center_print_timed(F("Autospace Off"), 0, default_display_msg_delay);
                                     }
                                     #endif                                  
                                 } else {
@@ -5069,7 +5102,7 @@ void ps2_keyboard_program_memory(byte memory_number)
   
   #ifdef FEATURE_DISPLAY
     if (memory_number < 9) {
-      lcd_string.concat(' ');
+      lcd_string.concat(' ');   // add a space in front single digits
     }    
     lcd_string.concat(memory_number+1);
     lcd_center_print_timed(lcd_string, 0, default_display_msg_delay);
@@ -5145,6 +5178,7 @@ void ps2_keyboard_program_memory(byte memory_number)
 
   if (error) {
     #ifdef FEATURE_DISPLAY
+      boop();boop();boop();
       lcd_status = LCD_REVERT;
     #else
     boop();
@@ -5155,7 +5189,6 @@ void ps2_keyboard_program_memory(byte memory_number)
       if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
         x = temp_memory_index;
       }
-
     }
     // write terminating 255
     EEPROM.write((memory_start(memory_number)+x),255);
@@ -5263,7 +5296,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
     }
   }
   if (error) {
-    boop();
+    boop();boop();boop();
     return(-1);
   } else {
     int y = 1;
@@ -5275,7 +5308,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
     if ((return_number > lower_limit) && (return_number < upper_limit)) {
       return(return_number);
     } else {
-      boop();
+      boop();boop();boop();
       return(-1);
     }
   }
@@ -8247,26 +8280,36 @@ void command_mode() {
 
 //-------------------------------------------------------------------------------------------------------
 
-void command_display_memory(byte memory_number) {
- 
+int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]) {
   #if defined(FEATURE_DISPLAY) && defined(FEATURE_MEMORIES)
     byte eeprom_byte_read = 0;
-    char memory_char[LCD_COLUMNS];                                                        // an array of char to hold the retrieved memory from EEPROM
-    int j;
-    int fill_char;                                                                        // a flag that is set if we need to fill the char array with spaces
+    //static char memory_char[LCD_COLUMNS] = {};              // an array of char to hold the retrieved memory from EEPROM    
+    int y,j,k;
+    int fill_char;                                  // a flag that is set if we need to fill the char array with spaces
  
-    j = 0;
-    fill_char = 0;
-    for(int y = (memory_start(memory_number)); y < (memory_start(memory_number)) + LCD_COLUMNS; y++) {
-      eeprom_byte_read = EEPROM.read(y);                                                  // read memory characters from EEPROM
-      if (eeprom_byte_read == 255) fill_char = 1;                                         // if it is the 'end of stored memory' character set a flag
-      if (!fill_char) memory_char[j] = eeprom_byte_read;                                  // save the retrieved character in the character array
-      else memory_char[j] = ' ';                                                          // else fill the rest of the array with spaces
-      j++;                                                                                // move to the next character to be stored in the array
-    }                                                                                     // end for
-    lcd_center_print_timed(memory_char, 1, default_display_msg_delay);                    // write the retrieved char array to line 2 of LCD display
-  #endif                                                                                  // FEATURE_DISPLAY
-}                                                                                         // end command_display_memory
+    y = k = j = fill_char = 0;
+    for(y = (memory_start(memory_number)); y < (memory_start(memory_number)) + LCD_COLUMNS; y++) {
+      eeprom_byte_read = EEPROM.read(y);                    // read memory characters from EEPROM
+      if (eeprom_byte_read == 255) {
+        fill_char = 1;           // if it is the 'end of stored memory' character set a flag
+        k++;   // capture end for string length fucntions
+      }
+      if (!fill_char) memory_char[j] = eeprom_byte_read;    // save the retrieved character in the character array
+      else memory_char[j] = ' ';                               // else fill the rest of the array with spaces            
+      j++;                                                  // move to the next character to be stored in the array
+    }    // end for loop
+    static int len = j-k-3; // account for increments on both number, terminator
+    if (len < 0) return 0;
+    else return len; // send string length back to caller to avoid the trailing spaces                   
+  #endif  // FEATURE_DISPLAY
+} 
+
+void command_display_memory(byte memory_number) {  
+  char tmp_str[LCD_COLUMNS] = {};
+  read_memory(memory_number, tmp_str);
+  lcd_center_print_timed(tmp_str, 1, default_display_msg_delay); // write the retrieved char array to line 2 of LCD display
+}
+// end command_display_memory
 
 //-------------------------------------------------------------------------------------------------------
 
@@ -13532,7 +13575,7 @@ void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use){
     y++;
     if (y > (EEPROM_DUMP_COLUMNS - 1)){
       port_to_use->print(F("\t"));
-      for (int z = x - y; z < x; z++) {
+      for (int z = x+1 - y; z < x+1; z++) {
         eeprom_byte_in = EEPROM.read(z);
         if ((eeprom_byte_in > 31) && (eeprom_byte_in < 127)){
           port_to_use->write(eeprom_byte_in);
@@ -17617,22 +17660,92 @@ void initialize_i2c(void) {
 #endif
 
 #ifdef FEATURE_COMPASS
-//-----------------------------------------------------------
-// Read I2C compass and temperature
-// Use Memory F12 to store declination to present true north.
-//-----------------------------------------------------------
-#include "IST8310.h"
-#include <math.h>
-#include <Wire.h>
+  //-----------------------------------------------------------
+  // Read I2C compass and temperature
+  // Use Memory F12 to store declination to present true north.
+  //-----------------------------------------------------------
+  #include "IST8310.h"
+  #include <math.h>
+  #include <Wire.h>
 
-IST8310 ist8310;
+  IST8310 ist8310;
 
-float convert_to_rad(float declination) { 
+    float convert_to_rad(float declination) { 
     debug_serial_port->print("Declination in Rad: "); debug_serial_port->println(declination * (M_PI/180));
     return (declination * (M_PI/180));
-}
+  }
 
-void initialize_compass() {
+  // compute and display the heading info
+  void process_compass(bool force_update, bool ignore_dec) {
+    static char declination_str[6];
+    static  float last_declination = -1.0f;  // -1 to force an update on first run
+    int declination_memory_number = DECLINATION_MEMORY-1;
+    int x;
+    
+    // Store declination into the designated memory location (default is 12)
+    if (declination != last_declination || force_update) {  // grid or digits changed, store new value
+      // See if there is any valid declination info we can use.  Try to use value in config structure. Use config file declination if not blank    
+      if (configuration.declination == 0 || force_update) { // find a good data souce in priority order
+        //debug_serial_port->print(F("Process Declination for Memory "));debug_serial_port->print(DECLINATION_MEMORY);
+        char tmp_dec_str[LCD_COLUMNS] = {};
+        int tmp_dec_str_len = read_memory(DECLINATION_MEMORY-1, tmp_dec_str);
+        tmp_dec_str[tmp_dec_str_len] = '\0';  // replace the 255 with null
+        strupr(tmp_dec_str);
+
+        //debug_serial_port->print(F(" - configuration.declination = ")); debug_serial_port->print(configuration.declination);
+        //debug_serial_port->print(F(" - string = ")); debug_serial_port->print(tmp_dec_str); 
+        //debug_serial_port->print(F(" - length (20 max!)= ")); debug_serial_port->println(tmp_dec_str_len); 
+  
+        if (tmp_dec_str_len != 0 || force_update) {  // not an empty memory, check to see if it is a number (X, or x.y)
+          float tmp_f = atof(tmp_dec_str);          
+          //debug_serial_port->print(F("Memory is not empty, check if string is a valid number = ")); debug_serial_port->println(tmp_f);             
+          if (tmp_f != 0) {  // use memoryX
+            //debug_serial_port->print(F("Memory has a valid number = ")); debug_serial_port->println(tmp_f);        
+            declination = tmp_f;
+          } else {  // value is 0 from user
+            if (force_update ) {
+              declination = 0.0f;
+              //debug_serial_port->print(F("Memory is 0.0 entered by user. New declination = ")); debug_serial_port->println(declination);
+            } else {  // use default in config
+              if (DECLINATION && tmp_dec_str_len == 0) {
+                declination = DECLINATION;
+                //debug_serial_port->print(F("Memory has an invalid number. Use config file. New declination = ")); debug_serial_port->println(declination);
+              } else {
+                declination = 0.0f;
+                //debug_serial_port->print(F("Memory is set to 0.00. New declination = ")); debug_serial_port->println(declination);
+              }
+            }
+          }
+        }  // finished with memory
+        configuration.declination = declination;
+        config_dirty = 1;
+        //debug_serial_port->print(F("Final declination = ")); debug_serial_port->println(declination);
+      } else {  // if not a user entered memeory and we have a value in the EEPROM, use it                
+        declination = configuration.declination;
+        //debug_serial_port->print(F("Declination stored in structure not 0 so use it = ")); debug_serial_port->println(declination);
+      }
+      sprintf(declination_str, "%3.2f", declination);
+      debug_serial_port->print("Declination = ");debug_serial_port->println(declination_str);
+      uint8_t dec_len =  strlen(declination_str);
+      for (x = 0; x < dec_len; x++) {  // write to memory
+        EEPROM.write((memory_start(declination_memory_number)+x), (byte) uppercase(declination_str[x]));
+        if ((memory_start(declination_memory_number)+x) == memory_end(declination_memory_number)) {    // are we at last memory location?
+          x = dec_len;
+        }
+      }
+      EEPROM.write((memory_start(declination_memory_number)+x),255);   // write terminating 255
+      //debug_serial_port->print(F("\nWrote Declination to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+      config_dirty = 1;
+      #if defined(HARDWARE_ESP32_DEV)
+        EEPROM.commit();
+      #endif
+      last_declination = declination;
+      ist8310.set_declination_offset_radians(convert_to_rad(declination));   // convert in deg min format to rad and apply offset
+    }
+    update_icons();
+  }  // end memories changed
+
+  void initialize_compass() {
     debug_serial_port->println(F("Trying to setup IST8310"));
     #ifdef USE_WIRE1 
       bool success = ist8310.setup(&Wire1, debug_serial_port);
@@ -17649,61 +17762,71 @@ void initialize_compass() {
     } else {
       debug_serial_port->println(F("Sucessfully calibrated IST8310"));
     }
-    
-    ist8310.set_flip_x_y(false);
 
+    ist8310.set_flip_x_y(false);
+    //declination = configuration.declination;
     // +0.2607521902 at Maltby WA (+14deg 58minutes)
     // -0.1887865056 at College Park, MD, USA. This value gets added to the magnetic heading to report the true heading;
     // See http://www.magnetic-declination.com/
-    ist8310.set_declination_offset_radians(convert_to_rad(DECLINATION));   // convert in deg min format to rad and apply offset
-}
+    //ist8310.set_declination_offset_radians(convert_to_rad(declination));   // convert in deg min format to rad and apply offset
+  }
 
-void check_compass() {
+  void check_compass() {
     static uint32_t last_measure = 0;
     int delay_time = 5000;
 
     if (update_heading_display_flag)
-        delay_time = 1000;
+      delay_time = 500;
     else 
-        delay_time = 5000;
+      delay_time = 5000;
     
     if (millis() > last_measure + delay_time) {
-        bool success = ist8310.update();
-        if (!success)
-        {
-            debug_serial_port->println(F("Failed to update IST8310"));
-        } else {
-            Vec3f* mag_latest_val = ist8310.get_magnetometer();
-            heading = ist8310.get_heading_degrees();
-            //debug_serial_port->printf("Mag (x, y, z): (%f, %f, %f)\n", mag_latest_val->x, mag_latest_val->y, mag_latest_val->z);
-            debug_serial_port->printf("Heading: %f degrees\n", heading);  // 0 degrees at true north (or magnetic north if declination is 0)
-            if (update_heading_display_flag) display_heading();
-        }  
-        last_measure = millis(); 
+      bool success = ist8310.update();
+      if (!success)
+      {
+          debug_serial_port->println(F("Failed to update IST8310"));
+      } else {
+          //Vec3f* mag_latest_val = ist8310.get_magnetometer();          
+          //debug_serial_port->printf("Mag (x, y, z): (%f, %f, %f)\n", mag_latest_val->x, mag_latest_val->y, mag_latest_val->z);
+          heading = ist8310.get_heading_degrees();
+          //debug_serial_port->printf("Heading: %3.2f degrees (declination = %3.2f)\n", heading, declination);  // 0 degrees at true north (or magnetic north if declination is 0)
+          if (update_heading_display_flag) display_heading();
+          process_compass(false,false);
+      }  
+      last_measure = millis(); 
     }
-}
+  }
+#endif  // FEATURE_COMPASS
 
-// if the comapss and tft is enabled, allow button or keyboard to pop up a window to show heading
+// if the compass and tft is enabled, allow button or keyboard to pop up a window to show heading and declination
 void display_heading(void) {
-  #if defined(FEATURE_TFT_DISPLAY)
-    static char last_heading[20] = {};
-    char h_str[20];
+  #if defined(FEATURE_COMPASS)
+    static char last_heading[LCD_COLUMNS] = {};
+    static char last_dec[LCD_COLUMNS] = {};
+    char h_str[LCD_COLUMNS];
     
     popup(true);
     lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
-    sprintf(h_str, "Heading:%3.1f", heading);
-    strcpy(last_heading, h_str);
 
-    //lcd.setCursor(20, 20);
+    sprintf(h_str, "Heading: %3.2f deg", heading);
+    strcpy(last_heading, h_str);
     lcd.setFreeFont(TFT_FONT_MEDIUM);
     lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-    lcd.drawString(h_str, 20, 40);
+    lcd.drawString(last_heading, 10, 40);
     lcd.setTextColor(TFT_WHITE, TFT_BLUE);                                    
-    lcd.drawString(h_str, 20, 40);
+    lcd.drawString(h_str, 10, 40);
+    
+    sprintf(h_str, "(dec is %3.2f deg)", declination);
+    strcpy(last_dec, h_str);
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
+    lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+    lcd.drawString(last_dec, 10, 70);
+    lcd.setTextColor(TFT_WHITE, TFT_BLUE);                                    
+    lcd.drawString(h_str, 10, 70);
+
     update_heading_display_flag = true;
   #endif                                  
 }
-#endif  // FEATURE_COMPASS
 
 //---------------------------------------------------------------------
 // Paddle and Key Interrupt Handlers
@@ -24254,6 +24377,8 @@ void update_time(){
                                     {
                                         case 0x04 ... 0x1d: ch = PS2_A_CTRL + (ch-4); break; // convert to lower case letters
                                         case 0x3A ... 0x45: ch = PS2_F1_CTRL + (ch-0x3A); break; // F1-F12 keys
+                                        case 0xC6: ch = PS2_F11_CTRL; break; // F1-F12 keys
+                                        case 0xC7: ch = PS2_F12_CTRL; break; // F1-F12 keys
                                     }
                                     //debug_serial_port->print(F("CTRL key = 0x"));
                                     //debug_serial_port->println(ch, HEX);
@@ -24265,6 +24390,8 @@ void update_time(){
                                         //case 0x04 : ch = 0; s_tone(sidetone_line,configuration.hz_sidetone,0); break; // Alt-b
                                         //case 0x05 : ch = 0; noTone(sidetone_line); break;  // Alt-b                                        
                                         case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
+                                        case 0xC6: ch = PS2_F11_ALT; break; // F1-F12 keys
+                                        case 0xC7: ch = PS2_F12_ALT; break; // F1-F12 keys
                                         case 0x29 : ch = PS2_ESC; 
                                                     queueflush();
                                                     break;  // ALT-C, clear the LCD scrollable area
@@ -24305,7 +24432,11 @@ void update_time(){
                                         case 0x37 : ch = '>'; break;      // '>'  key
                                         case 0x38 : ch = '?'; break;      // '?' cursor key
                                         case 0x3A ... 0x45: ch += 85; break; // F1-F12 keys
+                                        case 0xC6: ch = PS2_F11_SHIFT; break; // F1-F12 keys
+                                        case 0xC7: ch = PS2_F12_SHIFT; break; // F1-F12 keys
                                     }
+                                    //debug_serial_port->print(F("SHIFT key = 0x"));
+                                    //debug_serial_port->println(ch, HEX);
                                 } 
                                 else if (modifier == 0) // normal key
                                 {
@@ -25168,117 +25299,124 @@ void displayInfo()
 
 #endif  // FEATURE_GPS
 
-// insert GPS grid square and time/date functions here.
 void check_gps(bool force_update, bool ignore_gps) {
-  static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
-  int memory_number = GRID_MEMORY-1;
-  int x;
-  static uint32_t lost_gps_timer = 0;
+  #ifdef FEATURE_GPS
+    static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
+    int memory_number = GRID_MEMORY-1;
+    int x;
+    static uint32_t lost_gps_timer = 0;
 
-  if (ignore_gps) {
-    if (!configuration.ignore_gps) {
-      configuration.ignore_gps = true;   // toggle gps usage off
-      #ifdef FEATURE_DISPLAY
-        lcd_center_print_timed("Toggle Grid OFF", 0, default_display_msg_delay);
-      #endif
-    } else {
-      configuration.ignore_gps = false;  // toggle gps usage back on
+    if (ignore_gps) {
+      if (!configuration.ignore_gps) {
+        configuration.ignore_gps = true;   // toggle gps usage off
+        #ifdef FEATURE_DISPLAY
+          lcd_center_print_timed("Toggle GPS OFF", 0, default_display_msg_delay);
+        #endif
+      } else {
+        configuration.ignore_gps = false;  // toggle gps usage back on
+        
+        if (strlen(configuration.GridSq) != 0)
+          strcpy(grid_sq_str, configuration.GridSq);
+        else
+          strcpy(grid_sq_str, DEFAULT_GRID);
       
-      if (strlen(configuration.GridSq) != 0)
-        strcpy(grid_sq_str, configuration.GridSq);
-      else
-        strcpy(grid_sq_str, DEFAULT_GRID);
-      
-      #ifdef FEATURE_DISPLAY
-        lcd_center_print_timed("Toggle Grid ON", 0, default_display_msg_delay);        
-      #endif
-    }
-    config_dirty = 1;
-    //debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
-  }  
-
-  #ifdef FEATURE_GPS  
+        #ifdef FEATURE_DISPLAY
+          lcd_center_print_timed("Toggle GPS ON", 0, default_display_msg_delay);        
+        #endif
+      }
+      config_dirty = 1;  // changed ignore_gps in struct memory
+      //debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
+    }   
     uint8_t gps_hour = 0;
     uint8_t gps_minute = 0;
     uint8_t gps_second = 0;  
     
     #ifdef GPS_TEST
-    // choose one of the 2 below to simulate NMEA data from either grid square
-    //auto gpsStream = gpsStream_EM10;
-    auto gpsStream = gpsStream_CN87;
+      // choose one of the 2 below to simulate NMEA data from either grid square
+      //auto gpsStream = gpsStream_EM10;
+      auto gpsStream = gpsStream_CN87;
 
-    while (*gpsStream) {
-      if (gps.encode(*gpsStream++)) {
-        //displayInfo();
-        if (gps.location.isValid()) {
-          Convert_to_MH();
-          debug_serial_port->print(F("Grid Square = "));
-          debug_serial_port->println(grid_sq_str);
-          stop_msg = false;
+      while (*gpsStream) {
+        if (gps.encode(*gpsStream++)) {
+          //displayInfo();
+          if (gps.location.isValid()) {
+            Convert_to_MH();
+            debug_serial_port->print(F("Grid Square = "));
+            debug_serial_port->println(grid_sq_str);
+            stop_msg = false;
+          }
         }
       }
-    }
     #else
-    while (Serial2.available() > 0) {
-      //debug_serial_port->print((char) Serial2.read());
-      gps.encode(Serial2.read());
-      stop_msg = false;
-      lost_gps_timer = millis();
-    }
-    if (gps.location.isValid() && gps.location.isUpdated()) {
-        Convert_to_MH();
-        //debug_serial_port->print(F("Grid Square = ")); debug_serial_port->println(grid_sq_str);      
-    }
-     
-    if (gps.time.isValid() && gps.time.isUpdated())
-    {
-        gps_hour = gps.time.hour();
-        gps_minute = gps.time.minute();
-        gps_second = gps.time.second();
-        sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
-        //Serial.print(time_str);        
-    }
+      while (Serial2.available() > 0) {
+        //debug_serial_port->print((char) Serial2.read());
+        gps.encode(Serial2.read());
+        stop_msg = false;
+        lost_gps_timer = millis();
+      }
+
+      if (gps.location.isValid() && gps.location.isUpdated()) {
+          Convert_to_MH();
+          stop_msg = false;
+          //debug_serial_port->print(F(" Grid Square = ")); debug_serial_port->println(grid_sq_str);      
+      } else {
+        if (!gps.location.isValid()) stop_msg = true;
+      }
+      
+      if (gps.time.isValid() && gps.time.isUpdated())
+      {
+          gps_hour = gps.time.hour();
+          gps_minute = gps.time.minute();
+          gps_second = gps.time.second();
+          sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
+          stop_msg = false;
+          //debug_serial_port->println(time_str);        
+      } else {
+        if (!gps.time.isValid()) stop_msg = true;
+      }
     #endif
 
-    if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
-    {
-      debug_serial_port->println(F("No GPS detected: Check wiring."));
-      stop_msg = true;
-      lost_gps_timer = millis();
+      if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
+      {
+        debug_serial_port->println(F("No GPS detected: Check wiring."));
+        stop_msg = true;
+        lost_gps_timer = millis();
+      }
+
+    // see if there is any valid gps info we can use.  If not use config grid square if not blank
+    if (strlen(grid_sq_str) == 0 || configuration.ignore_gps) { // if no input then allow manually programmed grid to be used, do not overwrite, bail.
+      strcpy(configuration.GridSq, ""); // zero out stored grid used for icon row
+      return;
+    } else {
+      strcpy(configuration.GridSq, grid_sq_str);  // store valid GPS grid into EEPROM
+    }
+  
+    if (configuration.grid_digits == 0)
+      configuration.grid_digits = 4;
+      
+    // Store grid square into the designated memory location
+    if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || force_update) {  // grid or digits changed, store new value
+      strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
+      debug_serial_port->print("Grid=");debug_serial_port->println(configuration.GridSq);
+
+      for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
+        EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(configuration.GridSq[x]));
+        if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
+          x = configuration.grid_digits;
+        }
+      }
+      EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
+      debug_serial_port->print(F("\nWrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+      strcpy(last_grid_sq_str, grid_sq_str);
+      config_dirty = 1;
+      #if defined(HARDWARE_ESP32_DEV)
+        EEPROM.commit();
+      #endif
+      update_icons();
+      beep();
     }
   #endif
-
-  // see if there is any valid gps info we can use/  If not use config grid square if not blank
-  if (strlen(grid_sq_str) == 0 || configuration.ignore_gps) { // if no input then allow manually programmed grid to be used, do not overwrite, bail.
-    strcpy(configuration.GridSq, ""); // zero out stored grid used for icon row
-    return;
-  } else {
-    strcpy(configuration.GridSq, grid_sq_str);  // store valid GPS grid into EEPROM
-  }
-  
-  if (configuration.grid_digits == 0)
-    configuration.grid_digits = 4;
-  
-  // Store grid square into the designated memory location
-  if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || force_update) {  // grid or digits changed, store new value
-    strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
-    //debug_serial_port->print("Grid=");debug_serial_port->println(configuration.GridSq);
-
-    for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
-      EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(configuration.GridSq[x]));
-      if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
-        x = configuration.grid_digits;
-      }
-    }
-
-    EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
-    //debug_serial_port->print(F("\nWrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
-    strcpy(last_grid_sq_str, grid_sq_str);
-    config_dirty = 1;
-    update_icons();
-    beep();
-  }  // end memory changed
-}
+}  // end check_GPS
 
 void setup_esp()
 {

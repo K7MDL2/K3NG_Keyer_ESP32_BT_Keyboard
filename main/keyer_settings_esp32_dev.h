@@ -358,3 +358,4 @@
 
 #define HI_TEXT "K3NG"  // Must be in UPPER case
 #define GRID_MEMORY 9
+#define DECLINATION_MEMORY 12
