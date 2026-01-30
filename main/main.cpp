@@ -5027,7 +5027,7 @@ void check_ps2_keyboard()
                                 case PS2_F12_CTRL : {   // enter new declination in memory x and store it in config structure                                 
                                   char tmp_str[LCD_COLUMNS] = {};
                                   #ifdef FEATURE_DISPLAY                              
-                                    sprintf(tmp_str, "Mem %d = Declination", DECLINATION_MEMORY);
+                                    sprintf(tmp_str, "M%d = Declination", DECLINATION_MEMORY);
                                     debug_serial_port->println(tmp_str); 
                                     lcd_center_print_timed(tmp_str, 3, default_display_msg_delay);
                                   #endif
