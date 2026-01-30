@@ -151,13 +151,13 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY
     #else
-      #define paddle_left     19 //32 Must have pullup internal or external
+      #define paddle_left     21 //32 Must have pullup internal or external
       #define paddle_right    23 //25 Must have pullup internal or external.
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  39
       #endif //FEATURE_STRAIGHT_KEY          
     #endif
-    #define GPS_RX_PIN      23
+    #define GPS_RX_PIN      19
     #define TOUCH_X         300     // x  300 default
     #define TOUCH_X1        3598    // x1 3600 default
     #define TOUCH_Y         345     // y  300 default

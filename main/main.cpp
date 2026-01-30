@@ -1982,6 +1982,7 @@ int print_memory(byte memory_number, char *mem_string);
 void check_gps(bool force_update, bool ignore_gps);
 void check_compass(void);
 void process_compass(bool force_update, bool ignore_dec);
+void command_display_memory(byte memory_number);
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
@@ -4911,8 +4912,11 @@ void check_ps2_keyboard()
 
                                 #ifdef FEATURE_GPS
                                 case PS2_Y_CTRL : {  // cyc;le thogh GPS serial port baud rates and restart comms                                  
-                                  static uint32_t next_baud = GPS_BAUD_RATE;
+                                  static uint32_t next_baud = 0;
                                   
+                                  if (configuration.gps_baud == 0) next_baud = GPS_BAUD_RATE;
+                                  else next_baud = configuration.gps_baud;
+
                                   switch (next_baud) {
                                     case 4800: next_baud = 9600; break;
                                     case 9600: next_baud = 19200; break;
@@ -5023,20 +5027,21 @@ void check_ps2_keyboard()
                                 }
                                 break;
                                   
-                                case PS2_F12_CTRL : {   // enter new declination in memory x and store it in config structure
-                                  char tmp_str[40];
+                                case PS2_F12_CTRL : {   // enter new declination in memory x and store it in config structure                                 
+                                  char tmp_str[LCD_COLUMNS] = {};
                                   #ifdef FEATURE_DISPLAY                              
                                     sprintf(tmp_str, "Mem %d = Declination", DECLINATION_MEMORY);
-                                    //debug_serial_port->println(tmp_str); 
+                                    debug_serial_port->println(tmp_str); 
                                     lcd_center_print_timed(tmp_str, 3, default_display_msg_delay);
                                   #endif
                                   ps2_keyboard_program_memory(DECLINATION_MEMORY-1);                                                                                        
                                   // store user entered memory x value into config structure, overrides defaults
-                                  char  memory_str[LCD_COLUMNS] = {};
+                                  //command_display_memory(DECLINATION_MEMORY-1);
+                                  char memory_str[LCD_COLUMNS] = {};
                                   int len = read_memory(DECLINATION_MEMORY-1, memory_str);
                                   memory_str[len] = '\0';  // replace the 255 with null
-                                  debug_serial_port->print("Read memory str = "); debug_serial_port->println(memory_str);  
-                                  debug_serial_port->print("Read memory len = "); debug_serial_port->println(len);       
+                                  //debug_serial_port->print("Read memory str = "); debug_serial_port->println(memory_str);  
+                                  //debug_serial_port->print("Read memory len = "); debug_serial_port->println(len);       
                                   process_compass(true, false);  // force a memory update 
                                 }
                                 break;
@@ -8332,7 +8337,7 @@ int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]) {
       else memory_char[j] = ' ';                               // else fill the rest of the array with spaces            
       j++;                                                  // move to the next character to be stored in the array
     }    // end for loop
-    static int len = j-k-3; // account for increments on both number, terminator
+    static int len = j-k; // account for increments on both number, terminator
     if (len < 0) return 0;
     else return len; // send string length back to caller to avoid the trailing spaces                   
   #endif  // FEATURE_DISPLAY
@@ -17758,7 +17763,7 @@ void initialize_i2c(void) {
         declination = configuration.declination;
         //debug_serial_port->print(F("Declination stored in structure not 0 so use it = ")); debug_serial_port->println(declination);
       }
-      sprintf(declination_str, "%3.2f", declination);
+      sprintf(declination_str, "%3.3f", declination);
       debug_serial_port->print("Declination = ");debug_serial_port->println(declination_str);
       uint8_t dec_len =  strlen(declination_str);
       for (x = 0; x < dec_len; x++) {  // write to memory
@@ -17850,7 +17855,7 @@ void display_heading(void) {
     lcd.setTextColor(TFT_WHITE, TFT_BLUE);                                    
     lcd.drawString(h_str, 10, 40);
     
-    sprintf(h_str, "(dec is %3.2f deg)", declination);
+    sprintf(h_str, "(dec is %3.3f deg)", declination);
     strcpy(last_dec, h_str);
     lcd.setFreeFont(TFT_FONT_MEDIUM);
     lcd.setTextColor(TFT_BLACK, TFT_BLACK);
@@ -24426,9 +24431,7 @@ void update_time(){
                                         case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
                                         case 0xC6: ch = PS2_F11_ALT; break; // F1-F12 keys
                                         case 0xC7: ch = PS2_F12_ALT; break; // F1-F12 keys
-                                        case 0x29 : ch = PS2_ESC; 
-                                                    queueflush();
-                                                    break;  // ALT-C, clear the LCD scrollable area
+                                        case 0x29 : ch = PS2_ESC; queueflush(); break;  // ALT-C, clear the LCD scrollable area
                                     }
                                     //debug_serial_port->print(F("ALT key = 0x"));
                                     //debug_serial_port->println(ch, HEX);
