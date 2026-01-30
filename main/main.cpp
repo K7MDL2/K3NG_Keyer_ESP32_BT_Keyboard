@@ -1894,14 +1894,11 @@ struct config_t {  // 120 bytes total
   int sidetone_volume;
     // 2 bytes
 
-#ifdef FEATURE_TFT_DISPLAY
   uint8_t grid_digits;  // length of gridsquare to display
   char GridSq[grid_len_max];  // typically 9 bytes
   bool ignore_gps;  // set to true if we shoudl not use GPS info
   float declination; // store the declination stored in memory 12 from config, or from a user entered overriding value in memory 12
   uint32_t gps_baud; // store the last known GPS serial baud rate
-    // 2+9 bytes
-#endif
 
 #if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
   char wifissid[20]=WIFI_SSID;//Initialize configuration.wifissid with default set in keyer_settings...h file
