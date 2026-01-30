@@ -1895,7 +1895,9 @@ struct config_t {  // 120 bytes total
     // 2 bytes
 
   uint8_t grid_digits;  // length of gridsquare to display
-  char GridSq[grid_len_max];  // typically 9 bytes
+  char GPS_GridSq[grid_len_max];  // store the active grid square - can come frm GPS or nto avaiable, config file
+  char Mem_GridSq[grid_len_max];  // store the user entered grid square
+  uint8_t GridSq_source;  // specify which source to use/  0 = Config File, 1 = GPS, 2 = Memory in GRID_WORKING_MEMORY #
   bool ignore_gps;  // set to true if we shoudl not use GPS info
   float declination; // store the declination stored in memory 12 from config, or from a user entered overriding value in memory 12
   uint32_t gps_baud; // store the last known GPS serial baud rate
@@ -1980,6 +1982,10 @@ void check_gps(bool force_update, bool ignore_gps);
 void check_compass(void);
 void process_compass(bool force_update, bool ignore_dec);
 void command_display_memory(byte memory_number);
+void store_Grid(char * grid);
+int validate_grid(const char * input_grid, char grid[]);
+int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]);
+void process_gps(char * memory_str, bool force_update, uint8_t source);
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
@@ -2168,7 +2174,6 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 void s_noTone(uint8_t sidetone_line_pin_num);
 void generic_popup_key(uint16_t key_ID, const char* msg_text);
 void display_heading(void);
-int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]);
 
 //#define USE_BT_TASK // for BT check in a task
 #ifdef USE_BT_TASK
@@ -2215,11 +2220,8 @@ byte iambic_flag = 0;
 unsigned long last_config_write = 0;
 uint16_t memory_area_end = 0;
 #define GRIDSQUARE_LEN  (9u)
-#ifdef DEFAULT_GRID
-  char grid_sq_str[12] = DEFAULT_GRID;
-#else
-  char grid_sq_str[12] = {};
-#endif
+char grid_sq_str[12] = {};
+char default_grid[9] = {};
 #ifdef DECLINATION
   float declination = DECLINATION;
 #else
@@ -3894,20 +3896,20 @@ void update_icons(void) {
       last_key_tx = key_tx;
     }
 
-    if (stop_msg_changed || strcmp(configuration.GridSq, last_GridSq) != 0)  // connect status and/or grid changed, update display
+    if (stop_msg_changed || strcmp(grid_sq_str, last_GridSq) != 0)  // connect status and/or grid changed, update display
     {
       lcd.setTextColor(TFT_BLACK, TFT_BLACK);
       lcd.drawString(last_GridSq, GRID_ANCHOR, row);   // blank out space 
 
       if (!configuration.ignore_gps && !stop_msg) {
         lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);
-        lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
+        lcd.drawString(grid_sq_str, GRID_ANCHOR, row); // update display
       } else {
         lcd.setTextColor(TFT_GREY, TFT_BLACK);
-        lcd.drawString(configuration.GridSq, GRID_ANCHOR, row); // update display
+        lcd.drawString(grid_sq_str, GRID_ANCHOR, row); // update display
       }
 
-      strcpy(last_GridSq, configuration.GridSq);  // write grid square
+      strcpy(last_GridSq, grid_sq_str);  // write grid square
     }
 
 //    GRID_ANCHOR (SCREEN_WIDTH/4)
@@ -4988,7 +4990,21 @@ void check_ps2_keyboard()
                                 break;
                                 #endif //OPTION_SAVE_MEMORY_NANOKEYER
                                 
-                                #ifdef FEATURE_GPS
+                                #ifdef FEATURE_COMPASS
+                                case PS2_F8_CTRL : {  // if compass is enabled, display in a popup window                                                                   
+                                    if (update_heading_display_flag) {
+                                      update_heading_display_flag = false;
+                                      if (popup_active) {
+                                        popup(false);
+                                        popup_active = false;   
+                                      }                          
+                                      return;
+                                    }
+                                    display_heading();                                                      
+                                }
+                                break;
+                                #endif
+
                                 case PS2_F9_CTRL : {  // tell GPS how many grid digits to save to memory location                                  
                                   if (configuration.grid_digits == 4) {
                                     configuration.grid_digits = 6;
@@ -5001,41 +5017,53 @@ void check_ps2_keyboard()
                                       lcd_center_print_timed(F("GRID LENGTH = 4 "), 0, default_display_msg_delay);
                                     #endif
                                   }
-                                  check_gps(true, false);  // force a memory update                  
+                                  process_gps(grid_sq_str, true, false);  // force a memory update                  
                                 }                                
                                 break;
 
-                                case PS2_F10_CTRL :   // ignore stored GPS grid square and declination values
+                                case PS2_F10_CTRL :   // ignore stored GPS grid square
                                   check_gps(true, true);  // force a memory update                                             
                                 break;
-                                #endif //FEATURE_GPS
-
-                                #ifdef FEATURE_COMPASS
-                                case PS2_F11_CTRL : {  // if compass is enabled, display in a popup window                                                                   
-                                    if (update_heading_display_flag) {
-                                      update_heading_display_flag = false;
-                                      if (popup_active) {
-                                        popup(false);
-                                        popup_active = false;   
-                                      }                          
-                                      return;
-                                    }
-                                    display_heading();                                                      
-                                }
-                                break;
-                                  
-                                case PS2_F12_CTRL : {   // enter new declination in memory x and store it in config structure                                 
+                                          
+                                #ifdef FEATURE_GPS
+                                case PS2_F11_CTRL : {   // enter new grid sqaure in memory x and store it in config structure                                 
                                   char tmp_str[LCD_COLUMNS] = {};
                                   #ifdef FEATURE_DISPLAY                              
-                                    sprintf(tmp_str, "M%d = Declination", DECLINATION_MEMORY);
+                                    sprintf(tmp_str, "M%d = Grid Sq", GRID_WORKING_MEMORY);
                                     debug_serial_port->println(tmp_str); 
                                     lcd_center_print_timed(tmp_str, 3, default_display_msg_delay);
                                   #endif
-                                  ps2_keyboard_program_memory(DECLINATION_MEMORY-1);                                                                                        
+                                  ps2_keyboard_program_memory(GRID_WORKING_MEMORY-1);                                                                                        
                                   // store user entered memory x value into config structure, overrides defaults
-                                  //command_display_memory(DECLINATION_MEMORY-1);
+                                  //command_display_memory(GRID_WORKING_MEMORY-1);
                                   char memory_str[LCD_COLUMNS] = {};
-                                  int len = read_memory(DECLINATION_MEMORY-1, memory_str);
+                                  int len = read_memory(GRID_WORKING_MEMORY-1, memory_str);
+                                  if (len >=8) len = 8;
+                                  memory_str[len] = '\0';  // replace the 255 with null
+                                  //debug_serial_port->print("Read memory str = "); debug_serial_port->println(memory_str);  
+                                  //debug_serial_port->print("Read memory len = "); debug_serial_port->println(len);                                    
+                                  validate_grid(memory_str, tmp_str);  // returns a proper 4-8 grid, or empty grid if bad input.
+                                  strcpy(configuration.Mem_GridSq, tmp_str);
+                                  config_dirty = 1;
+                                  debug_serial_port->print("Read Validated Memory Grid = "); debug_serial_port->println(configuration.Mem_GridSq);
+                                  process_gps(configuration.Mem_GridSq, true, 2);  // force a memory update (source = 2)                                                                   
+                                }
+                                break;
+                                #endif  // FEATURE_GPS
+                                
+                                #ifdef FEATURE_COMPASS
+                                case PS2_F12_CTRL : {   // enter new declination in memory x and store it in config structure                                 
+                                  char tmp_str[LCD_COLUMNS] = {};
+                                  #ifdef FEATURE_DISPLAY                              
+                                    sprintf(tmp_str, "M%d = Declination", DECLINATION_WORKING_MEMORY);
+                                    debug_serial_port->println(tmp_str); 
+                                    lcd_center_print_timed(tmp_str, 3, default_display_msg_delay);
+                                  #endif
+                                  ps2_keyboard_program_memory(DECLINATION_WORKING_MEMORY-1);                                                                                        
+                                  // store user entered memory x value into config structure, overrides defaults
+                                  //command_display_memory(DECLINATION_WORKING_MEMORY-1);
+                                  char memory_str[LCD_COLUMNS] = {};
+                                  int len = read_memory(DECLINATION_WORKING_MEMORY-1, memory_str);
                                   memory_str[len] = '\0';  // replace the 255 with null
                                   //debug_serial_port->print("Read memory str = "); debug_serial_port->println(memory_str);  
                                   //debug_serial_port->print("Read memory len = "); debug_serial_port->println(len);       
@@ -8318,6 +8346,7 @@ void command_mode() {
 
 int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]) {
   #if defined(FEATURE_DISPLAY) && defined(FEATURE_MEMORIES)
+    static int len = 0;
     byte eeprom_byte_read = 0;
     //static char memory_char[LCD_COLUMNS] = {};              // an array of char to hold the retrieved memory from EEPROM    
     int y,j,k;
@@ -8328,13 +8357,15 @@ int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]) {
       eeprom_byte_read = EEPROM.read(y);                    // read memory characters from EEPROM
       if (eeprom_byte_read == 255) {
         fill_char = 1;           // if it is the 'end of stored memory' character set a flag
-        k++;   // capture end for string length fucntions
+        //debug_serial_port->print("j="); debug_serial_port->println(j);
+        //debug_serial_port->print("k="); debug_serial_port->println(k);
+        if (k == 0) k = j;   // capture end for string length fucntions
       }
       if (!fill_char) memory_char[j] = eeprom_byte_read;    // save the retrieved character in the character array
       else memory_char[j] = ' ';                               // else fill the rest of the array with spaces            
       j++;                                                  // move to the next character to be stored in the array
     }    // end for loop
-    static int len = j-k; // account for increments on both number, terminator
+    len = k; // account for increments on both number, terminator
     if (len < 0) return 0;
     else return len; // send string length back to caller to avoid the trailing spaces                   
   #endif  // FEATURE_DISPLAY
@@ -17715,16 +17746,16 @@ void initialize_i2c(void) {
   void process_compass(bool force_update, bool ignore_dec) {
     static char declination_str[6];
     static  float last_declination = -1.0f;  // -1 to force an update on first run
-    int declination_memory_number = DECLINATION_MEMORY-1;
+    int declination_memory_number = DECLINATION_WORKING_MEMORY-1;
     int x;
     
     // Store declination into the designated memory location (default is 12)
     if (declination != last_declination || force_update) {  // grid or digits changed, store new value
       // See if there is any valid declination info we can use.  Try to use value in config structure. Use config file declination if not blank    
       if (configuration.declination == 0 || force_update) { // find a good data souce in priority order
-        //debug_serial_port->print(F("Process Declination for Memory "));debug_serial_port->print(DECLINATION_MEMORY);
+        //debug_serial_port->print(F("Process Declination for Memory "));debug_serial_port->print(DECLINATION_WORKING_MEMORY);
         char tmp_dec_str[LCD_COLUMNS] = {};
-        int tmp_dec_str_len = read_memory(DECLINATION_MEMORY-1, tmp_dec_str);
+        int tmp_dec_str_len = read_memory(DECLINATION_WORKING_MEMORY-1, tmp_dec_str);
         tmp_dec_str[tmp_dec_str_len] = '\0';  // replace the 255 with null
         strupr(tmp_dec_str);
 
@@ -25233,7 +25264,7 @@ int positionToMaidenhead(char m[])
 }
 
 //  Convert Lat and Lon to MH Grid Sqaure
-int Convert_to_MH(void)
+int Convert_to_MH(char gps_grid[])
 {
     char m[9];
 
@@ -25245,12 +25276,13 @@ int Convert_to_MH(void)
 
     if (positionToMaidenhead(m))
     {   
-        strncpy(grid_sq_str,m,8);
+        strncpy(gps_grid,m,8);
+        gps_grid[8] = '\0';
         return 1;  // Success               
     }
     else
     {
-        strcpy(grid_sq_str,"");
+        strcpy(gps_grid,"");
         return 0; // fail      /*  Can use later to skip displaying anything when have invalid or no GPS input   */
     }
 }
@@ -25335,10 +25367,9 @@ void displayInfo()
 
 void check_gps(bool force_update, bool ignore_gps) {
   #ifdef FEATURE_GPS
-    static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
-    int memory_number = GRID_MEMORY-1;
-    int x;
     static uint32_t lost_gps_timer = 0;
+    bool do_process = false;
+    char gps_grid[9];
 
     if (ignore_gps) {
       if (!configuration.ignore_gps) {
@@ -25347,13 +25378,7 @@ void check_gps(bool force_update, bool ignore_gps) {
           lcd_center_print_timed("Toggle GPS OFF", 0, default_display_msg_delay);
         #endif
       } else {
-        configuration.ignore_gps = false;  // toggle gps usage back on
-        
-        if (strlen(configuration.GridSq) != 0)
-          strcpy(grid_sq_str, configuration.GridSq);
-        else
-          strcpy(grid_sq_str, DEFAULT_GRID);
-      
+        configuration.ignore_gps = false;  // toggle gps usage back on        
         #ifdef FEATURE_DISPLAY
           lcd_center_print_timed("Toggle GPS ON", 0, default_display_msg_delay);        
         #endif
@@ -25392,19 +25417,9 @@ void check_gps(bool force_update, bool ignore_gps) {
           lost_gps_timer = millis();
         } else {
           Serial2.read();
-          stop_msg = true;
-          return;
         }
       }
 
-      if (gps.location.isValid() && gps.location.isUpdated()) {
-          Convert_to_MH();
-          stop_msg = false;
-          //debug_serial_port->print(F(" Grid Square = ")); debug_serial_port->println(grid_sq_str);      
-      } else {
-        if (!gps.location.isValid()) stop_msg = true;
-      }
-      
       if (gps.time.isValid() && gps.time.isUpdated())
       {
           gps_hour = gps.time.hour();
@@ -25412,53 +25427,150 @@ void check_gps(bool force_update, bool ignore_gps) {
           gps_second = gps.time.second();
           sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
           stop_msg = false;
-          //debug_serial_port->println(time_str);        
+          //debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
       } else {
         if (!gps.time.isValid()) stop_msg = true;
       }
+
+      if (gps.location.isValid() && gps.location.isUpdated()) {
+        Convert_to_MH(gps_grid);
+        if (strcmp(gps_grid, configuration.GPS_GridSq) != 0) { 
+          strcpy(configuration.GPS_GridSq, gps_grid);         // if grid changed, store it in EEPROM
+          config_dirty = 1;
+        }
+        stop_msg = false;
+        //debug_serial_port->print(F("check_gps: Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq); 
+        do_process = true;
+      } else {
+        if (!gps.location.isValid()) stop_msg = true;
+      }
     #endif
 
-      if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
-      {
-        debug_serial_port->println(F("No GPS detected: Check wiring."));
-        stop_msg = true;
-        lost_gps_timer = millis();
-      }
+    if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
+    {
+      debug_serial_port->println(F("No GPS detected: Check wiring."));
+      if (!stop_msg) do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid  
+      strcpy(gps_grid, "");
+      stop_msg = true;
+      lost_gps_timer = millis();      
+    } 
 
-    // see if there is any valid gps info we can use.  If not use config grid square if not blank
-    if (strlen(grid_sq_str) == 0 || configuration.ignore_gps) { // if no input then allow manually programmed grid to be used, do not overwrite, bail.
-      strcpy(configuration.GridSq, ""); // zero out stored grid used for icon row
-      return;
-    } else {
-      strcpy(configuration.GridSq, grid_sq_str);  // store valid GPS grid into EEPROM
-    }
-  
-    if (configuration.grid_digits == 0)
-      configuration.grid_digits = 4;
-      
-    // Store grid square into the designated memory location
-    if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || force_update) {  // grid or digits changed, store new value
-      strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
-      debug_serial_port->print("Grid=");debug_serial_port->println(configuration.GridSq);
-
-      for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
-        EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(configuration.GridSq[x]));
-        if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
-          x = configuration.grid_digits;
-        }
-      }
-      EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
-      debug_serial_port->print(F("\nWrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
-      strcpy(last_grid_sq_str, grid_sq_str);
-      config_dirty = 1;
-      #if defined(HARDWARE_ESP32_DEV)
-        EEPROM.commit();
-      #endif
-      update_icons();
-      beep();
-    }
+    if (do_process) process_gps(gps_grid, force_update, 1);   // 1 = GPS source
   #endif
-}  // end check_GPS
+}
+
+// validate 0, or 4-8 character grid square from multiple sources.
+// input *grid
+// returns value in grid[], possibly fizxed up or null if invalid
+int validate_grid(const char * input_grid, char grid[]) {
+  int i;
+  int len = strlen(input_grid);
+  if (len > 0) {    // minimum grid is 4 places, max is 8 places.
+    for (i=0; i < len; i++) {
+      if (isAlphaNumeric(input_grid[i])) {
+        grid[i] = input_grid[i];
+      } else {
+        grid[i] = '\0';  // replace bad data with null
+      }
+      if (i >= 8) {       
+        break;
+      }         
+    } 
+    
+    grid[i] = '\0'; // terminate the string at max 8 places and exit.
+
+    len = strlen(grid);
+    if (len < 4 || len > 8) { // detect bad digits in middle (will have '\0').  Should have digits == len 
+      strcpy(grid, "");
+      len = 0;
+      //debug_serial_port->println(F("Empty or Invalid entry. Grid is set to empty"));
+    } 
+    
+    //debug_serial_port->print(F("Validate_grid: Grid = ")); debug_serial_port->println(grid);
+  }   // done, have a validated grid, could be ""
+  return len;
+}
+
+void process_gps(char * memory_str, bool force_update, uint8_t source) {
+  static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
+  static uint8_t last_source = 0;
+  bool update_flag;
+  //char * grid_ptr;
+  
+  #ifdef GPS_PROCESS_DEBUG
+    debug_serial_port->print(F("\nProcess_gps: Function Input    = ")); debug_serial_port->print(memory_str); 
+      debug_serial_port->print(F("  Source = ")); debug_serial_port->println(source); 
+    debug_serial_port->print(F("Process_gps: Grid (current)    = ")); debug_serial_port->println(grid_sq_str);
+    debug_serial_port->print(F("Process_gps: Grid FILE value   = ")); debug_serial_port->println(default_grid);
+    debug_serial_port->print(F("Process_gps: Grid GPS value    = ")); debug_serial_port->println(configuration.GPS_GridSq);
+    debug_serial_port->print(F("Process_gps: Grid Memory value = ")); debug_serial_port->println(configuration.Mem_GridSq);
+    debug_serial_port->print(F("Process_gps: Current Source (0 file, 1 EEPROM, 3 memory) = ")); debug_serial_port->println(configuration.GridSq_source);
+  #endif
+
+  // Source Priority Ladder.  Favor memory over GPS over config file
+  update_flag = 0;
+  if (configuration.GridSq_source < 2 && source == 2 && strlen(memory_str) >=4) {configuration.GridSq_source = 2; update_flag = 1;}
+  else if (configuration.GridSq_source < 1 && source == 1 && strlen(memory_str) >=4) {configuration.GridSq_source = 1; update_flag = 1;}
+  
+  if (update_flag) {
+    config_dirty = 1;
+    debug_serial_port->print(F("*Process_gps: New Source (0 file, 1 EEPROM, 2 memory) = ")); debug_serial_port->println(configuration.GridSq_source);
+  }
+
+  // use the current source to update the global grid value
+  // if the new grid is empty, use the next lowest source
+  last_source = configuration.GridSq_source;
+  switch (configuration.GridSq_source) {
+    case 2 :  if (strlen(memory_str) >= 4) {
+                  strcpy(grid_sq_str, configuration.Mem_GridSq);
+                  break;
+              }  __attribute__((fallthrough)); // No warning // fall through if grid is empty
+    case 1 :  if (strlen(memory_str) >= 4) {
+                  strcpy(grid_sq_str, configuration.GPS_GridSq);
+                  configuration.GridSq_source = 1;  // update new source
+                  break;
+              }  __attribute__((fallthrough)); // No warning // fall through if grid is empty
+    case 0 : strcpy(grid_sq_str, default_grid); 
+             configuration.GridSq_source = 0;  // update new source
+             break;
+  }
+  if (last_source != configuration.GridSq_source) config_dirty = 1;  // update EEPROM with change
+
+  //if (configuration.ignore_gps) return;  // nothing more to do, bail and save CPU time
+  if (configuration.grid_digits == 0) configuration.grid_digits = 4;
+    
+  // Store grid square into the designated memory location
+  if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || force_update) {  // grid or digits changed, store new value
+    debug_serial_port->print(F("*Process_gps: Updated Grid = ")); debug_serial_port->println(grid_sq_str);
+    store_Grid(grid_sq_str);
+    strcpy(last_grid_sq_str, grid_sq_str);
+  }
+}
+
+//  Store a Grid Square into a Memory position
+void store_Grid(char * grid) {
+  int memory_number = GRID_MEMORY-1;
+  int x;
+
+  //strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
+  debug_serial_port->print("Storing Grid "); debug_serial_port->print(grid);
+  debug_serial_port->print(" into Memory "); debug_serial_port->println(GRID_MEMORY);
+
+  for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
+    EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(grid[x]));
+    if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
+      x = configuration.grid_digits;
+    }
+  }
+  EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
+  debug_serial_port->print(F("\nWrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+  config_dirty = 1;
+  #if defined(HARDWARE_ESP32_DEV)
+    EEPROM.commit();
+  #endif
+  update_icons();
+  beep();
+}  // end store_Grid
 
 void setup_esp()
 {
@@ -25512,6 +25624,12 @@ void setup_esp()
       lcd_center_print_timed("GPS Baud = " + String(configuration.gps_baud), 1, default_display_msg_delay);
       Serial2.flush();  // move the read string queue char ptr to the front so the next read works      
       stop_msg = false;
+      #ifdef DEFAULT_GRID
+          validate_grid(DEFAULT_GRID, default_grid);  // done, haved a validated grid from file, could be ""
+          strcpy(grid_sq_str, default_grid);  // stgart out with this, process_gps will look at source and adjust it.
+      #else
+        strcpy(grid_sq_str, "");
+      #endif
     #endif
     #ifdef FEATURE_COMPASS
       initialize_compass();  //  ist8310 compass

@@ -168,7 +168,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define tx_key_line_2   16 
     #define sidetone_line   26 //26 connect a passive buzzer for sidetone
     #define audio_enable     4  // audio amp enable = LOW for this display (only?)
-    #define ptt_tx_1        22 // 23 for PTT ("push to talk") lines, GPIO22 is RED LED
+    #define ptt_tx_1        22 // 22 for PTT ("push to talk") lines, GPIO22 is RED LED
     #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 
     #define tx_pause_pin     0 

@@ -357,5 +357,7 @@
 #endif //FEATURE_COMMAND_MODE_ENHANCED_CMD_ACKNOWLEDGEMENT
 
 #define HI_TEXT "K3NG"  // Must be in UPPER case
-#define GRID_MEMORY 9
-#define DECLINATION_MEMORY 12
+#define GRID_MEMORY 9   // this is where the user access the 4 or 6 digit grid square
+// these are used when manually programming the memories (Ctrl-F11/12)
+#define GRID_WORKING_MEMORY 11  //  Stored full 8 digit manually entered into memory 11 to override EEPROM and Config file
+#define DECLINATION_WORKING_MEMORY 12  // stores manually entered declination to override config EEPROM and config file.
