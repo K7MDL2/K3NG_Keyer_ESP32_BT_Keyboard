@@ -17074,18 +17074,16 @@ byte play_memory(byte memory_number) {
           if (y < (memory_end(memory_number)+1)) {
             eeprom_byte_read = EEPROM.read(y);            // memory macros (backslash commands)
             switch (eeprom_byte_read) {
-              case 48:                         // 0 - jump to memory 10
-                eeprom_byte_read = 58;
-              case 49:                         // 1 - jump to memory 1
-              case 50:                         // 2 - jump to memory 2
-              case 51:                         // 3 - jump to memory 3
-              case 52:                         // 4 - jump to memory 4
-              case 53:                         // 5 - jump to memory 5
-              case 54:                         // 6 - jump to memory 6
-              case 55:                         // 7 - jump to memory 7
-              case 56:                         // 8 - jump to memory 8
-              case 57:                         // 9 - jump to memory 9
-                if (number_of_memories > (eeprom_byte_read-49)) {
+              case 48:  eeprom_byte_read = 58; __attribute__((fallthrough)); // No warning  // 0 - jump to memory 10
+              case 49:  __attribute__((fallthrough)); // No warning   // 1 - jump to memory 1
+              case 50:  __attribute__((fallthrough)); // No warning   // 2 - jump to memory 2
+              case 51:  __attribute__((fallthrough)); // No warning   // 3 - jump to memory 3
+              case 52:  __attribute__((fallthrough)); // No warning   // 4 - jump to memory 4
+              case 53:  __attribute__((fallthrough)); // No warning   // 5 - jump to memory 5
+              case 54:  __attribute__((fallthrough)); // No warning   // 6 - jump to memory 6
+              case 55:  __attribute__((fallthrough)); // No warning   // 7 - jump to memory 7
+              case 56:  __attribute__((fallthrough)); // No warning   // 8 - jump to memory 8
+              case 57: if (number_of_memories > (eeprom_byte_read-49)) {  // 9 - jump to memory 9
                   memory_number = (eeprom_byte_read-49);
                   y = ((memory_start(memory_number)) - 1);
                   if (keyer_machine_mode == KEYER_NORMAL) {

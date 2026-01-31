@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.1.29"
+#define CODE_VERSION "K7MDL-2026.1.29.1"
 #define eeprom_magic_number 32          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
@@ -84,7 +84,7 @@
     #define FEATURE_IDEASPARK_LCD  // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
     #define FEATURE_STRAIGHT_KEY   // This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY    
-    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used. Valid values are 4800, 9600, 38400, 57600, 115200
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
@@ -131,8 +131,8 @@
     ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     ////#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
-    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
-    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
+    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.    
     #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
