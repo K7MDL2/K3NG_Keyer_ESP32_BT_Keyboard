@@ -23,7 +23,7 @@
 
 # K3NG CW Keyer (Modified for ESP32)
 
-Based on a 2022 version modifed to run on ESP32-WROOM32.  Select updates since 2025 have been applied.  Added BT keyboards, TFT and LCD displays. Compiles under ESP-IDF, or with some limitations Arduino.
+Based on a 2022 version modifed to run on ESP32-WROOM32.  Select relevant updates form 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT and LCD displays. Compiles under ESP-IDF, or with some limitations Arduino.
 
 To build under ESP-IDF (preferred) see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
 
@@ -46,7 +46,7 @@ This fork on a ESP32-WROOM32 adds
  - Status Bar with (future) Grid, call, WPM rate, and sevceral satus icons including T/R status.
  - MCP23017 I2C port expander to add IO to the IO starved TFT display boards.  The Paddles and Straight key are on PA0-2 pins.
  - Using interrupts for all paddle and straight key IO pin, both the port expander and local GPIO pins.
- - Serial GPS can udpate time and grid sqaure to 8 places, and populate a memory with 4 or 6 digits.
+ - Serial GPS can udpate time and grid square to 8 places, and populate a memory with 4 or 6 digits.
  - I2C compass heading values can display in a popup windows to help point microwave antennas.  Can configure your declination.
 
 Check out the latest changes on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
