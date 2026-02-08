@@ -245,6 +245,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 
 
 #else // ESP-WROOM-32, 27, 5 33
+
+  #define I2CDEV_SDA_PIN  21   // override the sdkconfig pair of 21, 22
+  #define I2CDEV_SCL_PIN  22
+  
   #define bt_keyboard_LED   2 //2  // indicates BT keyboard connection status
   #define paddle_left       25 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
   #define paddle_right      26 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
