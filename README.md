@@ -49,7 +49,7 @@ This fork on a ESP32-WROOM32 adds
  - Serial GPS can udpate time and grid square to 8 places, and populate a memory with 4 or 6 digits.
  - I2C compass heading values can display in a popup windows to help point microwave antennas.  Can configure your declination.
 
-Check out the latest changes on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
+Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
 > [!NOTE]
 > Arduino IDE Users see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE
