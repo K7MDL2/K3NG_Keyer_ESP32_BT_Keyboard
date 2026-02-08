@@ -1438,6 +1438,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
                       // Download from here https://github.com/lbernstone/Tone32 - do not use, now included in Arduino library
   #include "keyer_esp32_dev.h"
   #include <esp_task_wdt.h>
+  static const char* TAG = "Main";
   //#define ARDUINO_ARCH_ESP32
 #else // end HARDWARE_ESP32_DEV
   #include <avr/pgmspace.h>
@@ -1493,7 +1494,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "keyer_features_and_options.h"
 #endif
 
-#include "keyer.h"
+#if !defined(HARDWARE_ESP32_DEV)
+  #include "keyer.h"
+#endif
 
 #ifdef FEATURE_EEPROM_E24C1024
   #include <E24C1024.h>
@@ -1577,6 +1580,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "keyer_settings.h"
 #endif
 
+#ifdef ARDUINO_ARCH_ESP32 
+  #include "esp32-hal-log.h" 
+#endif
+
 #if !defined(HARDWARE_GENERIC_STM32F103C) && !defined(FEATURE_MCP23017_EXPANDER) // bypass when using mcp23017_write_io in place of digital write
   #if (paddle_left == 0) || (paddle_right == 0)
   #error "You cannot define paddle_left or paddle_right as 0 to disable"
@@ -1651,7 +1658,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_TFT_DISPLAY)
-  const uint8_t grid_len_max = 9;
+ 
   #define CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION
   //#define TFT_VIEWPORT
   #ifdef M5STACK_CORE2a
@@ -1834,6 +1841,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #define memory_area_start (sizeof(configuration)+5)
 
 // Variables and stuff
+const uint8_t grid_len_max = 9;
 struct config_t {  // 120 bytes total
   
   uint8_t paddle_mode;                                                   
@@ -2137,7 +2145,7 @@ int32_t w = 240;
 #endif
 // ________________________________
 // 
-#ifdef FEATURE_BT_KEYBOARD
+//#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 // QUEUESIZE must be a power of two 
 #define QUEUESIZE       (128)
 #define QUEUEMASK       (QUEUESIZE-1)
@@ -2152,6 +2160,8 @@ int queueempty();
 int queue_available();
 void queueflush();
 int queuefull();
+//#endif  //FEATURE_BT_KEYBOARD
+
 void boop_beep();
 void check_paddles();
 void service_dit_dah_buffers();
@@ -2174,6 +2184,7 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 void s_noTone(uint8_t sidetone_line_pin_num);
 void generic_popup_key(uint16_t key_ID, const char* msg_text);
 void display_heading(void);
+bool stop_msg = false;
 
 //#define USE_BT_TASK // for BT check in a task
 #ifdef USE_BT_TASK
@@ -2181,7 +2192,7 @@ void display_heading(void);
 #else
   void check_bt_keyboard(void);
 #endif
-#endif  //FEATURE_BT_KEYBOARD
+
 // ________________________________
 // 
 byte sending_mode = UNDEFINED_SENDING;
@@ -2259,10 +2270,10 @@ bool popup_active = false;
   uint8_t hr_off;  // time offsets to apply to UTC time
   uint8_t min_off;
   int shift_dir;  // + or -
-  bool stop_msg = false;
   char time_str[27] = {};
   bool time_disp_updated = false;
 #endif
+volatile bool do_process = false;
 
 #ifdef FEATURE_SLEEP
   unsigned long last_activity_time = 0;
@@ -2384,13 +2395,13 @@ byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
   #endif //OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE
 #endif //FEATURE_WINKEY_EMULATION
 
-#ifdef FEATURE_PS2_KEYBOARD
+#if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
   byte ps2_keyboard_mode = PS2_KEYBOARD_NORMAL;
   byte ps2_keyboard_command_buffer[25];
   byte ps2_keyboard_command_buffer_pointer = 0;
 #endif //FEATURE_PS2_KEYBOARD
 
-#ifdef FEATURE_BT_KEYBOARD
+#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
   byte bt_keyboard_mode = BT_KEYBOARD_NORMAL;
   byte bt_keyboard_command_buffer[25];
   byte bt_keyboard_command_buffer_pointer = 0;
@@ -3803,33 +3814,34 @@ void lcd_scroll_box_clear() {
 }
 #endif
 
-#ifdef FEATURE_BT_KEYBOARD
+
 char bt_keyboard_read() {
-  #ifndef USE_BT_TASK
+  #if !defined(USE_BT_TASK) && defined(FEATURE_BT_KEYBOARD)
     vTaskDelay(1 / portTICK_PERIOD_MS);
-    check_bt_keyboard();
+    //check_bt_keyboard();
   #endif
-  return queuepop();
+  if (queue_available()) return queuepop();
+  else return 0;
 }
 
 int bt_keyboard_available() {
-  #ifndef USE_BT_TASK
+  #if !defined(USE_BT_TASK) && defined(FEATURE_BT_KEYBOARD)
     vTaskDelay(1 / portTICK_PERIOD_MS);
-    check_bt_keyboard();
+    //check_bt_keyboard();
   #endif
   return queue_available();
 }
-#endif // FEATURE_BT_KEYBOARD
 
-int touch_key_read() {  // if touch_button_available then ther eis a non-zero touch key value set in button_active
+int touch_key_read() {  // if touch_button_available then there is a non-zero touch key value set in button_active
   #if defined(FEATURE_TOUCH_DISPLAY)
     #ifndef USE_TOUCH_TASK
       check_touch_buttons();    
     #endif 
     vTaskDelay(1 / portTICK_PERIOD_MS);
     if (button_active) process_buttons();
-    return queuepop();
-    #else
+    if (queue_available()) return queuepop();
+    else return 0;    
+  #else
       return 0;
   #endif
 }
@@ -3867,13 +3879,17 @@ void update_icons(void) {
     lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)    
   
     #ifdef FEATURE_GPS      // if not enabled leave the default grey 00:00:00 printed at init time.
-      if (!time_disp_updated && !configuration.ignore_gps && !stop_msg) {
+    if (!time_disp_updated && !configuration.ignore_gps && !stop_msg) {
         lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
         time_disp_updated = true;
       } else {
-        lcd.setTextColor(TFT_GREY, TFT_BLACK);
+        #ifndef FEATURE_BT_KEYBOARD
+          lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+        #else
+          lcd.setTextColor(TFT_GREY, TFT_BLACK);
+        #endif
         time_disp_updated = true;
-      } 
+      }      
       
       if (time_disp_updated) {
         lcd.drawString(time_str, SCROLL_TEXT_LEFT_SIDE-6, STATUS_BAR_X_CURSOR);  
@@ -3905,7 +3921,11 @@ void update_icons(void) {
         lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);
         lcd.drawString(grid_sq_str, GRID_ANCHOR, row); // update display
       } else {
-        lcd.setTextColor(TFT_GREY, TFT_BLACK);
+        #ifndef FEATURE_BT_KEYBOARD
+          lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);          
+        #else
+          lcd.setTextColor(TFT_GREY, TFT_BLACK);
+        #endif
         lcd.drawString(grid_sq_str, GRID_ANCHOR, row); // update display
       }
 
@@ -4353,7 +4373,7 @@ void check_for_dead_op()
 #endif
 //-------------------------------------------------------------------------------------------------------
 
-#if (defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_BT_KEYBOARD)) && defined(FEATURE_MEMORIES)
+#if (defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)) && defined(FEATURE_MEMORIES)
 
 void repeat_memory_msg(byte memory_number){
   
@@ -4374,7 +4394,7 @@ void repeat_memory_msg(byte memory_number){
 
 //-------------------------------------------------------------------------------------------------------
 
-#if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD)
+#if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD) || defined (FEATURE_TOUCH_DISPLAY)
 
 void check_ps2_keyboard()
 {
@@ -4402,10 +4422,12 @@ void check_ps2_keyboard()
                 while ((bt_keyboard_available() || touch_button_available()) && (play_memory_prempt == 0)) 
                 {  
                     // use BT keyboard char stream  
-                    if (bt_keyboard_available())
+                    if (bt_keyboard_available()) {
                       keystroke = bt_keyboard_read();
-                    if (touch_button_available())
-                      keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes
+                    } else if (touch_button_available()) {                                         
+                        keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes  
+                    }
+                    
             #else  // Do PS2 keyboard
                 while ((keyboard.available() || touch_button_available()) && (play_memory_prempt == 0)) 
                 {      
@@ -5017,6 +5039,7 @@ void check_ps2_keyboard()
                                       lcd_center_print_timed(F("GRID LENGTH = 4 "), 0, default_display_msg_delay);
                                     #endif
                                   }
+                                  do_process = true;
                                   process_gps(grid_sq_str, true, false);  // force a memory update                  
                                 }                                
                                 break;
@@ -5046,6 +5069,7 @@ void check_ps2_keyboard()
                                   strcpy(configuration.Mem_GridSq, tmp_str);
                                   config_dirty = 1;
                                   debug_serial_port->print("Read Validated Memory Grid = "); debug_serial_port->println(configuration.Mem_GridSq);
+                                  do_process = true;
                                   process_gps(configuration.Mem_GridSq, true, 2);  // force a memory update (source = 2)                                                                   
                                 }
                                 break;
@@ -5125,7 +5149,7 @@ void check_ps2_keyboard()
 #endif //FEATURE_PS2_KEYBOARD || defined (FEATURE_BT_KEYBOARD)
 
 //-------------------------------------------------------------------------------------------------------
-#if (defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_BT_KEYBOARD)) && defined(FEATURE_MEMORIES)
+#if (defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)) && defined(FEATURE_MEMORIES)
 void ps2_usb_keyboard_play_memory(byte memory_number){
 
   if (memory_number < number_of_memories) {
@@ -5137,12 +5161,13 @@ void ps2_usb_keyboard_play_memory(byte memory_number){
   }
 }
 #endif  //defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_USB_KEYBOARD)
+
 //-------------------------------------------------------------------------------------------------------
-#if (defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD)) && defined(FEATURE_MEMORIES)
+#if (defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)) && defined(FEATURE_MEMORIES)
 void ps2_keyboard_program_memory(byte memory_number)
 {
 
-  char keystroke;
+  char keystroke = 0;
   byte looping = 1;
   byte error = 0;
   int temp_memory_index = 0;
@@ -5181,7 +5206,7 @@ void ps2_keyboard_program_memory(byte memory_number)
     #ifdef FEATURE_PS2_KEYBOARD
     while (keyboard.available() == 0) {
     #endif
-    #ifdef FEATURE_BT_KEYBOARD
+    #if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
     while (bt_keyboard_available() == 0) {
       mydelay(5);
     #endif
@@ -5198,7 +5223,7 @@ void ps2_keyboard_program_memory(byte memory_number)
         #endif
     #endif
 
-    #ifdef FEATURE_BT_KEYBOARD
+    #if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
         keystroke = bt_keyboard_read();
         #ifdef DEBUG_BT_KEYBOARD
             debug_serial_port->println(keystroke,DEC);
@@ -5272,7 +5297,7 @@ void ps2_keyboard_program_memory(byte memory_number)
 
 //-------------------------------------------------------------------------------------------------------
 
-#if defined(FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD)
+#if defined(FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 
 int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
 {
@@ -5295,7 +5320,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
     #ifdef FEATURE_PS2_KEYBOARD
     if (keyboard.available() == 0) {        // wait for the next keystroke
     #endif
-    #ifdef FEATURE_BT_KEYBOARD
+    #if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
     if (bt_keyboard_available() == 0) {
     #endif
         if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
@@ -5322,7 +5347,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
       #ifdef FEATURE_PS2_KEYBOARD        
         keystroke = keyboard.read();
       #endif
-      #ifdef FEATURE_BT_KEYBOARD
+      #if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
         keystroke = bt_keyboard_read();
       #endif      
       //debug_serial_port->println(F("[0x"));
@@ -5380,7 +5405,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
 #endif
 
 //-------------------------------------------------------------------------------------------------------
-#if (defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_BT_KEYBOARD)) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
+#if (defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
 void put_serial_number_in_send_buffer()
 {
 
@@ -8368,13 +8393,17 @@ int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]) {
     len = k; // account for increments on both number, terminator
     if (len < 0) return 0;
     else return len; // send string length back to caller to avoid the trailing spaces                   
+  #else
+    return 0;
   #endif  // FEATURE_DISPLAY
 } 
 
 void command_display_memory(byte memory_number) {  
-  char tmp_str[LCD_COLUMNS] = {};
-  read_memory(memory_number, tmp_str);
-  lcd_center_print_timed(tmp_str, 1, default_display_msg_delay); // write the retrieved char array to line 2 of LCD display
+  #ifdef FEATURE_DISPLAY
+    char tmp_str[LCD_COLUMNS] = {};
+    read_memory(memory_number, tmp_str);
+    lcd_center_print_timed(tmp_str, 1, default_display_msg_delay); // write the retrieved char array to line 2 of LCD display
+  #endif // FEATURE_DISPLAY
 }
 // end command_display_memory
 
@@ -17735,8 +17764,8 @@ void initialize_i2c(void) {
 
   IST8310 ist8310;
 
-    float convert_to_rad(float declination) { 
-    debug_serial_port->print("Declination in Rad: "); debug_serial_port->println(declination * (M_PI/180));
+  float convert_to_rad(float declination) { 
+    //debug_serial_port->print("  Declination in Rad: "); debug_serial_port->println(declination * (M_PI/180));
     return (declination * (M_PI/180));
   }
 
@@ -18124,7 +18153,11 @@ void initialize_pins() {
     // digitalWrite (cw_decoder_pin, HIGH);
 
     #if defined(OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR)
-      digitalWrite (cw_decoder_audio_input_pin, LOW);
+      //pinMode (cw_decoder_audio_input_pin, INPUT);
+      //digitalWrite (cw_decoder_audio_input_pin, LOW);
+      analogSetPinAttenuation(cw_decoder_audio_input_pin, ADC_6db); //ADC_ATTENDB_MAX);
+      analogReadResolution(4095);
+      //analogSetWidth(12);
       cwtonedetector.init(cw_decoder_audio_input_pin);
     #endif //OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
 
@@ -18421,7 +18454,8 @@ void service_cw_decoder() {
     static int last_printed_decoder_wpm = 0;
   #endif
 
-  cd_decoder_pin_state = digitalRead(cw_decoder_pin);
+  if (cw_decoder_pin) cd_decoder_pin_state = digitalRead(cw_decoder_pin);
+  else cd_decoder_pin_state = 1;  // emulate the pullup state
 
   #if defined(OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR)
     if (cwtonedetector.detecttone() == HIGH){  // invert states
@@ -18432,7 +18466,7 @@ void service_cw_decoder() {
   #endif  
  
   #if defined(DEBUG_CW_DECODER_WITH_TONE)
-    if (cd_decoder_pin_state == LOW){
+    if (cd_decoder_pin_state == LOW){  // original is LOW
       #if defined(GOERTZ_TARGET_FREQ)
         tone(sidetone_line, GOERTZ_TARGET_FREQ);
       #else
@@ -18444,9 +18478,9 @@ void service_cw_decoder() {
   #endif  //DEBUG_CW_DECODER 
  
   if ((cw_decoder_indicator) && (cd_decoder_pin_state == LOW)){ 
-   digitalWrite(cw_decoder_indicator,HIGH);
-  } else {
-   digitalWrite(cw_decoder_indicator,LOW);      
+     digitalWrite(cw_decoder_indicator,HIGH);
+    } else {
+      digitalWrite(cw_decoder_indicator,LOW);      
   }
  
   #ifdef DEBUG_OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
@@ -18534,8 +18568,6 @@ void service_cw_decoder() {
       }
     }
    }
- 
- 
  
  
   if (decode_it_flag) {                      // are we ready to decode the element array?
@@ -19057,7 +19089,10 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
   
   #if defined(FEATURE_BT_KEYBOARD)
   
-    //esp_log_level_set(TAG, ESP_LOG_ERROR);
+    esp_log_level_set("*", ESP_LOG_NONE);
+    //esp_log_level_set("bt", ESP_LOG_VERBOSE);
+    //esp_log_level_set("ESP_HIDH", ESP_LOG_VERBOSE);
+    
     pinMode(bt_keyboard_LED, OUTPUT);
     digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
     // To test the Pairing code entry, uncomment the following line as pairing info is
@@ -19093,7 +19128,7 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
   #endif
 }
 
-#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+//#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 ////////////////////////////////////////////////////////////////////////
 //
 // Here is a queue to store the characters that I've typed.
@@ -19108,6 +19143,7 @@ void queueadd(const char ch)
 {
     queue[qtail++] = ch ;
     qtail &= QUEUEMASK ;
+    //debug_serial_port->printf("Queue string after char Add %s\n", queue);
 }
  
 void queueadd(const char *s)
@@ -19122,6 +19158,7 @@ char queuepop()
     char ch ;
     ch = queue[qhead++];
     qhead &= QUEUEMASK;
+    //debug_serial_port->printf("QueuePop char %c\n", ch);
     return ch;
 }
  
@@ -19144,7 +19181,7 @@ void queueflush()
 {
     qhead = qtail;
 }
-#endif // BT_KEYBOARD
+//#endif // BT_KEYBOARD
 
 void mydelay(uint32_t _ms)
 {
@@ -19525,7 +19562,9 @@ void TX_enable_key(uint16_t key_ID) {
   #ifdef FEATURE_TOUCH_DISPLAY
     queueflush(); 
     queueadd(PS2_I_CTRL);
-    check_ps2_keyboard();
+    #ifdef FEATURE_BT_KEYBOARD
+      check_ps2_keyboard();
+    #endif
     if (key_tx) {
       key[key_ID].hold = false;
     } else {
@@ -19560,7 +19599,7 @@ void TX_select_key(uint16_t key_ID) {
 // The button row counter is reset to 0 if it exceeds the number of button rows.
 void process_buttons() { // (uint8_t button_ID) {
   // Process button presses
-  #ifdef FEATURE_TOUCH_DISPLAY        
+  #ifdef FEATURE_TOUCH_DISPLAY
     static int last_button = 0;
     uint16_t key_ID = 254;
     static uint8_t mem_number = 0;
@@ -19675,8 +19714,8 @@ void process_buttons() { // (uint8_t button_ID) {
         bool pressed = false; 
         uint16_t threshold = 320;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also                                    
 
-          // Scan buttons every 50ms at most
-          if (millis() - scanTime >= 50) {  // check every 50ms for any activity
+          // Scan buttons every 50ms at most when not sending out cw
+          if (!ptt_line_activated && millis() - scanTime >= 50) {  // check every 50ms for any activity
             scanTime = millis();
 
             #ifdef TOUCH_GT911_BUTTONS          
@@ -24298,340 +24337,359 @@ void update_time(){
                     repeat_memory = 255;
                 #endif
           #else  // this one has 2 methods, both work the same.
-                char ch;
-                static bool keyDN = false;
-                static bool CMD_KEY = false;
-                static bool last_key = true;
-                uint8_t modifier = 0;
-                TickType_t    repeat_period_;
-                BTKeyboard::KeyInfo inf;
-                mydelay(5);
-                #ifdef USE_BT_TASK
-                  bt_keyboard.wait_for_low_event(inf);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
-                #else
-                  bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
-                  //bt_keyboard.get_ascii_char();
-                #endif
+            char ch;
+            bool ret;
+            bool keyDN = false;
+            bool keyUP = false;
+            static bool CMD_KEY = false;
+            static bool last_key = true;
+            uint8_t modifier = 0;
+            TickType_t    repeat_period_;
+            BTKeyboard::KeyInfo inf;                
 
-                #ifdef DEBUG_BT_KEYBOARD_A
-                    debug_serial_port->print(',');
-                    debug_serial_port->print(inf.size);
-                    debug_serial_port->print(',');
-                    debug_serial_port->print(inf.keys[1]);
-                    debug_serial_port->print(',');
-                #endif
+            #ifdef USE_BT_TASK
+              mydelay(1);
+              do (
+                  ret = bt_keyboard.wait_for_low_event(inf);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+            #else
+              do {
+                  ret = bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  //bt_keyboard.get_ascii_char();
+                  if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much
+            #endif
                 
-                #ifdef DEBUG_BT_KEYBOARD_A
-                for (int n = 0; n < inf.size; n++) {
-                    debug_serial_port->print(':');
-                    debug_serial_port->print(inf.keys[n],HEX);
-                    debug_serial_port->print(':');
-                }
-                #endif
-                
-                ch = 0;
-                if (inf.size > 0 && inf.size < 9)   //(inf.size == 8 || inf.size == 7 || inf.size == 4 || inf.size == 3) 
-                {
-                    modifier = inf.keys[0];  // capture shift, alt, ctrl state
-                    if (inf.size == 8) {
-                      // keyboard chars are len = 8, mouse and others are len=4
-                      ch = inf.keys[2];  // capture normal keys
-                    } else if (inf.size == 7 || inf.size == 4 || inf.size == 3) {  // K380s has only 7 bytes.  1st is missing.
-                      // keyboard chars are len = 7
-                      ch = inf.keys[1];  // capture normal keys
+                  // if there is delay getting here than can be multiple char arrays.  They are in a buffer, and once read here, the next read is brand new.  
+                  //  We have to loop through all chars strings or store all the strings and then loop through them later.
+                  // Since here is a timeout, the content of the buffer should be ignored. There is a immediate return when wait is false.
+
+                  // Going to loop through each string until all are done.  The output already goes to a queue for further processing so converting each 
+                  // string to a char here won't take long.
+                  
+                  #ifdef DEBUG_BT_KEYBOARD_A     
+                    if (inf.size > 2 && inf.size < 9 && inf.keys[2] !=0)  {
+                      debug_serial_port->print(" Keys=");                       
+                      for (int n = 0; n < inf.size; n++) {   // print out each char in each keys string                        
+                          debug_serial_port->printf(" %02X:",inf.keys[n]);                        
+                      }
+                      debug_serial_port->printf(" Char = %c", inf.keys[2]+0x5D);  // capture normal keys
+                      debug_serial_port->printf(" Size = %d\n",inf.size);
+                      debug_serial_port->println("Done");                      
+                    }
+                  #endif
+
+                  ch = 0;
+                  if (inf.size > 2 && inf.size < 9)   //(inf.size == 8 || inf.size == 7 || inf.size == 4 || inf.size == 3) 
+                  {                      
+                    int k = 0;
+                    for (int n = 0; n < inf.size; n++) { 
+                      if (inf.keys[n] == 0)
+                        k++;
+                    }
+                    if (k == inf.size) {  // all 0's is Key UP event, skip further work
+                      keyUP = true;
+                      keyDN = false;
+                      //debug_serial_port->println(F(" Key UP"));
+                    } else {
+                      keyUP = false;  // not Key Up, see if it is a new key 
                     }
 
-                    #ifdef DEBUG_BT_KEYBOARD_B  // change #ifdef to #ifndef to use
-                        debug_serial_port->print(F("[size="));
-                        debug_serial_port->print((uint8_t) inf.size);
-                        debug_serial_port->print(F("-"));
-                        for (int n = 0; n < inf.size; n++) {          
-                            debug_serial_port->print(F("0x"));              
-                            debug_serial_port->print(inf.keys[n],HEX);
-                            debug_serial_port->print(':');
-                        }  
-                        debug_serial_port->print(F("-M(0x"));
-                        debug_serial_port->print((uint8_t) modifier, HEX);
-                        debug_serial_port->print(F(")-Char(0x"));
-                        debug_serial_port->print((uint8_t) ch,HEX);
-                        debug_serial_port->println(F(")] "));
-                    #endif
+                    if (!keyUP && !keyDN) {
+                      modifier = inf.keys[0];  // capture shift, alt, ctrl state
+                      if (inf.size == 8) {
+                        // keyboard chars are len = 8, mouse and others are len=4
+                        ch = inf.keys[2];  // capture normal keys
+                      } else if (inf.size == 7 || inf.size == 4 || inf.size == 3) {  // K380s has only 7 bytes.  1st is missing.
+                        // keyboard chars are len = 7
+                        ch = inf.keys[1];  // capture normal keys
+                      }
 
-                    if (ch != 0 && keyDN != true) 
+                      if (ch != 0 && !keyDN) {
                         keyDN = true;  // this is a valid alphanumeric key
+                        //debug_serial_port->print(F(" Key DN == "));
+                      }
 
-                    if (keyDN != last_key) // only process new key events separated by key-up
-                    {
-                        if (ch == 0) // ignore keyups
-                        {
-                            keyDN = false;
-                            //debug_serial_port->print(ch);
-                        } 
-                        else 
-                        {
-                            keyDN = true;  // this is a valid alphanumeric key - send to processing
-                            #ifdef DEBUG_BT_KEYBOARD_A
-                                debug_serial_port->print(F("-0x"));
-                                debug_serial_port->print(ch,HEX);  // print our valid char
-                                debug_serial_port->print(',');
-                            #endif
+                      if (keyDN != last_key) // only process new key events separated by key-up
+                      {
+                        #ifdef DEBUG_BT_KEYBOARD_B  // change #ifdef to #ifndef to use
+                          debug_serial_port->print(F("[size="));
+                          debug_serial_port->print((uint8_t) inf.size);
+                          debug_serial_port->print(F("-"));
+                          for (int n = 0; n < inf.size; n++) {          
+                              debug_serial_port->print(F("0x"));              
+                              debug_serial_port->print(inf.keys[n],HEX);
+                              debug_serial_port->print(':');
+                          }  
+                          debug_serial_port->print(F("-M(0x"));
+                          debug_serial_port->print((uint8_t) modifier, HEX);
+                          debug_serial_port->print(F(")-Char(0x"));
+                          debug_serial_port->print((uint8_t) ch,HEX);
+                          debug_serial_port->print(F(")] "));
+                        #endif
+                        
+                        #ifdef DEBUG_BT_KEYBOARD_A
+                            debug_serial_port->print(F("-0x"));
+                            debug_serial_port->print(ch,HEX);  // print our valid char
+                            debug_serial_port->print('-');
+                        #endif
 
-                            #ifdef Key_LOOKUP_METHOD
-                                static char last_ch_;
-                                bool caps_lock_ = false;
-                                const char shift_trans_dict_[] =
-                                    "aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ1!2@3#4$5%6^7&8*9(0)"
-                                    "\r\r\033\033\b\b\t\t  -_=+[{]}\\|??;:'\"`~,<.>/?"
-                                    "\200\200"                                          // CAPS LOC
-                                    "\201\201\202\202\203\203\204\204\205\205\206\206"  // F1..F6
-                                    "\207\207\210\210\211\211\212\212\213\213\214\214"  // F7..F12
-                                    "\215\215\216\216\217\217"                          // PrintScreen ScrollLock Pause
-                                    "\220\220\221\221\222\222\177\177"                  // Insert Home PageUp Delete
-                                    "\223\223\224\224\225\225\226\226\227\227\230\230"; // End PageDown Right Left Dow Up
+                        #ifdef Key_LOOKUP_METHOD
+                            static char last_ch_;
+                            bool caps_lock_ = false;
+                            const char shift_trans_dict_[] =
+                                "aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ1!2@3#4$5%6^7&8*9(0)"
+                                "\r\r\033\033\b\b\t\t  -_=+[{]}\\|??;:'\"`~,<.>/?"
+                                "\200\200"                                          // CAPS LOC
+                                "\201\201\202\202\203\203\204\204\205\205\206\206"  // F1..F6
+                                "\207\207\210\210\211\211\212\212\213\213\214\214"  // F7..F12
+                                "\215\215\216\216\217\217"                          // PrintScreen ScrollLock Pause
+                                "\220\220\221\221\222\222\177\177"                  // Insert Home PageUp Delete
+                                "\223\223\224\224\225\225\226\226\227\227\230\230"; // End PageDown Right Left Dow Up
 
-                                if (ch >= 4) 
-                                {
-                                    if (modifier & bt_keyboard.CTRL_MASK) {
-                                        if (ch < (3 + 26)) {
-                                            repeat_period_  = pdMS_TO_TICKS(500);
-                                            last_ch_ = (ch - 3);
-                                        }
-                                    } else if (ch <= 0x52) {
-                                        // ESP_LOGD(TAG, "Scan code: %d", ch);
-                                        if (ch == bt_keyboard.KEY_CAPS_LOCK) caps_lock_ = !caps_lock_;
-                                        if (modifier & bt_keyboard.SHIFT_MASK) {
-                                            if (caps_lock_) {
-                                                repeat_period_  = pdMS_TO_TICKS(500);
-                                                last_ch_ = shift_trans_dict_[(ch - 4) << 1];
-                                            } else {
-                                                repeat_period_  = pdMS_TO_TICKS(500);
-                                                last_ch_ = shift_trans_dict_[((ch - 4) << 1) + 1];
-                                            }
-                                        } else {   // normal keys
-                                            if (caps_lock_) {
-                                                repeat_period_  = pdMS_TO_TICKS(500);
-                                                last_ch_ = shift_trans_dict_[((ch - 4) << 1) + 1];
-                                            } else {
-                                                repeat_period_  = pdMS_TO_TICKS(500);
-                                                last_ch_ = shift_trans_dict_[(ch - 4) << 1];
-                                            }
-                                        }
-                                    }
-                                    debug_serial_port->print(F("<"));
-                                    debug_serial_port->print(ch);
-                                    debug_serial_port->print(F(">"));
-                                    queueadd(ch); 
-                                    //check_ps2_keyboard();
-                                    ch = last_ch_;
-                                    last_ch_ = 0;
-                                }
-                            #else  // direct key mapping method
-
-                                // inf.keys[0] where
-                                // x=0x00 is Normal key
-                                // x=0x02 is Left Shift+key
-                                // x=0x20 is Right Shift+key
-                                // x=0x01 is Left Ctl+key
-                                // x=0x10 is Right Ctl+key
-                                // x=0x04 is Left Alt+key
-                                // x=0x40 is Right Alt+key
-                                
-                                if (modifier & bt_keyboard.CTRL_MASK) // bt_keyboard.SHIFT_MASK) // left or right side key pressed
-                                {                                     
-                                    switch (ch) 
-                                    {
-                                        case 0x04 ... 0x1d: ch = PS2_A_CTRL + (ch-4); break; // convert to lower case letters
-                                        case 0x3A ... 0x45: ch = PS2_F1_CTRL + (ch-0x3A); break; // F1-F12 keys
-                                        case 0xC6: ch = PS2_F11_CTRL; break; // F1-F12 keys
-                                        case 0xC7: ch = PS2_F12_CTRL; break; // F1-F12 keys
-                                    }
-                                    //debug_serial_port->print(F("CTRL key = 0x"));
-                                    //debug_serial_port->println(ch, HEX);
-                                }
-                                else if (modifier & bt_keyboard.ALT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
-                                {   
-                                    switch (ch) 
-                                    {
-                                        //case 0x04 : ch = 0; s_tone(sidetone_line,configuration.hz_sidetone,0); break; // Alt-b
-                                        //case 0x05 : ch = 0; noTone(sidetone_line); break;  // Alt-b                                        
-                                        case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
-                                        case 0xC6: ch = PS2_F11_ALT; break; // F1-F12 keys
-                                        case 0xC7: ch = PS2_F12_ALT; break; // F1-F12 keys
-                                        case 0x29 : ch = PS2_ESC; queueflush(); break;  // ALT-C, clear the LCD scrollable area
-                                    }
-                                    //debug_serial_port->print(F("ALT key = 0x"));
-                                    //debug_serial_port->println(ch, HEX);
-                                }
-                                else if (modifier & bt_keyboard.SHIFT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
-                                {
-                                    //debug_serial_port->print(F("SHIFT key  modifier = 0x"));
-                                    //debug_serial_port->println(modifier, HEX);
-
-                                    switch (ch) {     
-                                        case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
-                                                    ch = uppercase(ch); 
-                                                    break;                     
-                                        case 0x1e : ch = '!'; break;      // '!'  key
-                                        case 0x1f : ch = '@'; break;      // '@'  key
-                                        case 0x20 : ch = '#'; break;      // '#'  key
-                                        case 0x21 : ch = '$'; break;      // '$'  key
-                                        case 0x22 : ch = '%'; break;      // '%'  key
-                                        case 0x23 : ch = '^'; break;      // '^'  key
-                                        case 0x24 : ch = '&'; break;      // '&'  key
-                                        case 0x25 : ch = '*'; break;      // '*'  key                            
-                                        case 0x26 : ch = '('; break;      // '('  key
-                                        case 0x27 : ch = ')'; break;      // ')'  key
-                                        case 0x28 : ch = PS2_ENTER_SHIFT; break; // PgDn key
-                                        case 0x2A : ch = PS2_BACKSPACE_SHIFT; break; // PgDn key   
-                                        case 0x2B : ch = PS2_TAB_SHIFT; break; // PgDn key                         
-                                        case 0x2D : ch = '_'; break;      // '_'  key
-                                        case 0x2E : ch = '+'; break;      // '+'  key
-                                        case 0x2F : ch = '{'; break;      // '{'  key
-                                        case 0x30 : ch = '}'; break;      // '}'  key    
-                                        case 0x31 : ch = '|'; break;      // '|' key                        
-                                        case 0x33 : ch = ':'; break;      // ':'  key
-                                        case 0x34 : ch = '"'; break;      // '"'  key
-                                        case 0x36 : ch = '<'; break;      // '<'  key
-                                        case 0x37 : ch = '>'; break;      // '>'  key
-                                        case 0x38 : ch = '?'; break;      // '?' cursor key
-                                        case 0x3A ... 0x45: ch += 85; break; // F1-F12 keys
-                                        case 0xC6: ch = PS2_F11_SHIFT; break; // F1-F12 keys
-                                        case 0xC7: ch = PS2_F12_SHIFT; break; // F1-F12 keys
-                                    }
-                                    //debug_serial_port->print(F("SHIFT key = 0x"));
-                                    //debug_serial_port->println(ch, HEX);
-                                } 
-                                else if (modifier == 0) // normal key
-                                {
-                                    //debug_serial_port->print('<');
-                                    //debug_serial_port->print(ch,HEX);
-                                    //debug_serial_port->print('>');
-                                    
-                                    switch (ch) {
-                                        case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters (add 93)
-                                                    ch = uppercase(ch);
-                                                    break;
-                                        case 0x1e ... 0x26 : ch += 0x13;  // numbers 1-9 (add 19)
-                                                    if (!isdigit(ch)) ch = 0;
-                                                    break;
-                                        case 0x27 : ch += 0x09;  // number 0
-                                                    if (!isdigit(ch)) ch = 0;
-                                                    break;
-                                        case 0x28 : ch = PS2_ENTER; break;   // enter key
-                                        case 0x29 : ch = PS2_ESC; queueflush(); break;   // ESC key - figure out how to erase a queue or stop senbding with this
-                                        case 0x2A : ch = PS2_BACKSPACE; break;   // BACK key
-                                        case 0x2B : ch = PS2_TAB; break; // TAB key
-                                        case 0x2c : ch = ' '; break;    // space
-                                        case 0x2D : ch = '-'; break;    // '-'  key
-                                        case 0x2E : ch = '='; break;    // '='  key
-                                        case 0x2F : ch = '['; break;    // '['  key                                                  
-                                        case 0x30 : ch = '['; break;    // '['  key
-                                        case 0x31 : ch = '\\'; break;   // '\' key
-                                        case 0x33 : ch = ';'; break;    // ';'  key
-                                        case 0x34 : ch = '\''; break;   // '''  key
-                                        case 0x36 : ch = ','; break;    // ','  key
-                                        case 0x37 : ch = '.'; break;    // '.'  key
-                                        case 0x38 : ch = '/'; break;    // '/' cursor key
-                                        case 0x39 : ch = 0; break;   // CAP LOCK toggle
-                                        case 0x3A ... 0x45: ch += 72; break; // F1-F12 keys (add 0x48)
-                                        case 0x49 : ch = PS2_INSERT; break; // End key
-                                        case 0x4A : ch = PS2_HOME; break; // Home key
-                                        case 0x4C : ch = PS2_DELETE; break; // End key
-                                        case 0x4D : ch = PS2_END; break; // End key
-                                        case 0x4B : ch = PS2_PAGEUP; break; // PgUp key
-                                        case 0x4E : ch = PS2_PAGEDOWN; break; // PgDn key
-                                        case 0x4F : ch = PS2_LEFTARROW; break;   // right cursor key
-                                        case 0x50 : ch = PS2_RIGHTARROW; break;   // left cursor key
-                                        case 0x51 : ch = PS2_DOWNARROW; break;   // down cursor key
-                                        case 0x52 : ch = PS2_UPARROW; break;   // up cursor key
-                                        //case 0x53 : ch = BT_SCROLL; break;   // No Scroll on BT keyboards so far
-                                        default   : break; //debug_serial_port->print(ch);   // filter out key up events
-                                    }  // end switch ch
-                                } 
-                                else  ch = 0;
-
-                            #endif // WORKING CODE
-
-                            #ifdef DEBUG_BT_KEYBOARD_C
-                                debug_serial_port->print(ch);  // print our valid char
-                                debug_serial_port->print(',');
-                            #endif
-                            /*
-                            switch (ch) 
+                            if (ch >= 4) 
                             {
-                                case PS2_RIGHTARROW : adjust_dah_to_dit_ratio(int(configuration.dah_to_dit_ratio/10)); break;
-                                case PS2_LEFTARROW : adjust_dah_to_dit_ratio(-1*int(configuration.dah_to_dit_ratio/10)); break;
-                                case PS2_UPARROW : speed_set(configuration.wpm+1); break;
-                                case PS2_DOWNARROW : speed_set(configuration.wpm-1); break;
-                                case PS2_ESC: CMD_KEY = false; debug_serial_port->println(F("< Exiting CLI mode >")); break;
-                                case PS2_TAB:
-                                    if (pause_sending_buffer) {
-                                    pause_sending_buffer = 0;
-                                    #ifdef FEATURE_DISPLAY
-                                        #ifdef OPTION_MORE_DISPLAY_MSGS
-                                        lcd_center_print_timed("Resume", 0, default_display_msg_delay);
-                                        #endif
-                                    #endif                 
-                                    } else {
-                                    pause_sending_buffer = 1;
-                                    #ifdef FEATURE_DISPLAY
-                                        lcd_center_print_timed("Pause", 0, default_display_msg_delay);
-                                    #endif            
+                                if (modifier & bt_keyboard.CTRL_MASK) {
+                                    if (ch < (3 + 26)) {
+                                        repeat_period_  = pdMS_TO_TICKS(500);
+                                        last_ch_ = (ch - 3);
                                     }
-                                break;  // pause
-                                default:  break;
+                                } else if (ch <= 0x52) {
+                                    // ESP_LOGD(TAG, "Scan code: %d", ch);
+                                    if (ch == bt_keyboard.KEY_CAPS_LOCK) caps_lock_ = !caps_lock_;
+                                    if (modifier & bt_keyboard.SHIFT_MASK) {
+                                        if (caps_lock_) {
+                                            repeat_period_  = pdMS_TO_TICKS(500);
+                                            last_ch_ = shift_trans_dict_[(ch - 4) << 1];
+                                        } else {
+                                            repeat_period_  = pdMS_TO_TICKS(500);
+                                            last_ch_ = shift_trans_dict_[((ch - 4) << 1) + 1];
+                                        }
+                                    } else {   // normal keys
+                                        if (caps_lock_) {
+                                            repeat_period_  = pdMS_TO_TICKS(500);
+                                            last_ch_ = shift_trans_dict_[((ch - 4) << 1) + 1];
+                                        } else {
+                                            repeat_period_  = pdMS_TO_TICKS(500);
+                                            last_ch_ = shift_trans_dict_[(ch - 4) << 1];
+                                        }
+                                    }
+                                }
+                                debug_serial_port->print(F("<"));
+                                debug_serial_port->print(ch);
+                                debug_serial_port->print(F(">"));
+                                queueadd(ch); 
+                                //check_ps2_keyboard();
+                                ch = last_ch_;
+                                last_ch_ = 0;
+                            }
+                        #else  // direct key mapping method
+
+                            // inf.keys[0] where
+                            // x=0x00 is Normal key
+                            // x=0x02 is Left Shift+key
+                            // x=0x20 is Right Shift+key
+                            // x=0x01 is Left Ctl+key
+                            // x=0x10 is Right Ctl+key
+                            // x=0x04 is Left Alt+key
+                            // x=0x40 is Right Alt+key
+                            
+                            if (modifier & bt_keyboard.CTRL_MASK) // bt_keyboard.SHIFT_MASK) // left or right side key pressed
+                            {                                     
+                                switch (ch) 
                                 {
-                                    //  process the rest of the keys
-                                    if (!CMD_KEY && (((ch != '\\') && (ch >= ' ') && (ch < 127)) || (ch == '\n') || (ch == '\r'))) {
-                                        //if (ps2_prosign_flag) {
-                                        //    add_to_send_buffer(SERIAL_SEND_BUFFER_PROSIGN);
-                                        //    ps2_prosign_flag = 0;
-                                        //}
-                                        ch = uppercase(ch);
-                                        add_to_send_buffer(ch);
+                                    case 0x04 ... 0x1d: ch = PS2_A_CTRL + (ch-4); break; // convert to lower case letters
+                                    case 0x3A ... 0x45: ch = PS2_F1_CTRL + (ch-0x3A); break; // F1-F12 keys
+                                    case 0xC6: ch = PS2_F11_CTRL; break; // F1-F12 keys
+                                    case 0xC7: ch = PS2_F12_CTRL; break; // F1-F12 keys
+                                }
+                                //debug_serial_port->print(F("CTRL key = 0x"));
+                                //debug_serial_port->println(ch, HEX);
+                            }
+                            else if (modifier & bt_keyboard.ALT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
+                            {   
+                                switch (ch) 
+                                {
+                                    //case 0x04 : ch = 0; s_tone(sidetone_line,configuration.hz_sidetone,0); break; // Alt-b
+                                    //case 0x05 : ch = 0; noTone(sidetone_line); break;  // Alt-b                                        
+                                    case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
+                                    case 0xC6: ch = PS2_F11_ALT; break; // F1-F12 keys
+                                    case 0xC7: ch = PS2_F12_ALT; break; // F1-F12 keys
+                                    case 0x29 : ch = PS2_ESC; queueflush(); break;  // ALT-C, clear the LCD scrollable area
+                                }
+                                //debug_serial_port->print(F("ALT key = 0x"));
+                                //debug_serial_port->println(ch, HEX);
+                            }
+                            else if (modifier & bt_keyboard.SHIFT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
+                            {
+                                //debug_serial_port->print(F("SHIFT key  modifier = 0x"));
+                                //debug_serial_port->println(modifier, HEX);
+
+                                switch (ch) {     
+                                    case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters
+                                                ch = uppercase(ch); 
+                                                break;                     
+                                    case 0x1e : ch = '!'; break;      // '!'  key
+                                    case 0x1f : ch = '@'; break;      // '@'  key
+                                    case 0x20 : ch = '#'; break;      // '#'  key
+                                    case 0x21 : ch = '$'; break;      // '$'  key
+                                    case 0x22 : ch = '%'; break;      // '%'  key
+                                    case 0x23 : ch = '^'; break;      // '^'  key
+                                    case 0x24 : ch = '&'; break;      // '&'  key
+                                    case 0x25 : ch = '*'; break;      // '*'  key                            
+                                    case 0x26 : ch = '('; break;      // '('  key
+                                    case 0x27 : ch = ')'; break;      // ')'  key
+                                    case 0x28 : ch = PS2_ENTER_SHIFT; break; // PgDn key
+                                    case 0x2A : ch = PS2_BACKSPACE_SHIFT; break; // PgDn key   
+                                    case 0x2B : ch = PS2_TAB_SHIFT; break; // PgDn key                         
+                                    case 0x2D : ch = '_'; break;      // '_'  key
+                                    case 0x2E : ch = '+'; break;      // '+'  key
+                                    case 0x2F : ch = '{'; break;      // '{'  key
+                                    case 0x30 : ch = '}'; break;      // '}'  key    
+                                    case 0x31 : ch = '|'; break;      // '|' key                        
+                                    case 0x33 : ch = ':'; break;      // ':'  key
+                                    case 0x34 : ch = '"'; break;      // '"'  key
+                                    case 0x36 : ch = '<'; break;      // '<'  key
+                                    case 0x37 : ch = '>'; break;      // '>'  key
+                                    case 0x38 : ch = '?'; break;      // '?' cursor key
+                                    case 0x3A ... 0x45: ch += 85; break; // F1-F12 keys
+                                    case 0xC6: ch = PS2_F11_SHIFT; break; // F1-F12 keys
+                                    case 0xC7: ch = PS2_F12_SHIFT; break; // F1-F12 keys
+                                }
+                                //debug_serial_port->print(F("SHIFT key = 0x"));
+                                //debug_serial_port->println(ch, HEX);
+                            } 
+                            else if (modifier == 0) // normal key
+                            {
+                                //debug_serial_port->print('<');
+                                //debug_serial_port->print(ch,HEX);
+                                //debug_serial_port->print('>');
+                                
+                                switch (ch) {
+                                    case 0x04 ... 0x1d : ch += 0x5D;  // convert to lower case letters (add 93)
+                                                ch = uppercase(ch);
+                                                break;
+                                    case 0x1e ... 0x26 : ch += 0x13;  // numbers 1-9 (add 19)
+                                                if (!isdigit(ch)) ch = 0;
+                                                break;
+                                    case 0x27 : ch += 0x09;  // number 0
+                                                if (!isdigit(ch)) ch = 0;
+                                                break;
+                                    case 0x28 : ch = PS2_ENTER; break;   // enter key
+                                    case 0x29 : ch = PS2_ESC; queueflush(); break;   // ESC key - figure out how to erase a queue or stop senbding with this
+                                    case 0x2A : ch = PS2_BACKSPACE; break;   // BACK key
+                                    case 0x2B : ch = PS2_TAB; break; // TAB key
+                                    case 0x2c : ch = ' '; break;    // space
+                                    case 0x2D : ch = '-'; break;    // '-'  key
+                                    case 0x2E : ch = '='; break;    // '='  key
+                                    case 0x2F : ch = '['; break;    // '['  key                                                  
+                                    case 0x30 : ch = '['; break;    // '['  key
+                                    case 0x31 : ch = '\\'; break;   // '\' key
+                                    case 0x33 : ch = ';'; break;    // ';'  key
+                                    case 0x34 : ch = '\''; break;   // '''  key
+                                    case 0x36 : ch = ','; break;    // ','  key
+                                    case 0x37 : ch = '.'; break;    // '.'  key
+                                    case 0x38 : ch = '/'; break;    // '/' cursor key
+                                    case 0x39 : ch = 0; break;   // CAP LOCK toggle
+                                    case 0x3A ... 0x45: ch += 72; break; // F1-F12 keys (add 0x48)
+                                    case 0x49 : ch = PS2_INSERT; break; // End key
+                                    case 0x4A : ch = PS2_HOME; break; // Home key
+                                    case 0x4C : ch = PS2_DELETE; break; // End key
+                                    case 0x4D : ch = PS2_END; break; // End key
+                                    case 0x4B : ch = PS2_PAGEUP; break; // PgUp key
+                                    case 0x4E : ch = PS2_PAGEDOWN; break; // PgDn key
+                                    case 0x4F : ch = PS2_LEFTARROW; break;   // right cursor key
+                                    case 0x50 : ch = PS2_RIGHTARROW; break;   // left cursor key
+                                    case 0x51 : ch = PS2_DOWNARROW; break;   // down cursor key
+                                    case 0x52 : ch = PS2_UPARROW; break;   // up cursor key
+                                    //case 0x53 : ch = BT_SCROLL; break;   // No Scroll on BT keyboards so far
+                                    default   : break; //debug_serial_port->print(ch);   // filter out key up events
+                                }  // end switch ch
+                            } 
+                            else  ch = 0;
+
+                        #endif // WORKING CODE
+
+                        #ifdef DEBUG_BT_KEYBOARD_B
+                            debug_serial_port->print(' ');
+                            debug_serial_port->print(ch);  // print our valid char
+                            debug_serial_port->print('\n');
+                        #endif
+                        /*
+                        switch (ch) 
+                        {
+                            case PS2_RIGHTARROW : adjust_dah_to_dit_ratio(int(configuration.dah_to_dit_ratio/10)); break;
+                            case PS2_LEFTARROW : adjust_dah_to_dit_ratio(-1*int(configuration.dah_to_dit_ratio/10)); break;
+                            case PS2_UPARROW : speed_set(configuration.wpm+1); break;
+                            case PS2_DOWNARROW : speed_set(configuration.wpm-1); break;
+                            case PS2_ESC: CMD_KEY = false; debug_serial_port->println(F("< Exiting CLI mode >")); break;
+                            case PS2_TAB:
+                                if (pause_sending_buffer) {
+                                pause_sending_buffer = 0;
+                                #ifdef FEATURE_DISPLAY
+                                    #ifdef OPTION_MORE_DISPLAY_MSGS
+                                    lcd_center_print_timed("Resume", 0, default_display_msg_delay);
+                                    #endif
+                                #endif                 
+                                } else {
+                                pause_sending_buffer = 1;
+                                #ifdef FEATURE_DISPLAY
+                                    lcd_center_print_timed("Pause", 0, default_display_msg_delay);
+                                #endif            
+                                }
+                            break;  // pause
+                            default:  break;
+                            {
+                                //  process the rest of the keys
+                                if (!CMD_KEY && (((ch != '\\') && (ch >= ' ') && (ch < 127)) || (ch == '\n') || (ch == '\r'))) {
+                                    //if (ps2_prosign_flag) {
+                                    //    add_to_send_buffer(SERIAL_SEND_BUFFER_PROSIGN);
+                                    //    ps2_prosign_flag = 0;
+                                    //}
+                                    ch = uppercase(ch);
+                                    add_to_send_buffer(ch);
+                                
+                                    #ifdef FEATURE_MEMORIES
+                                        repeat_memory = 255;
+                                    #endif
+                                }
+                                else if (CMD_KEY || ch > 126 || ch == '\\') {  // function key and ALT, CTRL, and special keys
+                                    debug_serial_port->print(F("< Special key = "));
                                     
-                                        #ifdef FEATURE_MEMORIES
-                                            repeat_memory = 255;
-                                        #endif
+                                    if (ch == '\\'){
+                                        debug_serial_port->println(F("Command Line Key Pressed.  To exit press ESC key"));
+                                        CMD_KEY = true;  // command line interface will need to set this to false to allow CW to resume
                                     }
-                                    else if (CMD_KEY || ch > 126 || ch == '\\') {  // function key and ALT, CTRL, and special keys
-                                        debug_serial_port->print(F("< Special key = "));
-                                        
-                                        if (ch == '\\'){
-                                            debug_serial_port->println(F("Command Line Key Pressed.  To exit press ESC key"));
-                                            CMD_KEY = true;  // command line interface will need to set this to false to allow CW to resume
-                                        }
-                                        else {
-                                            debug_serial_port->print(ch, DEC);   
-                                            debug_serial_port->println(F(" >"));
-                                        }
+                                    else {
+                                        debug_serial_port->print(ch, DEC);   
+                                        debug_serial_port->println(F(" >"));
                                     }
-                                }  // end of default
-                            }  // ens of switch
-                            */
-  
-                            queueadd(ch);   // add char to the queue                          
-                            #ifdef DEBUG_BT_KEYBOARD_A
-                                debug_serial_port->print(F("["));
-                                if (queueempty())
-                                    debug_serial_port->print(F("Q Empty\n")); 
-                                else
-                                    debug_serial_port->print(F("Q NOT Empty\n"));
-                                //debug_serial_port->print(queuepop());
-                                debug_serial_port->print(F("],"));
-                            #endif
-                            ch = 0;
-                        } // end of key mapping                        
-                    }  // end of valid keystroke
-                }  // inf size 7 or 8
-                last_key = keyDN;
-                keyDN = false;
+                                }
+                            }  // end of default
+                        }  // ens of switch
+                        */
+
+                        queueadd(ch);   // add char to the queue                          
+                        #ifdef DEBUG_BT_KEYBOARD_A
+                            debug_serial_port->print(F("["));
+                            if (queueempty())
+                                debug_serial_port->print(F("Q Empty\n")); 
+                            else
+                                debug_serial_port->print(F("Q NOT Empty\n"));
+                            //debug_serial_port->print(queuepop());
+                            debug_serial_port->print(F("],"));
+                        #endif
+                        ch = 0;                    
+                      }  // end of valid keystroke
+                    }
+                  }  // inf size 7 or 8
+                  last_key = keyDN;
+                  keyDN = false;
                 ch = 0;
+              mydelay(5); 
+            } while (ret);
           #endif
-         mydelay(5); 
-        #ifdef USE_BT_TASK
-        } // for ever
-        #endif
+          #ifdef USE_BT_TASK
+          } // for ever
+          #endif
     } // check_bt_keyboard
 #endif // FEATURE_BT_KEYBOARD
 
@@ -25366,8 +25424,9 @@ void displayInfo()
 void check_gps(bool force_update, bool ignore_gps) {
   #ifdef FEATURE_GPS
     static uint32_t lost_gps_timer = 0;
-    bool do_process = false;
+    bool _do_process = false;
     char gps_grid[9];
+    struct tm timeinfo;
 
     if (ignore_gps) {
       if (!configuration.ignore_gps) {
@@ -25420,10 +25479,23 @@ void check_gps(bool force_update, bool ignore_gps) {
 
       if (gps.time.isValid() && gps.time.isUpdated())
       {
+          if (gps.date.isUpdated()){              // set system time for log output
+            timeinfo.tm_year = gps.date.year() - 1900;
+            timeinfo.tm_mon  = gps.date.month() - 1;
+            timeinfo.tm_mday = gps.date.day();
+            timeinfo.tm_hour = gps.time.hour();
+            timeinfo.tm_min  = gps.time.minute();
+            timeinfo.tm_sec  = gps.time.second();
+            time_t t = mktime(&timeinfo);
+            struct timeval now = { .tv_sec = t };
+            settimeofday(&now, NULL); // Set ESP32 system time
+            //debug_serial_port->printf("Setting time (UTC): %s", asctime(&timeinfo));
+          }
+
           gps_hour = gps.time.hour();
           gps_minute = gps.time.minute();
           gps_second = gps.time.second();
-          sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
+          sprintf(time_str, "%02d:%02d:%02d UTC", gps_hour, gps_minute, gps_second);
           stop_msg = false;
           //debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
       } else {
@@ -25438,7 +25510,7 @@ void check_gps(bool force_update, bool ignore_gps) {
         }
         stop_msg = false;
         //debug_serial_port->print(F("check_gps: Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq); 
-        do_process = true;
+        _do_process = true;
       } else {
         if (!gps.location.isValid()) stop_msg = true;
       }
@@ -25447,13 +25519,17 @@ void check_gps(bool force_update, bool ignore_gps) {
     if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
     {
       debug_serial_port->println(F("No GPS detected: Check wiring."));
-      if (!stop_msg) do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid  
+      if (!stop_msg) _do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid  
       strcpy(gps_grid, "");
       stop_msg = true;
       lost_gps_timer = millis();      
     } 
 
-    if (do_process) process_gps(gps_grid, force_update, 1);   // 1 = GPS source
+    if (_do_process) {
+      do_process = true;
+      process_gps(gps_grid, force_update, 1);   // 1 = GPS source
+    }
+    
   #endif
 }
 
@@ -25495,6 +25571,9 @@ void process_gps(char * memory_str, bool force_update, uint8_t source) {
   bool update_flag;
   //char * grid_ptr;
   
+  if (!do_process) return;
+  do_process = false;
+
   #ifdef GPS_PROCESS_DEBUG
     debug_serial_port->print(F("\nProcess_gps: Function Input    = ")); debug_serial_port->print(memory_str); 
       debug_serial_port->print(F("  Source = ")); debug_serial_port->println(source); 
@@ -25522,12 +25601,14 @@ void process_gps(char * memory_str, bool force_update, uint8_t source) {
     case 2 :  if (strlen(memory_str) >= 4) {
                   strcpy(grid_sq_str, configuration.Mem_GridSq);
                   break;
-              }  __attribute__((fallthrough)); // No warning // fall through if grid is empty
+              } 
+              __attribute__((fallthrough)); // No warning // fall through if grid is empty
     case 1 :  if (strlen(memory_str) >= 4) {
                   strcpy(grid_sq_str, configuration.GPS_GridSq);
                   configuration.GridSq_source = 1;  // update new source
                   break;
-              }  __attribute__((fallthrough)); // No warning // fall through if grid is empty
+              }
+              __attribute__((fallthrough)); // No warning // fall through if grid is empty
     case 0 : strcpy(grid_sq_str, default_grid); 
              configuration.GridSq_source = 0;  // update new source
              break;
@@ -25561,7 +25642,7 @@ void store_Grid(char * grid) {
     }
   }
   EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
-  debug_serial_port->print(F("\nWrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+  debug_serial_port->print(F("Wrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
   config_dirty = 1;
   #if defined(HARDWARE_ESP32_DEV)
     EEPROM.commit();
@@ -25739,7 +25820,7 @@ void main_loop(void)
         #endif
         
         #ifdef FEATURE_GPS
-            check_gps(false, false);
+            check_gps(false, false);            
         #endif
 
         #ifdef FEATURE_COMPASS
@@ -25917,7 +25998,7 @@ void app_main(void)
     
     #if defined (FEATURE_BT_KEYBOARD) 
       #ifdef USE_BT_TASK
-        check_bt_keyboard();
+        //check_bt_keyboard((void*)1);
       #endif
     #endif
   }
@@ -25929,6 +26010,7 @@ void app_main(void)
   //}
 }
 
+// This is to make compatible with main.ino for Arduino ID compile
 #if defined(PROJECT_ESP32_COMPILER)
 }
 #else

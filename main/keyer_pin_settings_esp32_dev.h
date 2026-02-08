@@ -74,26 +74,30 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #define paddle_left     23   // if I2c is not used (compass and exander) then can use 21 and 22 here on connector.  Must be a pin with an internal pullup.
       #define paddle_right    19       
       #ifdef FEATURE_STRAIGHT_KEY
-        #define pin_straight_key 5 //used by sd card. pin 23 has a resistor pullup
+        #define pin_straight_key 35 //used by sd card. pin 23 has a resistor pullup
       #endif //FEATURE_STRAIGHT_KEY
     #endif
     #define GPS_RX_PIN      36 // unused input from non-installed U3.  Has pullup R to 3.3v installed.  Solder a wire to R3.
     #define TOUCH_SDA       33  // intenral bus for i2c touch controller GT911 pins
     #define TOUCH_SCL       32
-    #define TOUCH_INT        5   // pin 21 not actually used for touch int because R25 is not installed on DIYMalls 3.2" display and 21 is for i2c
+    #define TOUCH_INT        4   // pin 21 not actually used for touch int because R25 is not installed on DIYMalls 3.2" display and 21 is for i2c
     #define TOUCH_RST       25
     #define TOUCH_WIDTH    320  
     #define TOUCH_HEIGHT   240
     #define potentiometer    0 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-    #define tx_key_line_1   16 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
-    #define tx_key_line_2    0 
+    #define tx_key_line_1   16 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED, 4 is red, 17 is blue)
+    #define tx_key_line_2    4 
     #define sidetone_line   26 // connect a speaker for sidetone
     #define audio_enable     0 // Only for 3.5" Hoysond Display
-    #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         0 //4 // PTT ("push to talk") lines   (4 on 3.2" DIY malls st7789 TFT, red LED)
     #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
     #define tx_pause_pin     0 //14 
+    // FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
+    // See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details
+    //#define cw_decoder_pin    4                // This is for use with external decoding hardware
+    //#define cw_decoder_audio_input_pin 39   // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
+    //#define cw_decoder_indicator  0         // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
 
     #elif defined (FEATURE_IDEASPARK_LCD)
     #define bt_keyboard_LED 13 // indicates BT keyboard connection status pin ? on IdeaSpark 1.9" onboard Blue LED
@@ -110,14 +114,20 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define sidetone_line   12 // connect a passive buzzer for sidetone
     #define audio_enable     0 // 0.  Only set for 3.5" Hoysond Display
     #define GPS_RX_PIN      16 // 16 is RX2, 17 is TX2
-    #define potentiometer   35 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+    #define potentiometer    0 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define ptt_tx_1         5 // PTT ("push to talk") lines 
-    #define ptt_tx_2        33 // Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
+    #define ptt_tx_2         0  // Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0
     #define tx_pause_pin     0
     #ifdef FEATURE_STRAIGHT_KEY
       #define pin_straight_key 27
     #endif //FEATURE_STRAIGHT_KEY
+    // FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
+    // See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details
+    //#define cw_decoder_pin    0            // This is for use with external decoding hardware
+    //#define cw_decoder_audio_input_pin 35   // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
+    //define cw_decoder_indicator 33         // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
+
     
     // following linbes are used for internal functions
     //#define LCD_H_RES      320
@@ -182,6 +192,11 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     // 18/23  is Tx #1 Tx_Key_line and PTT out
     // 22 is RED LED, 17 is BLUE LED, and 16 is GREEN LED
     // --->   that leaves onboard pins 19 21 free  in both cases  <-----
+    // FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
+    // See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details
+    //#define cw_decoder_pin 13             // This is for use with external decoding hardware
+    //#define cw_decoder_audio_input_pin 39 // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
+    //#define cw_decoder_indicator 16       // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
 
     #elif defined (FEATURE_TFT_320x480_CAP_LCD)    // for ESP32-3248S05C 3.5" 320x480 TFT ST7796 and GT911
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
@@ -222,6 +237,12 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
     #define tx_pause_pin     0 //14 
+    // FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
+    // See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details
+    //#define cw_decoder_pin 13             // This is for use with external decoding hardware
+    //#define cw_decoder_audio_input_pin 39 // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
+    //#define cw_decoder_indicator 16       // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
+
 
 #else // ESP-WROOM-32, 27, 5 33
   #define bt_keyboard_LED   2 //2  // indicates BT keyboard connection status
@@ -326,13 +347,6 @@ FEATURE_SIDETONE_SWITCH
 #ifdef FEATURE_PTT_INTERLOCK
   #define ptt_interlock 0  // this pin disables PTT and TX KEY
 #endif //FEATURE_PTT_INTERLOCK
-
-// FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
-// See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details
-//#define cw_decoder_pin 13             // This is for use with external decoding hardware
-//#define cw_decoder_audio_input_pin 39 // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
-//#define cw_decoder_indicator 0       // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
-
 
 #if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
   #define compression_detection_pin 0

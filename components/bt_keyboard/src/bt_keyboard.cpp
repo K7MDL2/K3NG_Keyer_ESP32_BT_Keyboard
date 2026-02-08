@@ -365,6 +365,8 @@ bool BTKeyboard::setup(PairingHandler        *pairing_handler,
     return false;
   }
 
+  esp_log_level_set(TAG, ESP_LOG_ERROR);
+
   esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 
   bt_cfg.mode                       = mode;
@@ -402,9 +404,9 @@ bool BTKeyboard::setup(PairingHandler        *pairing_handler,
   // Set default parameters for Legacy Pairing
   // Use variable pin, input pin code when pairing
   esp_bt_pin_type_t pin_type = ESP_BT_PIN_TYPE_FIXED;
-  esp_bt_pin_code_t pin_code;
-  esp_bt_gap_set_pin(pin_type, 0, pin_code);
-
+  esp_bt_pin_code_t pin_code = {'1','2','3','4'};
+  esp_bt_gap_set_pin(pin_type, 4, pin_code);
+  
   if ((ret = esp_bt_gap_register_callback(bt_gap_event_handler))) {
     ESP_LOGE(TAG, "esp_bt_gap_register_callback failed: %d", ret);
     return false;
@@ -911,7 +913,7 @@ void BTKeyboard::ble_gap_event_handler(esp_gap_ble_cb_event_t  event,
       }
       break;
 
-    case ESP_GAP_BLE_KEY_EVT: // shows the ble key info share with peer device to the user.
+    case ESP_GAP_BLE_KEY_EVT: // shows the ble key info shared with peer device to the user.
       ESP_LOGD(TAG, "BLE GAP KEY type = %s",
                ble_key_type_str(param->ble_security.ble_key.key_type));
       break;
@@ -1179,14 +1181,13 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
       std::cout << ", BT keyboard Found " << std::endl;
       // open the selected entry
       if (esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type) == ESP_OK)
-        std::cout << "Open BLE/BT Entry for this Keyboard";
+        std::cout << "Open BLE/BT Entry for this Keyboard" << std::endl;
       else 
-        std::cout << "FAILED to Open BLE/BT Entry for this Keyboard";
+        std::cout << "FAILED to Open BLE/BT Entry for this Keyboard" << std::endl;
     }
     else  {
-      std::cout << "No Valid BLE/BT Keyboard Entry Found";
+      std::cout << "No Valid BLE/BT Keyboard Entry Found" << std::endl;
     }
-    std::cout << std::endl;
     // free the results
     results.clear();
   }
@@ -1254,7 +1255,7 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
                    ESP_BD_ADDR_HEX(bda), esp_hid_usage_str(param->input.usage),
                    param->input.map_index, param->input.report_id, param->input.length);
           ESP_LOG_BUFFER_HEX_LEVEL(TAG, param->input.data, param->input.length, ESP_LOG_DEBUG);
-            bt_keyboard_->push_key(param->input.data, param->input.length);
+          bt_keyboard_->push_key(param->input.data, param->input.length);
         }
         break;
       }
@@ -1311,7 +1312,7 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
  */
 void BTKeyboard::push_key(uint8_t *keys, uint8_t size) {
   KeyInfo inf;
-  if (size > MAX_KEY_DATA_SIZE) {
+  if (size > MAX_KEY_DATA_SIZE) {    
     ESP_LOGW(TAG, "Keyboard event data size bigger than expected: %d\n.", size);
     size = MAX_KEY_DATA_SIZE;
   }

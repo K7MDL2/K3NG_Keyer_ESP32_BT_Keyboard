@@ -55,6 +55,14 @@
   #define LCD_COLUMNS 20
   #define LCD_ROWS 4
 #endif
+
+#if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+  #define PS2_KEYBOARD_NORMAL 0
+#endif //FEATURE_PS2_KEYBOARD
+
+#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+  #define BT_KEYBOARD_NORMAL 0
+#endif //FEATURE_BT_KEYBOARD
  
 #define lcd_i2c_address_mathertel_PCF8574 0x27             // I2C address of display for FEATURE_LCD_MATHERTEL_PCF8574
 #define lcd_i2c_address_fdebrander_lcd 0x27                // I2C address of display for FEATURE_LCD_I2C_FDEBRABANDER
@@ -120,7 +128,6 @@
   #define qlf_dah_min 100
   #define qlf_on_by_default 0
 #endif //FEATURE_QLF
-
 
 #ifdef FEATURE_WINKEY_EMULATION
   #ifdef OPTION_WINKEY_UCXLOG_9600_BAUD
@@ -285,7 +292,7 @@
 
 #endif
 
-#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (TFT_HOSYOND_320x480_LCD) || defined(TFT_320x480_CAP_LCD)  // For TFT with touch controller         // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (TFT_HOSYOND_320x480_LCD) || defined(TFT_320x480_CAP_LCD) //|| defined(FEATURE_TFT7789_3_2inch_240x320_LCD)  // For TFT with touch controller         // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
   #define tx_key_line_active_state HIGH
   #define tx_key_line_inactive_state LOW
 #else

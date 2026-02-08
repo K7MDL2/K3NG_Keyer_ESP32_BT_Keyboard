@@ -25,7 +25,6 @@
   #define FEATURE_PADDLE_ECHO
 #endif
 
-
 #if defined(FEATURE_STRAIGHT_KEY) && (defined(FEATURE_STRAIGHT_KEY_ECHO) || defined(FEATURE_MEMORIES) || defined(FEATURE_CW_COMPUTER_KEYBOARD))
   #define FEATURE_STRAIGHT_KEY_DECODE
 #endif
@@ -57,3 +56,16 @@
 #if defined(FEATURE_BT_KEYBOARD) && !defined(HARDWARE_ESP32_DEV)
   #error "FEATURE_BT_KEYBOARD requires HARDWARE_ESP32_DEV"
 #endif
+
+#if defined(FEATURE_TOUCH_DISPLAY) && !defined(FEATURE_BT_KEYBOARD)
+  #error "FEATURE_TOUCH_DISPLAY requires FEATURE_BT_KEYBOARD"
+#endif
+
+#if defined(FEATURE_TOUCH_DISPLAY) && !defined(FEATURE_TFT_DISPLAY)
+  #error "FEATURE_TOUCH_DISPLAY requires FEATURE_TFT_DISPLAY"
+#endif
+
+#if defined(FEATURE_DISPLAY) && (!defined(FEATURE_TOUCH_DISPLAY) && !defined(FEATURE_TFT_DISPLAY) && !defined(FEATURE_LCD_LIQUIDCRYSTAL_I2C))
+  #error "This board type has a display. You must set one or more of these: FEATURE_LCD_LIQUIDCRYSTAL_I2C, FEATURE_TOUCH_DISPLAY, or FEATURE_TFT_DISPLAY"
+#endif
+
