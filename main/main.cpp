@@ -25495,7 +25495,7 @@ void check_gps(bool force_update, bool ignore_gps) {
           gps_hour = gps.time.hour();
           gps_minute = gps.time.minute();
           gps_second = gps.time.second();
-          sprintf(time_str, "%02d:%02d:%02d UTC", gps_hour, gps_minute, gps_second);
+          sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
           stop_msg = false;
           //debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
       } else {
