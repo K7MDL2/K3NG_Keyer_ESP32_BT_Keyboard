@@ -57,7 +57,7 @@ Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Key
 
 See the Wiki Pages for more information about parts supported and configuration. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
-This is a 3.5" 480x320 TFT with a single panel of 16 keys.  If you press the Mem key, a blue message window pops up diplaying the contents of each memory.  You can use Insert Memory macro '\Ix' to insert memories (1-9 only).  For example I have memeories 7 and 8 programmed with my callsign and grid square.
+This is a 3.5" 480x320 TFT with a single panel of 16 keys.  If you press the Mem key, a blue message window pops up diplaying the contents of each memory.  You can use Insert Memory macro '\Ix' to insert memories (1-9 only).  For example I have memories 7 and 8 programmed with my callsign and grid square.
 
 <img width="627" height="385" alt="image" src="https://github.com/user-attachments/assets/da19e558-d734-4327-8b30-68130b4608d2" />
 
