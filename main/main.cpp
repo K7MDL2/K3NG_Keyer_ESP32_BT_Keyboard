@@ -1621,16 +1621,15 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_BT_KEYBOARD)
-    uint8_t CTRL_MASK;
-    uint8_t SHIFT_MASK;
-    uint8_t ALT_MASK;
-    uint8_t META_MASK;
-
   #if defined(HARDWARE_ESP32_DEV)  
     #include "bt_keyboard.hpp"  // from esp-32 project component folder
     #include "esp_err.h"
     #include "nvs_flash.h"
     BTKeyboard bt_keyboard;
+    uint8_t CTRL_MASK;
+    uint8_t SHIFT_MASK;
+    uint8_t ALT_MASK;
+    uint8_t META_MASK;
   #endif
   #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
     #include <BluetoothHIDMaster.h>
@@ -2492,33 +2491,34 @@ uint8_t lastAddress[6] = {};
 uint8_t lastAddressType = 0;
 
 void loadEEPROM() {
-  configurationMDATA data;  // sub struct in configuration struct
+  //struct configuration *data;  // sub struct in configuration struct
   //EEPROM.begin(sizeof(EEPROMDATA));
   //EEPROM.get(0, data);
   //EEPROM.end();
-  if (memcmp(data.hdr, DATAHEADER, sizeof(data.hdr))) {
+  if (memcmp(configuration.hdr, DATAHEADER, sizeof(configuration.hdr))) {
     // Not our data, just clear things
     Serial.println("No previous paired device found in EEPROM");
     bzero(lastAddress, 6);
     lastAddressType = 0;
   } else {
     // Our baby, copy it to local storage
-    Serial.printf("Previoudly paired device found: %s\n", macToString(data.addr, data.addrType));
-    memcpy(lastAddress, data.addr, sizeof(lastAddress));
-    lastAddressType = data.addrType;
+    Serial.printf("Previously paired device found: %s\n", macToString(configuration.addr, configuration.addrType));
+    memcpy(lastAddress, configuration.addr, sizeof(lastAddress));
+    lastAddressType = configuration.addrType;
   }
 }
 
 void saveEEPROM() {
-  configuration.EEPROMDATA data;
-  memcpy(data.hdr, DATAHEADER, sizeof(data.hdr));
-  memcpy(data.addr, lastAddress, sizeof(data.addr));
-  data.addrType = lastAddressType;
+  //configuration data;
+  memcpy(configuration.hdr, DATAHEADER, sizeof(configuration.hdr));
+  memcpy(configuration.addr, lastAddress, sizeof(configuration.addr));
+  configuration.addrType = lastAddressType;
   //EEPROM.begin(sizeof(EEPROMDATA));
   //EEPROM.put(0, data);
   //EEPROM.commit();
   //EEPROM.end();
   Serial.printf("Wrote paired device to EEPROM: %s\n", macToString(lastAddress, lastAddressType));
+  config_dirty = 1;
 }
 
 // Either try continually to reconnect to the last device connected,
@@ -19384,19 +19384,19 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
         // Consumer keys are the special function ones like "mute" or "home"
       bt_keyboard.onConsumerKeyDown(ckb, (void *)true);
       bt_keyboard.onConsumerKeyUp(ckb, (void *)false);
-      //loadEEPROM(); // See about reconnecting
+      loadEEPROM(); // See about reconnecting
       if (use_BLE) bt_keyboard.begin(true);   // BLE
       else bt_keyboard.begin();  // BT Classic
     #endif
 
     pinMode(bt_keyboard_LED, OUTPUT);
     digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
-    debug_serial_port->print(F("BT keyboard connected LED inacive state = ")); debug_serial_port->println(bt_keyboard_LED_pin_inactive_state);
+    debug_serial_port->print(F("BT Keyboard connected LED inactive state = ")); debug_serial_port->println(bt_keyboard_LED_pin_inactive_state);
    
     debug_serial_port->println(F("BT and BLE device Scan Setup"));
 
     if (!bt_keyboard.is_connected()) {
-        debug_serial_port->println(F("No BT keyboards found"));
+        debug_serial_port->println(F("No BT Keyboards found"));
         lcd_center_print_timed("No BT Keyboards", 2, 3000);
     }
 
