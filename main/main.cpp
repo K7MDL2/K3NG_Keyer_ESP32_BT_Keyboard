@@ -1635,10 +1635,12 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #include <BluetoothHIDMaster.h>
     // We need the inverse map, borrow from the Keyboard library
     #include <HID_Keyboard.h>
+
     extern const uint8_t KeyboardLayout_en_US[128];
     BluetoothHIDMaster bt_keyboard;
-    HIDKeyStream keystream;
+    //HIDKeyStream keystream;
     const char *DATAHEADER = "Last BLE Address"; // exactly 16 chars + \0
+    
     typedef struct {
       char hdr[16];     // The header marker so we know this is our data
       uint8_t addr[6];  // MAC of the peer we last connected to
@@ -2539,8 +2541,11 @@ void connectOrPair() {
       else bt_keyboard.connect(lastAddress);
     } while (!bt_keyboard.connected() && !BOOTSEL);
     if (bt_keyboard.connected()) {
-      Serial.println("Reconnected!\n");      
+      Serial.println("Reconnected!\n");  
+      keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);    
       return;
+    } else {
+      keyboard_lost_connection_handler();
     }
     // Fall through to pair
   }
@@ -19299,48 +19304,56 @@ void keyboard_connected_handler() {
 #if defined(FEATURE_BT_KEYBOARD) && (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO))
 // Consumer keys are the special media keys on most modern keyboards (mute/etc.)
 void ckb(void *cbdata, int key) {
-  bool state = (bool)cbdata;
-  Serial.printf("Consumer: %02x %s \n", key, state ? "DOWN" : "UP");
-
-  // enqueue
-  inf.size = 8;  // fake the size to pass through the 
-  //memcpy(&inf.keys, keys, 1);
-  inf.keys[2] =key;
-  //inf.modifier = (KeyModifier) key;
-  inf.modifier = (KeyModifier) 0;
-  inf.state = state;
-  new_bt_key = true;
+    bool state = (bool)cbdata;
+    Serial.printf("Consumer: %02x %s \n", key, state ? "DOWN" : "UP");
+    inf.size = 8;  // fake the size to pass through the 
+    inf.state = state;
+    if (state) inf.keys[2] = key;
+    else inf.keys[2] = 0;
+    new_bt_key = true;
 }
 
 // We get make/break for every key which lets us hold notes while a key is depressed
 void kb(void *cbdata, int key) {
-  auto key_mask = cbdata;
-
-  bool state = (bool)cbdata;
-  if (state && key < 128) {
-    inf.keys[2] = key;
-  } else {
-    switch (key) {
-      case 0xe0 ... 0xe6 :  inf.keys[1] = key; inf.modifier = (KeyModifier) key; break;
-      default: inf.modifier = (KeyModifier) 0; break;
+    static bool _holding = false;
+    static uint8_t _heldKey = 0;
+    bool state = (bool) cbdata;
+    inf.size = 8;  // fake the size to match the ESP32 bt_keyboard class string info to pass through the key value translation code
+    inf.state = state;
+    
+    // Modifier key has let go. Set Modifier flag to false and exit
+    if (_holding && !state && ((key == 0xe1) || (key == 0xe5) || (key == 0xe0) || (key == 0xe4) || (key == 0xe2) || (key == 0xe6) || (key == 0xe3))) {
+      _holding = false;
+      inf.modifier =(KeyModifier) 0;
+      inf.keys[0] = 0; // redundant but emulates the ESP32 class bt_keyboard behavior.
+      //debug_serial_port->println("Released Modifier Key");
+      return;
     }
-  }
-  inf.state = state;  // true for key down
+    
+    // Modifier key has been pressed.  Set hold key flag and bit mask and exit, then only process regular keys until modifier key is let up
+    if (!_holding && state && ((key == 0xe1) || (key == 0xe5) || (key == 0xe0) || (key == 0xe4) || (key == 0xe2) || (key == 0xe6) || (key == 0xe3))) {
+        _heldKey = key;
+        _holding = true;
+        switch (_heldKey) {
+            case 0xe0: inf.modifier = KeyModifier::L_CTRL;  break;
+            case 0xe4: inf.modifier = KeyModifier::R_CTRL;  break;
+            case 0xe2: inf.modifier = KeyModifier::L_ALT;   break;
+            case 0xe6: inf.modifier = KeyModifier::R_ALT;   break;
+            case 0xe3: inf.modifier = KeyModifier::L_META;  break;
+            case 0xe1: inf.modifier = KeyModifier::L_SHIFT; break;
+            case 0xe5: inf.modifier = KeyModifier::R_SHIFT; break;            
+        }
+        inf.keys[0] = (uint8_t) inf.modifier;  // redundant but emulates the ESP32 class bt_keyboard behavior.
+        //debug_serial_port->printf("Kbd  out: mod:0x%02x keys[0]:0x%02x\n", inf.modifier, inf.keys[0]);
+        return;
+    }
 
-   Serial.printf("Keyboard1: %02x %s = '%c' mask = '%d' \n", key, state ? "DOWN" : "UP", state ? keystream.peek() : '-', key_mask);
-
-  // The HIDKeyStream object converts a key and state into ASCII.  HID key IDs do not map 1:1 to ASCII!
-  // Write the key and make/break state, then read 1 ASCII char back out.
-  keystream.flush();
-  keystream.write((uint8_t)key);
-  keystream.write((uint8_t)state);
-  
-  Serial.printf("Keyboard2: %02x %s = '%c' mask = '%d' \n", key, state ? "DOWN" : "UP", state ? keystream.peek() : '-', key_mask);
- 
-  // enqueue
-  inf.size = 8;  // fake the size to pass through the  
-  new_bt_key = true;
-  //xQueueSendToBack(event_queue_, &inf, 0);
+    // if we get here than it is a regular key either standalone or between modifier key events.
+    if (state && key < 128) inf.keys[2] = key;
+    else inf.keys[2] = 0;
+    new_bt_key = true;
+    
+    //if (state) debug_serial_port->printf("Kbd  out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
 }
 #endif
 
@@ -19376,8 +19389,6 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
     #endif
 
     #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-      // Setup the bt_keyboard key to ASCII conversion
-      keystream.begin();
       // We can use the cbData as a flag to see if we're making or breaking a key
       bt_keyboard.onKeyDown(kb, (void *)true);
       bt_keyboard.onKeyUp(kb, (void *)false);
@@ -19397,7 +19408,7 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
 
     if (!bt_keyboard.is_connected()) {
         debug_serial_port->println(F("No BT Keyboards found"));
-        lcd_center_print_timed("No BT Keyboards", 2, 3000);
+        lcd_center_print_timed("No BT Keyboards", 2, 2000);
     }
 
     queueflush();
@@ -24593,8 +24604,7 @@ void update_time(){
     #endif    
 
           #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)    
-            if (!bt_keyboard.connected()) {
-              keyboard_lost_connection_handler(); 
+            if (!bt_keyboard.connected()) {              
               connectOrPair();
             }
           #endif
@@ -24652,19 +24662,12 @@ void update_time(){
                   ret = bt_keyboard.wait_for_low_event(inf);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
             #else
               do {
-                  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)                                      
-                    if (!new_bt_key) {                    
-                      return;
-                    }
-                    new_bt_key = false;                    
-                    
-                    while (keystream.available())  {
-                      debug_serial_port->print("Peek ="); debug_serial_port->print (keystream.peek());
-                      ret = inf.keys[2] = keystream.read();                      
-                      debug_serial_port->print(" Key ="); debug_serial_port->print(inf.keys[2]);
-                      debug_serial_port->print("  ");
-                    }
-                    
+                  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+                    if (new_bt_key) {
+                      new_bt_key = false;
+                      ret = 1;                           
+                    }         
+                    else ret = 0;
                   #else
                    ret = bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
                   //bt_keyboard.get_ascii_char();                                   
@@ -24680,6 +24683,7 @@ void update_time(){
                   // Going to loop through each string until all are done.  The output already goes to a queue for further processing so converting each 
                   // string to a char here won't take long.
                   
+                  // For Pico BT, there is only 1 keys array per read.  ESP32 can have multiple keys queued per read.
                   #ifdef DEBUG_BT_KEYBOARD_A     
                     if (inf.size > 2 && inf.size < 9 && inf.keys[2] !=0)  {
                       debug_serial_port->print(" Keys = ");                       
@@ -24707,7 +24711,7 @@ void update_time(){
                       keyUP = false;  // not Key Up, see if it is a new key 
                     }
 
-                    if (!keyUP && !keyDN) {
+                    if (!keyUP && !keyDN) {                      
                       modifier = inf.keys[0];  // capture shift, alt, ctrl state
                       if (inf.size == 8) {
                         // keyboard chars are len = 8, mouse and others are len=4
