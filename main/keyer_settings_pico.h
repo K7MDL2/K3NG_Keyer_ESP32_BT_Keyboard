@@ -1,6 +1,8 @@
 /*
-
+/  keyer_settings_pico.h
 */
+
+#pragma once
 
 // Initial and hardcoded settings
 #define initial_speed_wpm 13             // "factory default" keyer speed setting
@@ -295,7 +297,7 @@
 
 #endif
 
-#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (TFT_HOSYOND_320x480_LCD) || defined(TFT_320x480_CAP_LCD) //|| defined(FEATURE_TFT7789_3_2inch_240x320_LCD)  // For TFT with touch controller         // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+#if defined (FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined(TFT_320x480_CAP_LCD) //|| defined(FEATURE_TFT7789_3_2inch_240x320_LCD)  // For TFT with touch controller         // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
   #define tx_key_line_active_state HIGH
   #define tx_key_line_inactive_state LOW
 #else
@@ -304,7 +306,7 @@
 #endif
 
 
-#if defined(FEATURE_TFT7789_3_2inch_240x320_LCD) || defined(TFT_HOSYOND_320x480_LCD) || defined(TFT_320x480_CAP_LCD)  // For TFT with touch controller
+#if defined(FEATURE_TFT_320x480_CAP_LCD) // For TFT with touch controller
   #define bt_keyboard_LED_pin_active_state LOW
   #define bt_keyboard_LED_pin_inactive_state HIGH
 #else
@@ -327,15 +329,8 @@
 #define tx_inhibit_pin_inactive_state HIGH
 #define tx_pause_pin_active_state LOW
 #define tx_pause_pin_inactive_state HIGH
-
-#if defined(ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32f103C) || defined HARDWARE_ESP32_DEV//sp5iou 20180329, 20210825
-  #define button_value_factor 4095  //sp5iou contributed
-#else
-  #define button_value_factor 1023
-#endif
-
+#define button_value_factor 1023
 #define farnsworth_timing_calibration 1.15
-
 #define sidetone_volume_low_limit 10
 #define sidetone_volume_high_limit 500
 

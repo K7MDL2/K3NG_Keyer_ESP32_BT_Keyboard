@@ -53,7 +53,7 @@ K3NG Updates
 // #define OPTION_PS2_KEYBOARD_GERMAN
 // #define OPTION_PS2_KEYBOARD_FRENCH
 
-#if !defined(ARDUINO_SAM_DUE) && !defined (__STM32F1__)
+#if !defined(ARDUINO_SAM_DUE) && !defined (__STM32F1__) && !defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(ARDUINO_RASPBERRY_PI_PICO)
   #include <avr/io.h>
   #include <avr/interrupt.h>
   #include <avr/pgmspace.h>

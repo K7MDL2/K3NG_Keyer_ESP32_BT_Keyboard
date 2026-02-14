@@ -9,10 +9,14 @@ void setup_esp(); // call actual setup
 void call_app_main();
 
 void setup() {
+  Serial.begin(115200);
+  delay(100);
+  //Serial.println("Start Setup");
   setup_esp(); // call actual setup
 }
 
-void loop() {
+void loop() {  
+  //Serial.println("Start Main Loop");
   call_app_main();
 }
 

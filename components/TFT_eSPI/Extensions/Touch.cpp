@@ -239,6 +239,8 @@ void TFT_eSPI::calibrateTouch(uint16_t *parameters, uint32_t color_fg, uint32_t 
 
     if (i == 5) break; // used to clear the arrows
     
+    delay(5000);
+    
     switch (i) {
       case 0: // up left
         drawLine(0, 0, 0, size, color_fg);
@@ -263,7 +265,7 @@ void TFT_eSPI::calibrateTouch(uint16_t *parameters, uint32_t color_fg, uint32_t 
       }
 
     // user has to get the chance to release 
-    delay(2000);
+    delay(5000);
 
     for(uint8_t j= 0; j<8; j++){
       // Use a lower detect threshold as corners tend to be less sensitive

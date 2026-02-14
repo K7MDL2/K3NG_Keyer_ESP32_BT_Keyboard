@@ -80,7 +80,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define GPS_RX_PIN      36 // unused input from non-installed U3.  Has pullup R to 3.3v installed.  Solder a wire to R3.
     #define TOUCH_SDA       33  // intenral bus for i2c touch controller GT911 pins
     #define TOUCH_SCL       32
-    #define TOUCH_INT        4   // pin 21 not actually used for touch int because R25 is not installed on DIYMalls 3.2" display and 21 is for i2c
+    #define TOUCH_INT       -1   // pin 21 not actually used for touch int because R25 is not installed on DIYMalls 3.2" display and 21 is for i2c
     #define TOUCH_RST       25
     #define TOUCH_WIDTH    320  
     #define TOUCH_HEIGHT   240

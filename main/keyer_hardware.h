@@ -29,6 +29,9 @@
 // #define HARDWARE_IZ3GME // https://github.com/iz3gme/k3ng_cw_keyer  edit these files: keyer_features_and_options_iz3gme.h keyer_pin_settings_iz3gme.h keyer_settings.h
 // #define HARDWARE_YCCC_SO2R_MINI // edit these files: keyer_pin_settings_yccc_so2r_mini.h, keyer_settings_yccc_so2r_mini.h, keyer_features_and_options_yccc_so2r_mini.h
 #define HARDWARE_ESP32_DEV //works well with IDK ESP32 2.0.1 on 2.0.2 Sidetone doesn't work. //SP5IOU 20220129
+//#define ARDUINO_RASPBERRY_PI_PICO_W // used for Pico2W also - has BT and WiFi
+//#define ARDUINO_RASPBERRY_PI_PICO // used for Pic2 also
+
 // #define HARDWARE_TEST_EVERYTHING
 // #define HARDWARE_TEST
 
@@ -94,8 +97,13 @@
 #elif defined(HARDWARE_ESP32_DEV)
   #define PRIMARY_SERIAL_CLS HardwareSerial
   #define SECONDARY_SERIAL_CLS HardwareSerial
-#else
+  #define GPS_SERIAL_CLS HardwareSerial
+#elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
   #define PRIMARY_SERIAL_CLS HardwareSerial
   #define SECONDARY_SERIAL_CLS HardwareSerial 
+  #define GPS_SERIAL_CLS HardwareSerial
+#else
+  #define PRIMARY_SERIAL_CLS HardwareSerial
+  #define SECONDARY_SERIAL_CLS HardwareSerial
 #endif
   

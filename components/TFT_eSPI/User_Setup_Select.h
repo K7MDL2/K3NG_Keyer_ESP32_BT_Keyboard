@@ -24,7 +24,11 @@
 
 // Only ONE line below should be uncommented to define your setup.  Add extra lines and files as needed.
 
-#include "../../main/keyer_features_and_options_esp32_dev.h"
+#if defined(PROJECT_ESP32_COMPILER)
+     #include "../../main/keyer_features_and_options_esp32_dev.h"
+#else
+     #include "../../main/keyer_features_and_options_pico.h"
+#endif
 
        // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
 #if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD || CONFIG_DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)
@@ -42,6 +46,9 @@
 #elif (DISPLAY_TYPE == TFT_320x480_CAP_LCD || CONFIG_DISPLAY_TYPE == TFT_320x480_CAP_LCD)
      //#define FEATURE_TFT_320x480_CAP_LCD     
      #include <../TFT_e_SPI_Custom_Config/User_Setup_ST7796_320x480_Cap.h>
+#elif (DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD || CONFIG_DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD)
+     //#define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+     #include <./TFT_e_SPI_Custom_Config/User_Setup_Pico_320x480_res.h>    
 #else
      #include <User_Setup.h>           // Default setup is root library folder
 #endif

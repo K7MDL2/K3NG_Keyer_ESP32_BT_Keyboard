@@ -1440,11 +1440,16 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include <esp_task_wdt.h>
   static const char* TAG = "Main";
   //#define ARDUINO_ARCH_ESP32
-#else // end HARDWARE_ESP32_DEV
+#elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+  #include "EEPROM.h"
+  #include <PWMAudio.h>
+  #include "keyer.h"
+  PWMAudio pwm;
+#else
   #include <avr/pgmspace.h>
   #include <avr/wdt.h>
   #include <EEPROM.h>  
-#endif //ARDUINO_SAM_DUE
+#endif
 
 #if defined(HARDWARE_OPENCWKEYER_MK2)
   #include "keyer_features_and_options_opencwkeyer_mk2.h"
@@ -1484,6 +1489,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "keyer_features_and_options_yaacwk.h"
 #elif defined(HARDWARE_ESP32_DEV)//sp5iou 20220123
   #include "keyer_features_and_options_esp32_dev.h"
+  #define EEPROM_size 2048
+#elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+  #include "keyer_features_and_options_pico.h"
+  #define EEPROM_size 2048
 #elif defined(HARDWARE_TEST)
   #include "keyer_features_and_options_test.h"
 #elif defined(HARDWARE_IZ3GME)
@@ -1494,7 +1503,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "keyer_features_and_options.h"
 #endif
 
-#if !defined(HARDWARE_ESP32_DEV)
+#if !defined(HARDWARE_ESP32_DEV) && !defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(ARDUINO_RASPBERRY_PI_PICO)
   #include "keyer.h"
 #endif
 
@@ -1536,6 +1545,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #ifdef ARDUINO_ARCH_ESP32
     #include "esp32-hal-log.h"
   #endif
+#elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+  #include "keyer_pin_settings_pico.h"
+  #include "keyer_settings_pico.h"
 #elif defined(HARDWARE_GENERIC_STM32F103C)
   #include "keyer_pin_settings_generic_STM32F103C.h"
   #include "keyer_settings_generic_STM32F103C.h"
@@ -1609,9 +1621,65 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_BT_KEYBOARD)
-  #include "bt_keyboard.hpp"  // from esp-32 project component folder
-  #include "esp_err.h"
-  #include "nvs_flash.h"
+    uint8_t CTRL_MASK;
+    uint8_t SHIFT_MASK;
+    uint8_t ALT_MASK;
+    uint8_t META_MASK;
+
+  #if defined(HARDWARE_ESP32_DEV)  
+    #include "bt_keyboard.hpp"  // from esp-32 project component folder
+    #include "esp_err.h"
+    #include "nvs_flash.h"
+    BTKeyboard bt_keyboard;
+  #endif
+  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+    #include <BluetoothHIDMaster.h>
+    // We need the inverse map, borrow from the Keyboard library
+    #include <HID_Keyboard.h>
+    extern const uint8_t KeyboardLayout_en_US[128];
+    BluetoothHIDMaster bt_keyboard;
+    HIDKeyStream keystream;
+    const char *DATAHEADER = "Last BLE Address"; // exactly 16 chars + \0
+    typedef struct {
+      char hdr[16];     // The header marker so we know this is our data
+      uint8_t addr[6];  // MAC of the peer we last connected to
+      uint8_t addrType; // Type of address (normal or randomized) of the last peer
+    } EEPROMDATA;
+    
+    //const uint8_t KEY_CAPS_LOCK = 0x39;
+    enum class KeyModifier : uint8_t {
+      L_CTRL  = 0x01,
+      L_SHIFT = 0x02,
+      L_ALT   = 0x04,
+      L_META  = 0x08,
+      R_CTRL  = 0x10,
+      R_SHIFT = 0x20,
+      R_ALT   = 0x40,
+      R_META  = 0x80
+    };
+
+    const uint8_t CTRL_MASK  = ((uint8_t)KeyModifier::L_CTRL) | ((uint8_t)KeyModifier::R_CTRL);
+    const uint8_t SHIFT_MASK = ((uint8_t)KeyModifier::L_SHIFT) | ((uint8_t)KeyModifier::R_SHIFT);
+    const uint8_t ALT_MASK   = ((uint8_t)KeyModifier::L_ALT) | ((uint8_t)KeyModifier::R_ALT);
+    const uint8_t META_MASK  = ((uint8_t)KeyModifier::L_META) | ((uint8_t)KeyModifier::R_META);
+
+    const uint8_t MAX_KEY_DATA_SIZE = 20;
+    typedef struct {
+      uint8_t     size;
+      uint8_t     keys[MAX_KEY_DATA_SIZE];
+      uint8_t     state;
+      KeyModifier modifier;
+    } KeyInfo;  
+
+    KeyInfo inf;
+    bool new_bt_key = false;
+    #ifdef USE_BLE
+      bool use_BLE = true;
+    #else
+      bool use_BLE = false;
+    #endif
+    #define is_connected connected   // handle both esp and pico forms
+  #endif
 #endif
 
 #if defined(FEATURE_LCD_4BIT) || defined(FEATURE_LCD1602_N07DH) || defined (FEATURE_LCD_8BIT) // works on 3.2V supply and logic, but do not work on every pins (SP5IOU)
@@ -1909,12 +1977,15 @@ struct config_t {  // 120 bytes total
   bool ignore_gps;  // set to true if we shoudl not use GPS info
   float declination; // store the declination stored in memory 12 from config, or from a user entered overriding value in memory 12
   uint32_t gps_baud; // store the last known GPS serial baud rate
+  char hdr[16];     // The header marker so we know this is our data (for BT/BLE on Pico)
+  uint8_t addr[6];  // BT/BLE MAC of the peer we last connected to
+  uint8_t addrType; // BLE Type of address (normal or randomized) of the last peer (ignored for BT Classic)
 
-#if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
-  char wifissid[20]=WIFI_SSID;//Initialize configuration.wifissid with default set in keyer_settings...h file
-  char wifipassword[20]=WIFI_PASSWORD;//Initialize configuration.wifipassword with default set in keyer_settings...h file
+  #if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
+    char wifissid[20]=WIFI_SSID;//Initialize configuration.wifissid with default set in keyer_settings...h file
+    char wifipassword[20]=WIFI_PASSWORD;//Initialize configuration.wifipassword with default set in keyer_settings...h file
     //40 bytes
-#endif
+  #endif
 } configuration;
 
 // Forward declarations to make esp-idf happy
@@ -1965,12 +2036,11 @@ void repeat_play_memory(PRIMARY_SERIAL_CLS * port_to_use);
 void serial_set_memory_repeat(PRIMARY_SERIAL_CLS * port_to_use);
 void initialize_eeprom();
 void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use);
-void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type_called);
 void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use);
 void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte group_size) ;
 void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type);
-void initialize_eeprom();
 void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use);
+void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type_called);
 void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type_called);
 void cli_keying_compensation(PRIMARY_SERIAL_CLS * port_to_use,String command_arguments);
 void serial_wpm_set(PRIMARY_SERIAL_CLS * port_to_use) ;
@@ -1983,7 +2053,7 @@ void popup(bool show);
 void sinewave_interrupt_compute();
 void initialize_sinewave_generator();
 void initialize_tonsin();
-void mydelay(uint32_t _ms);
+void myDelay(uint32_t _ms);
 void setup_esp();
 int print_memory(byte memory_number, char *mem_string);
 void check_gps(bool force_update, bool ignore_gps);
@@ -1994,6 +2064,7 @@ void store_Grid(char * grid);
 int validate_grid(const char * input_grid, char grid[]);
 int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]);
 void process_gps(char * memory_str, bool force_update, uint8_t source);
+void memorycheck();
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
@@ -2028,7 +2099,7 @@ enum button_ID{
 };
 
   uint16_t t_x = 0, t_y = 0;    // Variables to store touch coordinates
-  bool button_active = false;
+  volatile bool button_active = false;
   uint8_t button_row = 0;  // default to row 1
   uint16_t BtnX_active = 0;  // tracks if a key_ID is active across touches
  
@@ -2185,6 +2256,8 @@ void s_noTone(uint8_t sidetone_line_pin_num);
 void generic_popup_key(uint16_t key_ID, const char* msg_text);
 void display_heading(void);
 bool stop_msg = false;
+void keyboard_connected_handler();
+void keyboard_lost_connection_handler();
 
 //#define USE_BT_TASK // for BT check in a task
 #ifdef USE_BT_TASK
@@ -2248,8 +2321,6 @@ bool popup_active = false;
   #include "TinyGPSPlus.h"
   #include <string>
 
-  SECONDARY_SERIAL_CLS * gps_serial_port;
-
   /* Global variables for handling GPS conversion to Maindernhead grid square  */
   #define NMEA_MAX_LENGTH  (120)
   
@@ -2262,7 +2333,7 @@ bool popup_active = false;
   void reverse(char *str, int len);
   void ftoa(float n, char *res, int afterpoint);
   int positionToMaidenhead(char m[]);
-  int Convert_to_MH(void);
+  int Convert_to_MH(char gps_grid[]);
   void ConvertToMinutes(char _gps_msg[]);
   tmElements_t tm;
   TinyGPSPlus gps; // The TinyGPSPlus object
@@ -2346,6 +2417,9 @@ byte pot_wpm_low_value;
   #endif
   byte incoming_serial_byte;
   long primary_serial_port_baud_rate;
+  #ifdef FEATURE_GPS
+    long gps_serial_port_baud_rate;
+  #endif
   byte cw_send_echo_inhibit = 0;
   #ifdef FEATURE_COMMAND_LINE_INTERFACE
     byte serial_backslash_command;
@@ -2395,16 +2469,99 @@ byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
   #endif //OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE
 #endif //FEATURE_WINKEY_EMULATION
 
-#if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+#if defined(FEATURE_PS2_KEYBOARD)
   byte ps2_keyboard_mode = PS2_KEYBOARD_NORMAL;
   byte ps2_keyboard_command_buffer[25];
   byte ps2_keyboard_command_buffer_pointer = 0;
 #endif //FEATURE_PS2_KEYBOARD
 
-#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+#if defined(FEATURE_BT_KEYBOARD)  || defined(FEATURE_TOUCH_DISPLAY)
   byte bt_keyboard_mode = BT_KEYBOARD_NORMAL;
   byte bt_keyboard_command_buffer[25];
   byte bt_keyboard_command_buffer_pointer = 0;
+#endif 
+
+#if defined(FEATURE_BT_KEYBOARD)  && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+const char *macToString(const uint8_t *addr, uint8_t addrType) {
+  static char mac[32];
+  sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x,%d\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addrType ? 1 : 0);
+  return mac;
+}
+
+uint8_t lastAddress[6] = {};
+uint8_t lastAddressType = 0;
+
+void loadEEPROM() {
+  configurationMDATA data;  // sub struct in configuration struct
+  //EEPROM.begin(sizeof(EEPROMDATA));
+  //EEPROM.get(0, data);
+  //EEPROM.end();
+  if (memcmp(data.hdr, DATAHEADER, sizeof(data.hdr))) {
+    // Not our data, just clear things
+    Serial.println("No previous paired device found in EEPROM");
+    bzero(lastAddress, 6);
+    lastAddressType = 0;
+  } else {
+    // Our baby, copy it to local storage
+    Serial.printf("Previoudly paired device found: %s\n", macToString(data.addr, data.addrType));
+    memcpy(lastAddress, data.addr, sizeof(lastAddress));
+    lastAddressType = data.addrType;
+  }
+}
+
+void saveEEPROM() {
+  configuration.EEPROMDATA data;
+  memcpy(data.hdr, DATAHEADER, sizeof(data.hdr));
+  memcpy(data.addr, lastAddress, sizeof(data.addr));
+  data.addrType = lastAddressType;
+  //EEPROM.begin(sizeof(EEPROMDATA));
+  //EEPROM.put(0, data);
+  //EEPROM.commit();
+  //EEPROM.end();
+  Serial.printf("Wrote paired device to EEPROM: %s\n", macToString(lastAddress, lastAddressType));
+}
+
+// Either try continually to reconnect to the last device connected,
+// or if it's invalid or user holds BOOTSEL then we'll start a new
+// pairing process (i.e. the peripheral will need to be put into
+// pairing mode to bond)
+void connectOrPair() {
+  uint8_t x = 0;
+  for (int i = 0; i < 6; i++) {
+    x |= lastAddress[i];
+  }
+  if (x) {
+    // There's a valid address, attempt to reconnect forever until connect or BOOTSEL
+    Serial.printf("Attempting to reconnect to %s...\n", macToString(lastAddress, lastAddressType));
+    do {
+      delay(10);      
+      if (use_BLE) bt_keyboard.connectBLE(lastAddress, lastAddressType);
+      else bt_keyboard.connect(lastAddress);
+    } while (!bt_keyboard.connected() && !BOOTSEL);
+    if (bt_keyboard.connected()) {
+      Serial.println("Reconnected!\n");      
+      return;
+    }
+    // Fall through to pair
+  }
+  //pinMode(LED_BUILTIN, OUTPUT);
+  bool l = true;
+  Serial.println("Entering pairing mode.  Set the peripheral to pair state");
+  bt_keyboard.clearPairing();
+  do {
+    //digitalWrite(LED_BUILTIN, l);    
+    l = !l;
+    delay(10);
+    if (use_BLE) bt_keyboard.connectBLE();
+    else bt_keyboard.connectAny();
+  } while (!bt_keyboard.connected());
+  Serial.printf("Connected to device: %s\n", macToString(bt_keyboard.lastConnectedAddress(), bt_keyboard.lastConnectedAddressType()));
+  memcpy(lastAddress, bt_keyboard.lastConnectedAddress(), sizeof(lastAddress));
+  lastAddressType = bt_keyboard.lastConnectedAddressType();
+  // We've update the connection, store away
+  saveEEPROM();
+  keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);
+}
 #endif //FEATURE_BT_KEYBOARD
 
 #ifdef FEATURE_HELL
@@ -2596,10 +2753,6 @@ byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
   KbdRptParser KeyboardPrs;
 #endif
 
-#if defined(FEATURE_BT_KEYBOARD)
-  BTKeyboard bt_keyboard;
-#endif
-
 #if defined(FEATURE_USB_MOUSE)
   class MouseRptParser : public MouseReportParser 
     {
@@ -2627,6 +2780,10 @@ PRIMARY_SERIAL_CLS * primary_serial_port;
 #endif
 
 PRIMARY_SERIAL_CLS * debug_serial_port;
+
+#if defined(FEATURE_GPS) && !defined(GPS_TEST)  
+  GPS_SERIAL_CLS * gps_serial_port;
+#endif
 
 #ifdef FEATURE_PTT_INTERLOCK
   byte ptt_interlock_active = 0;
@@ -2908,13 +3065,13 @@ byte service_tx_inhibit_and_pause(){
       if (!pause_sending_buffer_active){
         pause_sending_buffer = 1;
         pause_sending_buffer_active = 1;
-        mydelay(10);
+        myDelay(10);
       }
     } else {
       if (pause_sending_buffer_active){
         pause_sending_buffer = 0;
         pause_sending_buffer_active = 0;
-        mydelay(10);
+        myDelay(10);
       } 
     }
 
@@ -3380,7 +3537,7 @@ void service_keypad(){
             Keyboard.write(KEY_CAPS_LOCK);
             #ifdef OPTION_CW_KEYBOARD_CAPSLOCK_BEEP
               if (cw_keyboard_capslock_on){
-                beep();mydelay(100);
+                beep();myDelay(100);
                 boop();
                 cw_keyboard_capslock_on = 0;
               } else {
@@ -3644,7 +3801,7 @@ void check_sleep(){
     sleep_enable();
     #ifdef DEBUG_SLEEP
     debug_serial_port->println(F("check_sleep: entering sleep"));
-    mydelay(1000);
+    myDelay(1000);
     #endif //DEBUG_SLEEP
 
     sleep_mode();
@@ -3709,7 +3866,7 @@ void check_sleep(){
 
     #ifdef DEBUG_SLEEP
       debug_serial_port->println(F("check_sleep: entering sleep"));
-      mydelay(1000);
+      myDelay(1000);
     #endif //DEBUG_SLEEP
 
     if (keyer_awake){
@@ -3797,13 +3954,13 @@ void lcd_scroll_box_clear() {
           return;  // skip this when a popup window is up, else will corrupt popup window content
         }
       //if (TFT_VIEWPORT_EXISTS) {
-      //    debug_serial_port->println("Close Viewport");
+      //    debug_serial_port->println(F("Close Viewport"));
           lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
       //    lcd.resetViewport();
       //}
       //else {
-      //    debug_serial_port->println("Clear scroll box, no Close Viewport");
+      //    debug_serial_port->println(F("Clear scroll box, no Close Viewport"));
       //    lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
           lcd.setTextColor(TFT_WHITE, TFT_BLACK);
       //}
@@ -3817,8 +3974,8 @@ void lcd_scroll_box_clear() {
 
 char bt_keyboard_read() {
   #if !defined(USE_BT_TASK) && defined(FEATURE_BT_KEYBOARD)
-    vTaskDelay(1 / portTICK_PERIOD_MS);
-    //check_bt_keyboard();
+    myDelay(1);
+    check_bt_keyboard();
   #endif
   if (queue_available()) return queuepop();
   else return 0;
@@ -3826,8 +3983,8 @@ char bt_keyboard_read() {
 
 int bt_keyboard_available() {
   #if !defined(USE_BT_TASK) && defined(FEATURE_BT_KEYBOARD)
-    vTaskDelay(1 / portTICK_PERIOD_MS);
-    //check_bt_keyboard();
+    myDelay(1);
+    check_bt_keyboard();
   #endif
   return queue_available();
 }
@@ -3835,9 +3992,12 @@ int bt_keyboard_available() {
 int touch_key_read() {  // if touch_button_available then there is a non-zero touch key value set in button_active
   #if defined(FEATURE_TOUCH_DISPLAY)
     #ifndef USE_TOUCH_TASK
-      check_touch_buttons();    
+      //check_touch_buttons();    
     #endif 
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
+    #if defined(DEBUG_TOUCH)
+      debug_serial_port->print(F("Read Touch"));
+    #endif //DEBUG_TOUCH
     if (button_active) process_buttons();
     if (queue_available()) return queuepop();
     else return 0;    
@@ -3849,8 +4009,12 @@ int touch_key_read() {  // if touch_button_available then there is a non-zero to
 int touch_button_available() {
   #if defined(FEATURE_TOUCH_DISPLAY)
     #ifndef USE_TOUCH_TASK
-      check_touch_buttons();
+      //check_touch_buttons();
     #endif
+    #if defined(DEBUG_TOUCH_x)
+      debug_serial_port->print(F("Check if Touch Event is Waiting: "));
+      debug_serial_port->println(button_active, DEC);
+    #endif //DEBUG_TOUCH
     if (button_active) process_buttons();
     return queue_available();
   #else
@@ -4015,7 +4179,7 @@ void update_icons(void) {
       last_pause_sending_buffer = pause_sending_buffer;
     }
 
-    #if defined (FEATURE_BT_KEYBOARD) 
+    #if defined(FEATURE_BT_KEYBOARD) 
     static bool last_BT_Connected = 0;
       if (last_BT_Connected != bt_keyboard.is_connected())
       {
@@ -4054,7 +4218,7 @@ void testlcd(char status, int x, int y) {
 void service_display() {
 
   #ifdef DEBUG_LOOP
-  debug_serial_port->println(F("loop: entering service_display"));
+    debug_serial_port->println(F("loop: entering service_display"));
   #endif    
 
   #define SCREEN_REFRESH_IDLE 0
@@ -4125,7 +4289,7 @@ void service_display() {
       lcd_status = lcd_previous_status;
       switch (lcd_status) {
         case LCD_CLEAR:
-            vTaskDelay(1 / portTICK_PERIOD_MS);
+            myDelay(1);
             lcd_scroll_box_clear();
             break;
         case LCD_SCROLL_MSG:   // this is called after a timed message clears the display and the buffer has to be redrawn onscreen.  Also at start of Pause
@@ -4143,7 +4307,7 @@ void service_display() {
             lcd_status = LCD_REVERT;
           }
           else {
-            mydelay(5);
+            myDelay(5);
           }
           break;
         case LCD_SCROLL_MSG:
@@ -4246,32 +4410,34 @@ void display_scroll_print_char(char charin){
 #ifdef FEATURE_DISPLAY
 void clear_display_row(byte row_number)
 {
-    #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-        lcd.backlight();
-    #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
+  #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+      lcd.backlight();
+  #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 
-    #ifndef FEATURE_TFT_DISPLAY
-        lcd.noCursor();//sp5iou 20180328
-    #endif
-  
-      // blank out line
-    #ifdef FEATURE_TFT_DISPLAY
-        lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-        lcd.setFreeFont(TFT_FONT_MEDIUM);
-        lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP+2+(row_number*FONT_HEIGHT), SCROLL_BOX_WIDTH, FONT_HEIGHT, 6, TFT_BLACK);
-        lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  #ifndef FEATURE_TFT_DISPLAY
+      lcd.noCursor();//sp5iou 20180328
+  #endif
 
-        // Loop method
-        //int32_t y1 = SCROLL_TOP_LINE+(row_number*FONT_HEIGHT);
-        //int32_t x1 = SCROLL_LEFT_SIDE-4+(x*COLUMN_WIDTH);
-        //lcd.drawChar(' ', x1, y1);
-        //lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    #else
-        for (byte x = 0; x < LCD_COLUMNS; x++) {
-          lcd.setCursor(x,row_number);
-          lcd.print(F(" "));
-        }
-    #endif
+    // blank out line
+  #ifdef FEATURE_TFT_DISPLAY
+      lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+      lcd.setFreeFont(TFT_FONT_MEDIUM);
+      lcd.setTextDatum(MC_DATUM);
+      lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP+6+(row_number*FONT_HEIGHT+2), SCROLL_BOX_WIDTH, FONT_HEIGHT, 6, TFT_BLACK);
+      lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+      lcd.setTextDatum(MY_DATUM);
+
+      // Loop method
+      //int32_t y1 = SCROLL_TOP_LINE+(row_number*FONT_HEIGHT);
+      //int32_t x1 = SCROLL_LEFT_SIDE-4+(x*COLUMN_WIDTH);
+      //lcd.drawChar(' ', x1, y1);
+      //lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  #else
+      for (byte x = 0; x < LCD_COLUMNS; x++) {
+        lcd.setCursor(x,row_number);
+        lcd.print(F(" "));
+      }
+  #endif
 }
 #endif
 
@@ -4279,6 +4445,8 @@ void clear_display_row(byte row_number)
 #ifdef FEATURE_DISPLAY
 void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration)
 {
+  //debug_serial_port->printf("Start lcd_center_print_timed(): Row:%d  Duration:%d  Incoming string is:", row_number, duration);
+  //debug_serial_port->println(lcd_print_string);
   #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
     lcd.backlight();
   #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
@@ -4297,17 +4465,18 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
     clear_display_row(row_number);
   }
   #ifdef FEATURE_TFT_DISPLAY
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK); 
     lcd.setFreeFont(TFT_FONT_MEDIUM);
     lcd.setTextDatum(MC_DATUM);
-      uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT);
-      lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, 4);
-    lcd.setTextDatum(MY_DATUM);   // restore o generic dataum
+    uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT);
+    //debug_serial_port->print("lcd_center_print_timed(): string = "); debug_serial_port->println(lcd_print_string);
+    lcd.setTextColor(TFT_WHITE);
+    lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, 4);
+    lcd.setTextDatum(MY_DATUM);   // restore to generic datum
   #else
     lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
     lcd.print(lcd_print_string);
   #endif
-  mydelay(5);
+  myDelay(5);
   lcd_timed_message_clear_time = millis() + duration;
 }
 #endif
@@ -4317,9 +4486,17 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 void check_for_dirty_configuration()
 {
   #ifdef DEBUG_LOOP
-    debug_serial_port->println(F("loop: entering check_for_dirty_configuration"));
+    debug_serial_port->print(F("loop: entering check_for_dirty_configuration - config_dirty = "));
+    debug_serial_port->println(config_dirty);
   #endif
 
+  #ifdef DEBUG_EEPROM_x
+    debug_serial_port->printf("d:%d w:%" PRIu32 " s:%d p:%d dit:%d dah:%d ee:%d pl:%d pr:%d\n",\
+       config_dirty,((millis()-last_config_write)>eeprom_write_time_ms), (send_buffer_bytes), \
+       (ptt_line_activated), (dit_buffer), (dah_buffer), (async_eeprom_write), \
+       (paddle_pin_read(paddle_left)  == HIGH), (paddle_pin_read(paddle_right) == HIGH));
+  #endif
+  
   //if ((config_dirty) && ((millis()-last_config_write)>30000) && (!send_buffer_bytes) && (!ptt_line_activated)) {
   if ((config_dirty) && ((millis()-last_config_write)>eeprom_write_time_ms) && (!send_buffer_bytes) && (!ptt_line_activated) && (!dit_buffer) && (!dah_buffer) && (!async_eeprom_write) && (paddle_pin_read(paddle_left) == HIGH)  && (paddle_pin_read(paddle_right) == HIGH) ) {
     write_settings_to_eeprom(0);
@@ -4404,10 +4581,10 @@ void check_ps2_keyboard()
     uint8_t keystroke = 0;
 
     #ifdef DEBUG_LOOP
-        debug_serial_port->print(F("loop: entering check_ps2_keyboard char = "));
+        debug_serial_port->print(F("loop: entering check_ps2_keyboard - "));
         //debug_serial_port->println(queue);
-        if (a != 0) 
-            debug_serial_port->println(a);
+        //if (a != 0) 
+        //    debug_serial_port->println(a);
     #endif    
 
     /* NOTE!!! This entire block of code is repeated again below the #else.  This was done to fix a bug with Notepad++ not
@@ -4425,19 +4602,25 @@ void check_ps2_keyboard()
                     if (bt_keyboard_available()) {
                       keystroke = bt_keyboard_read();
                     } else if (touch_button_available()) {                                         
-                        keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes  
+                      keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes  
                     }
                     
+                    #if defined(DEBUG_PS2_KEYBOARD) || defined(DEBUG_BT_KEYBOARD) || defined(DEBUG_TOUCH)|| defined(DEBUG_LOOP)
+                      debug_serial_port->print(F("check_ps2_keyboard: keystroke: "));
+                      debug_serial_port->println(keystroke,DEC);
+                    #endif //DEBUG_PS2_KEYBOARD
+
             #else  // Do PS2 keyboard
                 while ((keyboard.available() || touch_button_available()) && (play_memory_prempt == 0)) 
                 {      
-                    // read the next key                    
-                    if (bt_keyboard_available())
-                      keystroke = keyboard.read();
-                    if (touch_button_available())
-                      keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes
+                    // use BT keyboard char stream  
+                    if (bt_keyboard_available()) {
+                      keystroke = bt_keyboard_read();
+                    } else if (touch_button_available()) {                                         
+                        keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes  
+                    }
             #endif
-                    #if defined(DEBUG_PS2_KEYBOARD) || defined(DEBUG_BT_KEYBOARD)
+                    #if defined(DEBUG_PS2_KEYBOARD) || defined(DEBUG_BT_KEYBOARD) || defined(DEBUG_LOOP)
                         debug_serial_port->print(F("check_ps2_keyboard: keystroke: "));
                         debug_serial_port->println(keystroke,DEC);
                     #endif //DEBUG_PS2_KEYBOARD
@@ -4449,7 +4632,7 @@ void check_ps2_keyboard()
                         last_active_time = millis(); 
                     #endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 
-                    #if defined (FEATURE_BT_KEYBOARD) 
+                    #if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
                         if (bt_keyboard_mode == BT_KEYBOARD_NORMAL) 
                     #else
                         if (ps2_keyboard_mode == PS2_KEYBOARD_NORMAL)
@@ -4573,7 +4756,13 @@ void check_ps2_keyboard()
                                 #ifdef FEATURE_DISPLAY   // clear out the old text on the scrollable portion of display
                                     lcd_center_print_timed("Abort", 0, default_display_msg_delay);
                                     for (uint16_t i = 0; i < (LCD_ROWS); i++) {
+                                        
+                                    #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+                                        lcd_scroll_buffer[i] = "";
+                                        //memset(lcd_scroll_buffer[i], 0, sizeof(lcd_scroll_buffer[i])); // .clear() not on Pico. Maybe use memset(received, 0, sizeof(received))
+                                    #else 
                                         lcd_scroll_buffer[i].clear();
+                                    #endif
                                 }         
                                 #endif
                                 break;
@@ -4665,7 +4854,6 @@ void check_ps2_keyboard()
                                 #ifdef FEATURE_DISPLAY
                                     lcd_center_print_timed("Iambic A", 0, default_display_msg_delay);
                                 #endif
-
                                 config_dirty = 1;
                                 break;
 
@@ -4822,7 +5010,7 @@ void check_ps2_keyboard()
                                 } else if (configuration.sidetone_mode == SIDETONE_ON) {
                                     configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
                                     beep();
-                                    mydelay(400);
+                                    myDelay(400);
                                     beep();
                                     #ifdef FEATURE_DISPLAY
                                     if (LCD_COLUMNS < 9){
@@ -4872,6 +5060,7 @@ void check_ps2_keyboard()
                                     repeat_memory = 255;
                                 #endif
                                 if (keyboard_tune_on) {
+                                    debug_serial_port->println(F("Tune OFF"));
                                     sending_mode = MANUAL_SENDING;
                                     tx_and_sidetone_key(0);
                                     keyboard_tune_on = 0;
@@ -4879,8 +5068,9 @@ void check_ps2_keyboard()
                                     lcd_status = LCD_REVERT;
                                     #endif // FEATURE_DISPLAY
                                 } else {
+                                    debug_serial_port->println(F("Tune ON"));
                                     #ifdef FEATURE_DISPLAY
-                                    lcd_center_print_timed("Tune", 0, default_display_msg_delay);
+                                      lcd_center_print_timed("Tune", 0, default_display_msg_delay);
                                     #endif      
                                     sending_mode = MANUAL_SENDING;
                                     tx_and_sidetone_key(1);
@@ -4947,10 +5137,13 @@ void check_ps2_keyboard()
                                     default: next_baud = 4800; break;
                                   }                                   
                                   
-                                  debug_serial_port->print("New Serial Port Baud Rate is "); debug_serial_port->println(next_baud);
-                                  Serial2.updateBaudRate(next_baud);   // serial processing resumes after a few seconds delay
+                                  debug_serial_port->print("New Serial Port Baud Rate is "); debug_serial_port->println(next_baud);                                                                  
                                   configuration.gps_baud = next_baud;                                  
-                                  Serial2.read();  // similar to flush
+                                 
+                                  #if !defined(GPS_TEST)
+                                    gps_serial_port->updateBaudRate(next_baud);   // serial processing resumes after a few seconds delay
+                                    gps_serial_port->read();  // similar to flush                                 
+                                  #endif 
                                   #ifdef FEATURE_DISPLAY
                                     lcd_center_print_timed("Serial Baud " + String(next_baud), 0, default_display_msg_delay); 
                                   #endif
@@ -5200,15 +5393,13 @@ void ps2_keyboard_program_memory(byte memory_number)
   #endif
   repeat_memory = 255;
   while (looping) {
-    #ifdef HARDWARE_ESP32_DEV
-      vTaskDelay(1 / portTICK_PERIOD_MS);
-    #endif
+    myDelay(1);  // whem running in a task    
     #ifdef FEATURE_PS2_KEYBOARD
     while (keyboard.available() == 0) {
     #endif
     #if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
     while (bt_keyboard_available() == 0) {
-      mydelay(5);
+      myDelay(5);
     #endif
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -5249,6 +5440,9 @@ void ps2_keyboard_program_memory(byte memory_number)
           keystroke = uppercase(keystroke);
           #ifdef FEATURE_DISPLAY
             keyboard_string.concat(char(keystroke));
+            #ifdef DEBUG_MEMORIES
+              debug_serial_port->printf("ps2_keyboard_program_memory: Programming Memory %d with string: ", memory_number+1);debug_serial_port->println(keyboard_string);
+            #endif
             if (keyboard_string.length() > LCD_COLUMNS) {
               lcd_center_print_timed(keyboard_string.substring((keyboard_string.length()-LCD_COLUMNS)), 1, default_display_msg_delay);
             } else {         
@@ -5281,9 +5475,8 @@ void ps2_keyboard_program_memory(byte memory_number)
     }
     // write terminating 255
     EEPROM.write((memory_start(memory_number)+x),255);
-    debug_serial_port->print(F("\nWrote Keyboard Memory "));
-    debug_serial_port->println(memory_number+1);
-    #if defined(HARDWARE_ESP32_DEV)
+    debug_serial_port->print(F("\nWrote Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+    #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
       EEPROM.commit();
     #endif
     #ifdef FEATURE_DISPLAY
@@ -5315,7 +5508,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
 
   while (looping) {
     #ifdef HARDWARE_ESP32_DEV
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
     #endif
     #ifdef FEATURE_PS2_KEYBOARD
     if (keyboard.available() == 0) {        // wait for the next keystroke
@@ -5453,7 +5646,7 @@ void debug_capture ()
   byte serial_byte_in;
   int x = 1022;
 
-  while (primary_serial_port->available() == 0) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for first byte
+  while (primary_serial_port->available() == 0) {myDelay(1);}  // wait for first byte
   serial_byte_in = primary_serial_port->read();
   primary_serial_port->write(serial_byte_in);
   //if ((serial_byte_in > 47) or (serial_byte_in = 20)) { primary_serial_port->write(serial_byte_in); }  // echo back
@@ -5463,7 +5656,7 @@ void debug_capture ()
     EEPROM.write(x,serial_byte_in);
     x--;
     while ( x > 400) {
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       if (primary_serial_port->available() > 0) {
         serial_byte_in = primary_serial_port->read();
         EEPROM.write(x,serial_byte_in);
@@ -5475,8 +5668,11 @@ void debug_capture ()
       }
     }
   }
+  #if defined(HARDWARE_ESP32_DEV)  || defined(ARDUINO_RASPBERRY_PI_PICO_W) ||  defined(ARDUINO_RASPBERRY_PI_PICO)
+    EEPROM.commit();
+  #endif
 
-  while (1) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+  while (1) {myDelay(1);}
 
 }
 #endif
@@ -5508,7 +5704,7 @@ void debug_capture_dump()
     }
   }
 
-  while (1) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+  while (1) {myDelay(1);}
 
 }
 #endif
@@ -5836,7 +6032,7 @@ void put_memory_button_in_buffer(byte memory_number_to_put_in_buffer)
     }
   } else {
     #ifdef DEBUG_MEMORIES
-    debug_serial_port->println(F("put_memory_button_in_buffer: bad memory_number_to_put_in_buffer"));
+      debug_serial_port->println(F("put_memory_button_in_buffer: bad memory_number_to_put_in_buffer"));
     #endif
   }
 }
@@ -5861,7 +6057,7 @@ void check_paddles()
 
   static byte last_closure = NO_CLOSURE;
 
-  vTaskDelay(1 / portTICK_PERIOD_MS);
+  myDelay(1);
   check_dit_paddle();
   check_dah_paddle();  
 
@@ -6088,7 +6284,7 @@ void ptt_key(){
 
           //digitalWrite (current_tx_ptt_line, ptt_line_active_state);
 
-          //mydelay(configuration.ptt_lead_time[configuration.current_tx-1]);
+          //myDelay(configuration.ptt_lead_time[configuration.current_tx-1]);
           #ifdef FEATURE_SEQUENCER
             sequencer_ptt_inactive_time = 0;
           #endif  
@@ -6106,14 +6302,12 @@ void ptt_key(){
 
         //digitalWrite (configuration.current_ptt_line, ptt_line_active_state); 
 
-
-
         #if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION)
           if ((wk2_both_tx_activated) && (ptt_tx_2)) {
             digitalWrite (ptt_tx_2, ptt_line_active_state);
           }
         #endif
-         //mydelay(configuration.ptt_lead_time[configuration.current_tx-1]);
+         //myDelay(configuration.ptt_lead_time[configuration.current_tx-1]);
         #ifdef FEATURE_SEQUENCER
           sequencer_ptt_inactive_time = 0;
         #endif  
@@ -6127,7 +6321,7 @@ void ptt_key(){
     #endif
 
     while (!all_delays_satisfied){
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       #ifdef FEATURE_SEQUENCER
         if (sequencer_1_pin){
           if (((millis() - ptt_activation_time) >= configuration.ptt_active_to_sequencer_active_time[0]) || sequencer_1_active){
@@ -6428,45 +6622,54 @@ void check_ptt_tail()
 void write_settings_to_eeprom(int initialize_eeprom) {
 
   #if (!defined(ARDUINO_SAM_DUE) && \
-   !defined(ARDUINO_ARCH_MBED) && \
-   !defined(ARDUINO_RASPBERRY_PI_PICO_W) && \
-   !defined(ARDUINO_RASPBERRY_PI_PICO)) || \
-   (defined(ARDUINO_SAM_DUE) && \
-   defined(FEATURE_EEPROM_E24C1024))
+    !defined(ARDUINO_ARCH_MBED) && \
+    !defined(ARDUINO_RASPBERRY_PI_PICO_W) && \
+    !defined(ARDUINO_RASPBERRY_PI_PICO)) || \
+    (defined(ARDUINO_SAM_DUE) && \
+    defined(FEATURE_EEPROM_E24C1024))
 
     if (initialize_eeprom) {
         //configuration.magic_number = eeprom_magic_number;
         EEPROM.write(0, eeprom_magic_number);
-#ifdef FEATURE_MEMORIES
-        initialize_eeprom_memories();
-#endif  //FEATURE_MEMORIES  
+        #ifdef FEATURE_MEMORIES
+          initialize_eeprom_memories();
+        #endif  //FEATURE_MEMORIES  
     }
-      const byte* p = (const byte*)(const void*)&configuration;
-      unsigned int i;
-      int ee = 1;  // starting point of configuration struct
-      for (i = 0; i < sizeof(configuration); i++){
-        EEPROM.write(ee++, *p++);  
-      }
-      #if defined(HARDWARE_ESP32_DEV)
-      EEPROM.commit();;
-      #endif       
+    const byte* p = (const byte*)(const void*)&configuration;
+    unsigned int i;
+    int ee = 1;  // starting point of configuration struct
+    for (i = 0; i < sizeof(configuration); i++){
+      EEPROM.write(ee++, *p++);  
+    }
+    #if defined(HARDWARE_ESP32_DEV)
+    EEPROM.commit();;
+    #endif       
 
-      async_eeprom_write = 1;  // initiate an asynchronous eeprom write
-  
-  #endif //!defined(ARDUINO_SAM_DUE) || (defined(ARDUINO_SAM_DUE) && defined(FEATURE_EEPROM_E24C1024))
+    async_eeprom_write = 1;  // initiate an asynchronous eeprom write
 
-    #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+  #elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
       #if defined(DEBUG_EEPROM)
-        debug_serial_port->println(F("write_settings_to_eeprom: ARDUINO_RASPBERRY_PI_PICO"));
+        debug_serial_port->print(F("write_settings_to_eeprom: ARDUINO_RASPBERRY_PI_PICO"));
       #endif
-      EEPROM.write(0,eeprom_magic_number);
-      EEPROM.commit();
+      if (initialize_eeprom) {
+        #if defined(DEBUG_EEPROM)
+          debug_serial_port->print(F(" - Initialize EEPROM Settings AND Memories"));
+        #endif
+        //configuration.magic_number = eeprom_magic_number;
+        EEPROM.write(0, eeprom_magic_number);
+        //EEPROM.commit();
+        #ifdef FEATURE_MEMORIES
+          initialize_eeprom_memories();
+        #endif  //FEATURE_MEMORIES  
+      }
+      #if defined(DEBUG_EEPROM)
+        debug_serial_port->println(F(" - Save EEPROM Settings"));
+      #endif
       EEPROM.put(1, configuration);
       EEPROM.commit();
-    #endif
-
+  #endif
     config_dirty = 0;
-  }
+}
 
 //-------------------------------------------------------------------------------------------------------
 
@@ -6505,7 +6708,7 @@ void service_async_eeprom_write(){
       } else { // we're done
         async_eeprom_write = 0;
         last_async_eeprom_write_status = 0;
-        #if defined(ARDUINO_SAMD_VARIANT_COMPLIANCE) || defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
+        #if defined(ARDUINO_SAMD_VARIANT_COMPLIANCE) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
           EEPROM.commit();
         #endif       
 
@@ -6579,9 +6782,9 @@ int read_settings_from_eeprom() {
       #endif
       return 0;
     } else {
-    #if defined DEBUG_SETUP
-    debug_serial_port->println(F("Went here 10"));
-    #endif
+      #if defined DEBUG_SETUP
+        debug_serial_port->println(F("Went here 10"));
+      #endif
       #if defined(DEBUG_EEPROM_READ_SETTINGS)
         debug_serial_port->println(F("read_settings_from_eeprom: eeprom needs initialized"));
       #endif      
@@ -6593,9 +6796,10 @@ int read_settings_from_eeprom() {
   #if defined(DEBUG_EEPROM_READ_SETTINGS)
     debug_serial_port->println(F("read_settings_from_eeprom: bypassed read - no eeprom"));
   #endif
-     #if defined DEBUG_SETUP
+  
+  #if defined DEBUG_SETUP
     debug_serial_port->println(F("went here 11"));
-    #endif
+  #endif
  
   return 1;
 
@@ -6656,7 +6860,7 @@ void check_dit_paddle()
         // winkey_interrupted = 1;
 
         // tone(sidetone_line,1000);
-        // mydelay(500);
+        // myDelay(500);
         // noTone(sidetone_line);
 
         dit_buffer = 0;
@@ -6676,7 +6880,7 @@ void check_dit_paddle()
         repeat_memory = 255;
         #ifdef OPTION_DIT_PADDLE_NO_SEND_ON_MEM_RPT
           dit_buffer = 0;
-          while (!paddle_pin_read(dit_paddle)) {vTaskDelay(1 / portTICK_PERIOD_MS);};
+          while (!paddle_pin_read(dit_paddle)) {myDelay(1);};
           memory_rpt_interrupt_flag = 1;
         #endif
       }
@@ -7054,7 +7258,7 @@ void tx_and_sidetone_key (int state)
           }
         #endif
         if ((first_extension_time) && (previous_ptt_line_activated == 0)) {
-          mydelay(first_extension_time);
+          myDelay(first_extension_time);
         }
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
@@ -7119,7 +7323,7 @@ void tx_and_sidetone_key (int state)
           }
         #endif
         if ((first_extension_time) && (previous_ptt_line_activated == 0)) {
-          mydelay(first_extension_time);
+          myDelay(first_extension_time);
         }
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
@@ -7223,7 +7427,7 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
     #else
     while (((micros() - start) < ticks) && (service_tx_inhibit_and_pause() == 0)){
     #endif
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       check_ptt_tail();
       
       #if defined(FEATURE_SERIAL) && !defined(OPTION_DISABLE_SERIAL_PORT_CHECKING_WHILE_SENDING_CW)
@@ -7497,7 +7701,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
   unsigned long entry_time = millis();
 
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     #ifdef OPTION_WATCHDOG_TIMER
       wdt_reset();
     #endif  //OPTION_WATCHDOG_TIMER
@@ -7543,7 +7747,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
 
     #ifdef FEATURE_BUTTONS
       while (analogbuttonread(0)) {    // hit the button to get out of command mode if no paddle was hit
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
         looping = 0;
         button_hit = 1;
       }
@@ -7638,11 +7842,11 @@ void command_mode() {
   #endif
 
   while (stay_in_command_mode) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     cw_char = 0;
     looping = 1;
     while (looping) {
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       int8_t button_temp = button_array.Pressed();
 
           #ifdef FEATURE_DISPLAY
@@ -7686,9 +7890,9 @@ void command_mode() {
       if (button_temp >=0 ){  // check for a button press
         looping = 0;
         cw_char = 9;
-        mydelay(50);
+        myDelay(50);
         button_that_was_pressed = button_temp;
-        while (button_array.Held(button_that_was_pressed)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+        while (button_array.Held(button_that_was_pressed)) {myDelay(1);}
       }
 
       #if defined(FEATURE_SERIAL)
@@ -7769,7 +7973,7 @@ void command_mode() {
               lcd_center_print_timed("Speed " + String(configuration.wpm) + " wpm", 0, default_display_msg_delay);
             #endif                                                                      // OPTION_ADVANCED_SPEED_DISPLAY_DISPLAY
           #endif                                                                        // FEATURE_DISPLAY
-          mydelay(250);
+          myDelay(250);
           sprintf(c, "%d", configuration.wpm);
           send_char(c[0],KEYER_NORMAL);
           send_char(c[1],KEYER_NORMAL);
@@ -7979,7 +8183,7 @@ void command_mode() {
             configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
             #if !defined(FEATURE_COMMAND_MODE_ENHANCED_CMD_ACKNOWLEDGEMENT) 
               beep();
-              mydelay(200);
+              myDelay(200);
               beep();
             #else
               send_chars((char*)command_o_sidetone_paddle_only); 
@@ -8232,7 +8436,7 @@ void command_mode() {
           #ifdef FEATURE_DISPLAY
             lcd_center_print_timed("Status", 0, default_display_msg_delay);
             lcd_center_print_timed("wpm  " + String(configuration.wpm), 1, default_display_msg_delay);
-            mydelay(250);
+            myDelay(250);
           #endif                                                         // FEATURE_DISPLAY
 
           sprintf(c, "%d", configuration.wpm);
@@ -8244,21 +8448,21 @@ void command_mode() {
             case IAMBIC_A:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Iambic A", 1, default_display_msg_delay);
-                mydelay(250);
+                myDelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('A',KEYER_NORMAL);
               break;
             case IAMBIC_B:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Iambic B", 1, default_display_msg_delay);
-                mydelay(250);
+                myDelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('B',KEYER_NORMAL);
               break;
             case SINGLE_PADDLE:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Single Pdl", 1, default_display_msg_delay);
-                mydelay(250);
+                myDelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('S',KEYER_NORMAL);
               break;
@@ -8267,7 +8471,7 @@ void command_mode() {
             case ULTIMATIC:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Ultimatic", 1, default_display_msg_delay);
-                mydelay(250);
+                myDelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('U',KEYER_NORMAL);
               break;
@@ -8275,7 +8479,7 @@ void command_mode() {
             case BUG:
               #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("mode  Bug", 1, default_display_msg_delay);
-                mydelay(250);
+                myDelay(250);
               #endif                                                     // FEATURE_DISPLAY
               send_char('G',KEYER_NORMAL);
               break;
@@ -8285,7 +8489,7 @@ void command_mode() {
 
           #ifdef FEATURE_DISPLAY
             lcd_center_print_timed("weighting  " + String(configuration.weighting), 1, default_display_msg_delay);
-            mydelay(250);
+            myDelay(250);
           #endif                                                       // FEATURE_DISPLAY
           sprintf(c, "%d", configuration.weighting);
           send_char(c[0],KEYER_NORMAL);
@@ -8299,7 +8503,7 @@ void command_mode() {
               weight_deci[1] = (configuration.dah_to_dit_ratio % 10) + '0';                 // get the single digit units part
             }                                                                               // end if ((configuration.dah_to_dit_ratio % 100) != 0)
             lcd_center_print_timed("dah:dit  " + String(configuration.dah_to_dit_ratio / 100) + "." + weight_deci, 1, default_display_msg_delay);
-            mydelay(250);
+            myDelay(250);
           #endif                                                                            // FEATURE_DISPLAY
           sprintf(c, "%d", configuration.dah_to_dit_ratio);
           send_char(c[0],KEYER_NORMAL);
@@ -8469,7 +8673,7 @@ void command_progressive_5_char_echo_practice() {
   #endif 
 
   while (loop1) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     // if (practice_mode_called == ECHO_MIXED){
     //   practice_mode = random(ECHO_2_CHAR_WORDS,ECHO_QSO_WORDS+1);
     // } else {
@@ -8522,7 +8726,7 @@ void command_progressive_5_char_echo_practice() {
     
     loop2 = 1;
     while (loop2) {
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       user_send_loop = 1;
       user_sent_cw = "";
       cw_char = 0;
@@ -8530,7 +8734,7 @@ void command_progressive_5_char_echo_practice() {
 
       // send the CW to the user
       while ((x < (cw_to_send_to_user.length())) && (x < progressive_step_counter)) {
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
         send_char(cw_to_send_to_user[x],KEYER_NORMAL);
         // test
         // port_to_use->print(cw_to_send_to_user[x]);
@@ -8540,7 +8744,7 @@ void command_progressive_5_char_echo_practice() {
       //port_to_use->println();
 
       while (user_send_loop) {
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
         // get their paddle input
 
         #ifdef FEATURE_DISPLAY
@@ -8597,7 +8801,7 @@ void command_progressive_5_char_echo_practice() {
 
         // does the user want to exit?
         while (analogbuttonread(0)) {
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           user_send_loop = 0;
           loop1 = 0;
           loop2 = 0;
@@ -8638,7 +8842,7 @@ void command_progressive_5_char_echo_practice() {
                 #else  
                 // a loop to generate some increasing tones
                   tone(sidetone_line,NEWtone);                                              // generate a tone on the speaker pin
-                  mydelay(TONEduration);                                                      // hold the tone for the specified delay period
+                  myDelay(TONEduration);                                                      // hold the tone for the specified delay period
                   noTone(sidetone_line); 
                 #endif                                                                   // turn off the tone
                 NEWtone = NEWtone*1.25;                                                                  // calculate a new value for the tone frequency
@@ -8778,7 +8982,7 @@ void command_keying_compensation_adjust() {
   #endif
 
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8792,7 +8996,7 @@ void command_keying_compensation_adjust() {
       }
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       looping = 0;
     }
    
@@ -8802,7 +9006,7 @@ void command_keying_compensation_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
   config_dirty = 1;
@@ -8826,7 +9030,7 @@ void command_dah_to_dit_ratio_adjust() {
   #endif
 
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8836,7 +9040,7 @@ void command_dah_to_dit_ratio_adjust() {
       adjust_dah_to_dit_ratio(-10);
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       looping = 0;
     }
    
@@ -8846,7 +9050,7 @@ void command_dah_to_dit_ratio_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
 }
@@ -8868,7 +9072,7 @@ void command_weighting_adjust() {
   #endif
 
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     send_dit();
     send_dah();
     if (paddle_pin_read(paddle_left) == LOW) {
@@ -8880,7 +9084,7 @@ void command_weighting_adjust() {
       if (configuration.weighting < 10){configuration.weighting = 10;}
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       looping = 0;
     }
    
@@ -8889,7 +9093,7 @@ void command_weighting_adjust() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
   dit_buffer = 0;
   dah_buffer = 0;
 }
@@ -8921,7 +9125,7 @@ void command_tuning_mode() {
 
   key_tx = 1;
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     #ifdef OPTION_WATCHDOG_TIMER
       wdt_reset();
     #endif  //OPTION_WATCHDOG_TIMER
@@ -8945,7 +9149,7 @@ void command_tuning_mode() {
       tx_and_sidetone_key(1);
       ptt_key();
       while ((paddle_pin_read(paddle_right) == LOW) && (paddle_pin_read(paddle_left) == HIGH)) {
-        mydelay(10);
+        myDelay(10);
       }
     } else {
       if ((paddle_pin_read(paddle_right) == LOW) && (latched)) {
@@ -8954,7 +9158,7 @@ void command_tuning_mode() {
         tx_and_sidetone_key(0);
         ptt_unkey();
         while ((paddle_pin_read(paddle_right) == LOW) && (paddle_pin_read(paddle_left) == HIGH)) {
-          mydelay(10);
+          myDelay(10);
         }
       }
     }
@@ -8966,7 +9170,7 @@ void command_tuning_mode() {
   sending_mode = MANUAL_SENDING;
   tx_and_sidetone_key(0);
   ptt_unkey();
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
   key_tx = 0;
   send_dit();
   dit_buffer = 0;
@@ -9007,7 +9211,7 @@ void command_sidetone_freq_adj() {
   #endif
 
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
         #ifdef FEATURE_M5STACK_CORE2
           M5.Speaker.tone(700, configuration.hz_sidetone);
@@ -9036,7 +9240,7 @@ void command_sidetone_freq_adj() {
 	  sidetone_adj(1);
 	#endif                                              // OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
       #endif                                                // FEATURE_DISPLAY
-      mydelay(10);
+      myDelay(10);
     }
     if (paddle_pin_read(paddle_right) == LOW) {
       #ifdef FEATURE_DISPLAY
@@ -9057,10 +9261,10 @@ void command_sidetone_freq_adj() {
 	    sidetone_adj(-1);
 	#endif                                              // OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
       #endif                                                // FEATURE_DISPLAY
-      mydelay(10);
+      myDelay(10);
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       looping = 0;
     }
 
@@ -9069,7 +9273,7 @@ void command_sidetone_freq_adj() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
           #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
             s_noTone(sidetone_line);
           #else
@@ -9108,7 +9312,7 @@ void command_speed_mode(byte mode) {
   }         
   
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     send_dit();
     if ((paddle_pin_read(paddle_left) == LOW)) {
       if (mode == COMMAND_SPEED_MODE_KEYER_WPM) {
@@ -9142,7 +9346,7 @@ void command_speed_mode(byte mode) {
     }
     while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0) ))  // if paddles are squeezed or button0 pressed - exit
     {
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       looping = 0;
     }
 
@@ -9157,7 +9361,7 @@ void command_speed_mode(byte mode) {
   dit_buffer = 0;
   dah_buffer = 0;
 
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // wait for all lines to go high
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
   #ifndef FEATURE_DISPLAY
     // announce speed in CW
     if (mode == COMMAND_SPEED_MODE_KEYER_WPM){
@@ -9313,7 +9517,7 @@ void check_buttons() {
   button_depress_time = button_array.last_pressed_ms;
 
   while (button_array.Held(analogbuttontemp, button_depress_time + 1000)) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     if ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
       button_depress_time = 1001;  // if button 0 is held and a paddle gets hit, assume we have a hold and shortcut out
     }
@@ -9376,7 +9580,7 @@ void check_buttons() {
         key_tx = 0;
         // do stuff if this is a command button hold down
         while (button_array.Held(analogbuttontemp)) {
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           if (paddle_pin_read(paddle_left) == LOW) { 
  	          #ifdef OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
               speed_change(-1);                                           // left paddle decrease speed
@@ -9440,7 +9644,7 @@ void check_buttons() {
       }  // (analogbuttontemp == 0)
       if ((analogbuttontemp > 0) && (analogbuttontemp < analog_buttons_number_of_buttons)) {
         while (button_array.Held(analogbuttontemp)) {
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           if (((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) && (analogbuttontemp < (number_of_memories + 1))){
             #ifdef FEATURE_MEMORIES
               repeat_memory = analogbuttontemp - 1;
@@ -9589,7 +9793,7 @@ void beep()
   #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
     // #if defined(FEATURE_SINEWAVE_SIDETONE)
     //   tone(sidetone_line, hz_high_beep);
-    //   mydelay(200);
+    //   myDelay(200);
     //   noTone(sidetone_line);
     // #else
     #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
@@ -9602,7 +9806,7 @@ void beep()
   #else
     if (sidetone_line) {
       digitalWrite(sidetone_line, sidetone_line_active_state);
-      mydelay(200);
+      myDelay(200);
       digitalWrite(sidetone_line, sidetone_line_inactive_state);
     }
   #endif
@@ -9621,14 +9825,14 @@ void boop()
             #endif
         #else  
             tone(sidetone_line, hz_low_beep, 0);
-            mydelay(100);
+            myDelay(100);
             noTone(sidetone_line);
         #endif
 
     #else
         if (sidetone_line) {
         digitalWrite(sidetone_line, sidetone_line_active_state);
-        mydelay(100);
+        myDelay(100);
         digitalWrite(sidetone_line, sidetone_line_inactive_state);
         }
     #endif    
@@ -9649,15 +9853,15 @@ void beep_boop()
             #endif
         #else  
             tone(sidetone_line, hz_high_beep);
-            mydelay(100);
+            myDelay(100);
             tone(sidetone_line, hz_low_beep);
-            mydelay(100);
+            myDelay(100);
             noTone(sidetone_line);
         #endif
     #else
             if (sidetone_line) {
             digitalWrite(sidetone_line, sidetone_line_active_state);
-            mydelay(200);
+            myDelay(200);
             digitalWrite(sidetone_line, sidetone_line_inactive_state);
             }
     #endif     
@@ -9678,15 +9882,15 @@ void boop_beep()
         #endif
      #else  
         tone(sidetone_line, hz_low_beep);
-        mydelay(100);
+        myDelay(100);
         tone(sidetone_line, hz_high_beep);
-        mydelay(100);
+        myDelay(100);
         noTone(sidetone_line);
     #endif
   #else
     if (sidetone_line) {
       digitalWrite(sidetone_line, sidetone_line_active_state);
-      mydelay(200);
+      myDelay(200);
       digitalWrite(sidetone_line, sidetone_line_inactive_state);
     }
   #endif         
@@ -10114,7 +10318,7 @@ void serial_qrss_mode()
   byte error =0;
 
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     if (primary_serial_port->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -10151,7 +10355,7 @@ void serial_qrss_mode()
   if (error) {
     primary_serial_port->println(F("Error..."));
     while (primary_serial_port->available() > 0) { 
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       incoming_serial_byte = primary_serial_port->read(); 
     }  // clear out buffer
     return;
@@ -10305,6 +10509,7 @@ void service_send_buffer(byte no_print)
             remove_from_send_buffer();
             configuration.wpm = configuration.wpm + send_buffer_array[0];
             remove_from_send_buffer();
+            config_dirty = 1;
             
             #ifdef FEATURE_LED_RING
               update_led_ring();
@@ -11345,9 +11550,9 @@ void winkey_port_write(byte byte_to_send,byte override_filter){
   #ifdef DEBUG_WINKEY_PORT_WRITE
   if ((byte_to_send > 4) && (byte_to_send < 31)){
     boop();
-    mydelay(500);
+    myDelay(500);
     boop();
-    mydelay(500);
+    myDelay(500);
     boop();
     //return;
   }
@@ -11404,7 +11609,7 @@ void service_winkey(byte action) {
     if (!winkey_discard_bytes_init_done) {
       if (primary_serial_port->available()) {
         for (int z = winkey_discard_bytes_startup;z > 0;z--) {
-          while (primary_serial_port->available() == 0) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+          while (primary_serial_port->available() == 0) {myDelay(1);}
           primary_serial_port->read();
         }
         winkey_discard_bytes_init_done = 1;
@@ -12465,14 +12670,14 @@ void service_winkey(byte action) {
       }
        if (winkey_status ==  WINKEY_ADMIN_PADDLE_A2D_PARM_3) {
         #ifdef DEBUG_WINKEY
-          debug_serial_port->println("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_3 byte");
+          debug_serial_port->println(F("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_3 byte"));
         #endif //DEBUG_WINKEY         
         winkey_status = WINKEY_NO_COMMAND_IN_PROGRESS;
       }    
 
       if (winkey_status ==  WINKEY_ADMIN_PADDLE_A2D_PARM_2) {
         #ifdef DEBUG_WINKEY
-          debug_serial_port->println("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_2 byte");
+          debug_serial_port->println(F("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_2 byte"));
         #endif //DEBUG_WINKEY                
         winkey_status = WINKEY_ADMIN_PADDLE_A2D_PARM_3;
       }
@@ -12480,7 +12685,7 @@ void service_winkey(byte action) {
       if (winkey_status ==  WINKEY_ADMIN_PADDLE_A2D_PARM_1) {
         winkey_status = WINKEY_ADMIN_PADDLE_A2D_PARM_2;
         #ifdef DEBUG_WINKEY
-          debug_serial_port->println("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_1 byte");
+          debug_serial_port->println(F("service_winkey:ADMIN_COMMAND WINKEY_ADMIN_PADDLE_A2D_PARM_1 byte"));
         #endif //DEBUG_WINKEY        
       }      
 
@@ -12630,7 +12835,7 @@ void check_serial(){
   #endif
 
   while (primary_serial_port->available() > 0) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming_serial_byte = primary_serial_port->read();
     #ifdef FEATURE_SLEEP
       last_activity_time = millis(); 
@@ -12681,7 +12886,7 @@ void check_serial(){
 
   #ifdef FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
     while (secondary_serial_port->available() > 0) {
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       incoming_serial_byte = secondary_serial_port->read();     
       #ifdef FEATURE_SLEEP
         last_activity_time = millis(); 
@@ -12723,8 +12928,8 @@ void serial_page_pause(PRIMARY_SERIAL_CLS * port_to_use,byte seconds_timeout){
   unsigned long pause_start_time = millis();
 
   port_to_use->println(F("\r\nPress enter..."));
-  while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){vTaskDelay(1 / portTICK_PERIOD_MS);}
-  while (port_to_use->available()){vTaskDelay(1 / portTICK_PERIOD_MS); port_to_use->read();}
+  while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){myDelay(1);}
+  while (port_to_use->available()){myDelay(1); port_to_use->read();}
 
 }
 #endif //defined(FEATURE_SERIAL_HELP) && defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE)
@@ -13009,7 +13214,7 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
       } else if (configuration.sidetone_mode == SIDETONE_ON) {
         configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
         beep();
-        mydelay(200);
+        myDelay(200);
         beep();
         port_to_use->println(F("Paddle Only"));
       } else {
@@ -13257,7 +13462,7 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
   String userinput = "";
 
   while (looping) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     if (port_to_use->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -13275,7 +13480,7 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
           check_rotary_encoder();
         #endif //FEATURE_ROTARY_ENCODER        
         #ifdef FEATURE_DISPLAY
-          mydelay(10);  // service FreeRTOS watching timer while in loop
+          myDelay(10);  // service FreeRTOS watching timer while in loop
         #endif
       }
     } else {
@@ -13511,7 +13716,7 @@ void cli_sd_ls_command(PRIMARY_SERIAL_CLS * port_to_use,String directory){
   File dir = SD.open(directory);
 
   while (true) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     File entry =  dir.openNextFile();
     if (! entry) {
       // no more files
@@ -13683,8 +13888,8 @@ void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use){
       w++;
       if (w > EEPROM_DUMP_LINES){
         port_to_use->println(F("\r\nPress enter..."));
-        while(!port_to_use->available()){}
-        while(port_to_use->available()){port_to_use->read();}
+        while(!port_to_use->available()){myDelay(1);}
+        while(port_to_use->available()){port_to_use->read(); myDelay(1);}
         w = 0;
       }
     }
@@ -13763,7 +13968,7 @@ void service_paddle_echo()
         Keyboard.write(KEY_CAPS_LOCK);
         #ifdef OPTION_CW_KEYBOARD_CAPSLOCK_BEEP
           if (cw_keyboard_capslock_on){
-            beep();mydelay(100);
+            beep();myDelay(100);
             boop();
             cw_keyboard_capslock_on = 0;
           } else {
@@ -14140,6 +14345,7 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit,PRIMARY
   int numbers[6];
 
   while (looping) {
+    myDelay(1);
     if (port_to_use->available() == 0) {        // wait for the next keystroke
       if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
         check_paddles();
@@ -14182,7 +14388,7 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit,PRIMARY
     if (raise_error_message == RAISE_ERROR_MSG){
       port_to_use->println(F("Error..."));
     }
-    while (port_to_use->available() > 0) { vTaskDelay(1 / portTICK_PERIOD_MS); incoming_serial_byte = port_to_use->read(); }  // clear out buffer
+    while (port_to_use->available() > 0) { myDelay(1); incoming_serial_byte = port_to_use->read();}  // clear out buffer
     return(-1);
   } else {
     int y = 1;
@@ -14361,9 +14567,9 @@ void serial_set_weighting(PRIMARY_SERIAL_CLS * port_to_use) {
 void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
   byte incoming;
 
-  mydelay(100);
+  myDelay(100);
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming = port_to_use->read();
   }
 
@@ -14371,12 +14577,12 @@ void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
   tx_and_sidetone_key(1);
   port_to_use->println(F("\r\nKeying tx - press a key to unkey"));
   #ifdef FEATURE_BUTTONS
-    while ((port_to_use->available() == 0) && (!analogbuttonread(0))) {vTaskDelay(1 / portTICK_PERIOD_MS);}  // keystroke or button0 hit gets us out of here
+    while ((port_to_use->available() == 0) && (!analogbuttonread(0))) {myDelay(1);}  // keystroke or button0 hit gets us out of here
   #else
-    while (port_to_use->available() == 0) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+    while (port_to_use->available() == 0) {myDelay(1);}
   #endif
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming = port_to_use->read();
   }
   tx_and_sidetone_key(0);
@@ -14507,7 +14713,7 @@ String generate_callsign(byte callsign_mode) {
 //   int caller_wpm_delta = 0;
 
 //   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-//   vTaskDelay(1 / portTICK_PERIOD_MS);
+//   myDelay(1);
 //     port_to_use->read();
 //   }  
 
@@ -14525,7 +14731,7 @@ String generate_callsign(byte callsign_mode) {
 //   term.println(F("-------- ---- -------\n\n"));    
   
 //   while (loop1){
-//      vTaskDelay(1 / portTICK_PERIOD_MS);
+//      myDelay(1);
 //     // get user keyboard input
 //     if (port_to_use->available()){      
 //       user_input_buffer[user_input_buffer_characters] = toupper(port_to_use->read());
@@ -14720,7 +14926,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       port_to_use->read();
     }  
    
@@ -14736,7 +14942,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
     menu_loop2 = 1;
     
     while (menu_loop2) {
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -14779,7 +14985,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use) {
   while(menu_loop) {
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       port_to_use->read();
     }  
    
@@ -14800,7 +15006,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use) {
     menu_loop2 = 1;
     
     while (menu_loop2) {   
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)) {
@@ -14883,20 +15089,20 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
   port_to_use->println(F("Receive / Transmit Echo Practice\r\n\r\nCopy the code and send it back using the paddle."));
   port_to_use->println(F("Enter a blackslash \\ to exit.\r\n"));
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming_char = port_to_use->read();
   }
   port_to_use->print(F("Press enter to start...\r\n"));
   while (port_to_use->available() == 0) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
   }
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming_char = port_to_use->read();
   }
 
   while (loop1) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     if (practice_mode_called == ECHO_MIXED){
       practice_mode = random(ECHO_2_CHAR_WORDS,ECHO_QSO_WORDS+1);
     } else {
@@ -14946,7 +15152,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
     loop2 = 1;
     
     while (loop2){
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       user_send_loop = 1;
       user_sent_cw = "";
       cw_char = 0;
@@ -14954,7 +15160,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 
       // send the CW to the user
       while ((x < (cw_to_send_to_user.length())) && (x < progressive_step_counter)) {
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
         send_char(cw_to_send_to_user[x],KEYER_NORMAL);
         // test
         port_to_use->print(cw_to_send_to_user[x]);
@@ -14965,7 +15171,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 
       while (user_send_loop) {
         // get their paddle input
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
         #ifdef FEATURE_DISPLAY
           service_display();
         #endif
@@ -15049,7 +15255,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
         }
         #ifdef FEATURE_BUTTONS
           while (analogbuttonread(0)) {                                                 // can exit by pressing the Command Mode button
-            vTaskDelay(1 / portTICK_PERIOD_MS);
+            myDelay(1);
             user_send_loop = 0;
             loop1 = 0;
             loop2 = 0;
@@ -15083,7 +15289,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
                     #endif
                 #else  
                     tone(sidetone_line,NEWtone);                                            // generate a tone on the speaker pin
-                    mydelay(TONEduration);                                                    // hold the tone for the specified delay period
+                    myDelay(TONEduration);                                                    // hold the tone for the specified delay period
                     noTone(sidetone_line);
                 #endif                                                  // turn off the tone
                 NEWtone = NEWtone*1.25;                                                 // calculate a new value for the tone frequency
@@ -15134,7 +15340,7 @@ void serial_receive_practice_menu(PRIMARY_SERIAL_CLS * port_to_use,byte practice
   while(menu_loop) {
  
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       port_to_use->read();
     }  
    
@@ -15157,7 +15363,7 @@ void serial_receive_practice_menu(PRIMARY_SERIAL_CLS * port_to_use,byte practice
     menu_loop2 = 1;
     
     while (menu_loop2){
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -15219,7 +15425,7 @@ void serial_set_wordspace_parameters(PRIMARY_SERIAL_CLS * port_to_use,byte mode_
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       port_to_use->read();
     }  
   
@@ -15234,7 +15440,7 @@ void serial_set_wordspace_parameters(PRIMARY_SERIAL_CLS * port_to_use,byte mode_
     temp_value = 0;
     
     while (menu_loop2){
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char > 47) && (incoming_char < 58)){
@@ -15290,7 +15496,7 @@ void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use){
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       port_to_use->read();
     }  
     
@@ -15303,7 +15509,7 @@ void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use){
     menu_loop2 = 1;
     
     while (menu_loop2){
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -15357,12 +15563,12 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
   #endif
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming_char = port_to_use->read();
   }
 
   while (loop1){
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     switch(random_mode){
       case RANDOM_LETTER_GROUPS: random_character = random(65,91); break;
       case RANDOM_NUMBER_GROUPS: random_character = random(48,58); break;
@@ -15409,7 +15615,7 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
       }
     #else 
       while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
         loop1 = 0;
       }    
     #endif //FEATURE_BUTTONS
@@ -15433,7 +15639,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
   while(menu_loop){
   
     while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       port_to_use->read();
     }  
     
@@ -15461,7 +15667,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
     menu_loop2 = 1;
     
     while (menu_loop2){
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       if (port_to_use->available()){
         incoming_char = port_to_use->read();
         if ((incoming_char != 10) && (incoming_char != 13)){
@@ -15532,13 +15738,13 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
   #endif
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     port_to_use->read();
   }
 
 
   while (loop1){
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     if (practice_type_called == WORDSWORTH_MIXED){
       practice_type = random(WORDSWORTH_2_CHAR_WORDS,WORDSWORTH_QSO_WORDS+1);
     } else {
@@ -15579,12 +15785,12 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
     repetitions = 0;
 
     while ((loop3) && (repetitions < configuration.wordsworth_repetition)){ // word sending loop
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       loop2 = 1;
       x = 0;
 
       while (loop2){ //character sending loop
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
         #if defined(DEBUG_WORDSWORTH)
           debug_serial_port->print(F("wordsworth_practice: send_char:"));
           debug_serial_port->print(word_buffer[x]);
@@ -15702,20 +15908,20 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   port_to_use->println(F("If you are using the Arduino serial monitor, select \"Carriage Return\" line ending."));
   port_to_use->println(F("Enter a blackslash \\ to exit.\r\n"));
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming_char = port_to_use->read();
   }
   port_to_use->print(F("Press enter to start...\r\n"));
   while (port_to_use->available() == 0) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
   }
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming_char = port_to_use->read();
   }
 
   while (loop1){
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     if (practice_type_called == PRACTICE_MIXED){
       practice_type = random(PRACTICE_2_CHAR_WORDS,PRACTICE_QSO_WORDS+1);
     } else {
@@ -15769,7 +15975,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
     loop2 = 1;
     
     while (loop2){
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       #if defined(DEBUG_CALLSIGN_PRACTICE_SHOW_CALLSIGN)
         port_to_use->println(callsign);
       #endif
@@ -15778,7 +15984,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
       user_entered_cw = "";
       x = 0;
       while (serialwaitloop) {
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
         if(x < (cw_to_send_to_user.length())){
           send_char(cw_to_send_to_user[x],KEYER_NORMAL);
           #ifdef FEATURE_DISPLAY
@@ -15789,7 +15995,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
         }
 
         while(port_to_use->available() > 0) {
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           incoming_char = port_to_use->read();
           incoming_char = toUpperCase(incoming_char);
           port_to_use->print(incoming_char);
@@ -15835,13 +16041,13 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
   
       #ifdef FEATURE_BUTTONS
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           loop1 = 0;
           loop2 = 0;
         }
       #else 
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           loop1 = 0;
           loop2 = 0;
         }    
@@ -15888,14 +16094,14 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
   port_to_use->println(F("Callsign receive practice\r\n"));
 
   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     incoming_char = port_to_use->read();
   }
 
 
 
   while (loop1){
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     if (practice_type_called == PRACTICE_MIXED){
       practice_type = random(PRACTICE_2_CHAR_WORDS,PRACTICE_QSO_WORDS+1);
     } else {
@@ -15954,7 +16160,7 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
     x = 0;
 
     while ((loop2) && (x < (cw_to_send_to_user.length()))) {
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       send_char(cw_to_send_to_user[x],KEYER_NORMAL);
       #ifdef FEATURE_DISPLAY
         display_scroll_print_char(cw_to_send_to_user[x]);
@@ -15971,14 +16177,14 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
 
       #ifdef FEATURE_BUTTONS
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           loop1 = 0;
           loop2 = 0;
           x = 99;
         }
       #else 
         while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           loop1 = 0;
           loop2 = 0;
           x = 99;
@@ -16448,7 +16654,7 @@ int convert_cw_number_to_ascii (long number_in)
 }
 
 //---------------------------------------------------------------------
-#ifdef DEBUG_MEMORYCHECK
+#if defined(DEBUG_MEMORYCHECK) && defined(ARDUINO_SAMD_VARIANT_COMPLIANCE)
 void memorycheck()
 {
   void* HP = malloc(4);
@@ -16666,7 +16872,7 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
   }
 
   if ((memory_number_entered) && (memory_data_entered) && (!error_flag)){
-    #if defined(HARDWARE_ESP32_DEV)
+    #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
       EEPROM.commit(); //SP5IOU 20220129
     #endif
     port_to_use->print(F("\n\rWrote memory "));
@@ -16737,7 +16943,7 @@ byte memory_nonblocking_delay(unsigned long delaytime)
   unsigned long starttime = millis();
 
   while ((millis() - starttime) < delaytime) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     check_paddles();
     #ifdef FEATURE_BUTTONS
       if (((dit_buffer) || (dah_buffer) || (analogbuttonread(0))) && (keyer_machine_mode != BEACON)) {   // exit if the paddle or button0 was hit
@@ -16747,7 +16953,7 @@ byte memory_nonblocking_delay(unsigned long delaytime)
       dit_buffer = 0;
       dah_buffer = 0;
       #ifdef FEATURE_BUTTONS
-        while (analogbuttonread(0)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+        while (analogbuttonread(0)) {myDelay(1);}
       #endif
       return 1;
     }
@@ -17415,7 +17621,7 @@ byte play_memory(byte memory_number) {
               button0_buffer = 0;
               repeat_memory = 255;
               #ifdef FEATURE_BUTTONS
-                while (analogbuttonread(0)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+                while (analogbuttonread(0)) {myDelay(1);}
               #endif  
               return 0;
             }
@@ -17426,7 +17632,7 @@ byte play_memory(byte memory_number) {
               button0_buffer = 0;
               repeat_memory = 255;
               #ifdef FEATURE_BUTTONS
-                while (analogbuttonread(0)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+                while (analogbuttonread(0)) {myDelay(1);}
               #endif  
               return 0;
             }
@@ -17561,19 +17767,19 @@ void program_memory(int memory_number)
   dah_buffer = 0;
   
   #if defined(FEATURE_BUTTONS) && !defined(FEATURE_STRAIGHT_KEY)
-    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0))) {vTaskDelay(1 / portTICK_PERIOD_MS); }  // loop until user starts sending or hits the button
+    while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0))) {myDelay(1); }  // loop until user starts sending or hits the button
   #endif
 
   #if defined(FEATURE_BUTTONS) && defined(FEATURE_STRAIGHT_KEY)
     #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
-      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { vTaskDelay(1 / portTICK_PERIOD_MS);}  // loop until user starts sending or hits the button
+      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { myDelay(1);}  // loop until user starts sending or hits the button
     #else
-      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { vTaskDelay(1 / portTICK_PERIOD_MS);}  // loop until user starts sending or hits the button
+      while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { myDelay(1);}  // loop until user starts sending or hits the button
     #endif
   #endif
 
   while (loop2) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     #ifdef DEBUG_MEMORY_WRITE
       debug_serial_port->println(F("program_memory: entering loop2\r"));
     #endif
@@ -17582,10 +17788,8 @@ void program_memory(int memory_number)
     paddle_hit = 0;
     loop1 = 1;
     
-
-
     while (loop1) {
-       vTaskDelay(1 / portTICK_PERIOD_MS);
+       myDelay(1);
        check_paddles();
        if (dit_buffer) {
          sending_mode = MANUAL_SENDING;
@@ -17646,7 +17850,7 @@ void program_memory(int memory_number)
 
        #ifdef FEATURE_BUTTONS
          while (analogbuttonread(0)) {    // hit the button to get out of command mode if no paddle was hit
-           vTaskDelay(1 / portTICK_PERIOD_MS);
+           myDelay(1);
            loop1 = 0;
            loop2 = 0;
          }
@@ -17765,7 +17969,7 @@ void initialize_i2c(void) {
   IST8310 ist8310;
 
   float convert_to_rad(float declination) { 
-    //debug_serial_port->print("  Declination in Rad: "); debug_serial_port->println(declination * (M_PI/180));
+    //debug_serial_port->print(F("  Declination in Rad: ")); debug_serial_port->println(declination * (M_PI/180));
     return (declination * (M_PI/180));
   }
 
@@ -17819,7 +18023,7 @@ void initialize_i2c(void) {
         //debug_serial_port->print(F("Declination stored in structure not 0 so use it = ")); debug_serial_port->println(declination);
       }
       sprintf(declination_str, "%3.3f", declination);
-      debug_serial_port->print("Declination = ");debug_serial_port->println(declination_str);
+      debug_serial_port->print(F("Declination = "));debug_serial_port->println(declination_str);
       uint8_t dec_len =  strlen(declination_str);
       for (x = 0; x < dec_len; x++) {  // write to memory
         EEPROM.write((memory_start(declination_memory_number)+x), (byte) uppercase(declination_str[x]));
@@ -17999,7 +18203,7 @@ IRAM_ATTR void read_io_handler(void *pvParameters)
 {
     //EventBits_t e_bits;
     uint8_t bits = 0;
-    mydelay(100);
+    myDelay(100);
     while (1)
     {
         if (xEventGroupWaitBits(Key_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {            
@@ -18011,7 +18215,7 @@ IRAM_ATTR void read_io_handler(void *pvParameters)
             #endif
             bits = 0x00;
         }
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        myDelay(1);
     } 
 }
 
@@ -18052,7 +18256,7 @@ IRAM_ATTR void read_io_handler(void *pvParameters)
 //---------------------------------------------------------------------
 
 void initialize_pins() {
-#if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) //sp5iou 20180329, sp5iou 20220129
+#if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
   #ifdef FEATURE_MCP23017_EXPANDER
     init_MCP23017();
   #elif defined(HARDWARE_ESP32_DEV)
@@ -18731,9 +18935,9 @@ void initialize_keyer_state(){
       memory_area_end = 253;
   #else
     #if (defined HARDWARE_ESP32_DEV)
-      memory_area_end = 1023;//SP5IOU 20220129
+      memory_area_end = EEPROM_size-1;//SP5IOU 20220129
   #else
-      memory_area_end = 1023; // not sure if this is a valid assumption
+      memory_area_end = EEPROM_size-1; // not sure if this is a valid assumption
   #endif
   #endif  
   #endif
@@ -18798,7 +19002,7 @@ void initialize_default_modes(){
     Serial.println(F("Went here 3"));
   #endif
 
-  mydelay(2500);  // wait a little bit for the caps to charge up on the paddle lines
+  myDelay(2500);  // wait a little bit for the caps to charge up on the paddle lines
   #if defined DEBUG_SETUP
     Serial.println(F("Went here 4"));
   #endif
@@ -18819,10 +19023,7 @@ void initialize_watchdog(){
 //--------------------------------------------------------------------- 
 
 void check_eeprom_for_initialization(){
-  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO) 
-    EEPROM.begin(4096);
-  #endif
-
+  
   #if defined(HARDWARE_GENERIC_STM32F103C)
 //      EEPROM.PageBase0 = 0x801F000; //SP5IOU 20210802
 //      EEPROM.PageBase1 = 0x801F800; //SP5IOU 20210802
@@ -18830,13 +19031,13 @@ void check_eeprom_for_initialization(){
 //      EEPROM.init(); //sp5iou 20180328 to reinitialize / initialize EEPROM
   #endif
   
-  #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
-    EEPROM.begin(1024);
+  #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO) 
+    EEPROM.begin(EEPROM_size);
   #endif
   
   // do an eeprom reset to defaults if paddles are squeezed
   if (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {
-    while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+    while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {myDelay(1);}
     initialize_eeprom();
   }
   
@@ -18902,7 +19103,11 @@ void initialize_serial_ports(){
 
   // initialize serial port
   #if defined(FEATURE_SERIAL)
-  
+
+    #ifdef FEATURE_GPS
+      gps_serial_port_baud_rate = GPS_SERIAL_PORT_BAUD;
+    #endif
+
     #if defined(FEATURE_WINKEY_EMULATION) && defined(FEATURE_COMMAND_LINE_INTERFACE) //--------------------------------------------
     
       #ifdef FEATURE_BUTTONS
@@ -18923,7 +19128,7 @@ void initialize_serial_ports(){
             primary_serial_port_baud_rate = PRIMARY_SERIAL_PORT_BAUD;
           #endif  //ifndef OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION
         }
-        while (analogbuttonread(0)) {vTaskDelay(1 / portTICK_PERIOD_MS);}
+        while (analogbuttonread(0)) {myDelay(1);}
       #else //FEATURE_BUTTONS  
         #ifdef OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION
           primary_serial_port_mode = SERIAL_WINKEY_EMULATION;
@@ -18946,9 +19151,13 @@ void initialize_serial_ports(){
     #endif //defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_COMMAND_LINE_INTERFACE)
     
     primary_serial_port = PRIMARY_SERIAL_PORT;
-
     primary_serial_port->begin(primary_serial_port_baud_rate);
-    
+
+    #if defined(FEATURE_GPS) && !defined(GPS_TEST)  
+      gps_serial_port = GPS_SERIAL_PORT;
+      gps_serial_port->begin(gps_serial_port_baud_rate);
+    #endif
+
     #ifdef DEBUG_STARTUP
       debug_serial_port->println(F("setup: serial port opened"));
     #endif //DEBUG_STARTUP
@@ -19009,7 +19218,7 @@ void initialize_ps2_keyboard(){
   attachInterrupt(1, ps2int_write, FALLING);
   digitalWrite(ps2_keyboard_data, LOW); // pullup off
   pinMode(ps2_keyboard_data, OUTPUT); // pull clock low
-  mydelay(200);
+  myDelay(200);
   #endif //OPTION_PS2_KEYBOARD_RESET
 
 
@@ -19057,18 +19266,21 @@ void ps2int_write() {
 #endif 
 
 //--------------------------------------------------------------------- 
-#ifdef FEATURE_BT_KEYBOARD
+#if defined(FEATURE_BT_KEYBOARD) && defined(HARDWARE_ESP32_DEV)
 
 void pairing_handler(uint32_t pid) {
     debug_serial_port->print(F("Please enter the following pairing code followed with ENTER on your keyboard: "));
     debug_serial_port->println(pid);    
-    mydelay(5);
+    myDelay(5);
     char pass[28];
     clear_display_row(1);
     sprintf(pass, "Pairing Code %lu", pid);
     lcd_center_print_timed(pass, 2, 15000);
 }
 
+#endif
+
+#ifdef FEATURE_BT_KEYBOARD
 void keyboard_lost_connection_handler() {
     debug_serial_port->println(F("====> Lost connection with keyboard <===="));
     BT_Keyboard_Lost = true;
@@ -19084,40 +19296,104 @@ void keyboard_connected_handler() {
 }
 #endif
 
-void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for BLE and BT Classic
-  esp_err_t ret;
+#if defined(FEATURE_BT_KEYBOARD) && (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO))
+// Consumer keys are the special media keys on most modern keyboards (mute/etc.)
+void ckb(void *cbdata, int key) {
+  bool state = (bool)cbdata;
+  Serial.printf("Consumer: %02x %s \n", key, state ? "DOWN" : "UP");
+
+  // enqueue
+  inf.size = 8;  // fake the size to pass through the 
+  //memcpy(&inf.keys, keys, 1);
+  inf.keys[2] =key;
+  //inf.modifier = (KeyModifier) key;
+  inf.modifier = (KeyModifier) 0;
+  inf.state = state;
+  new_bt_key = true;
+}
+
+// We get make/break for every key which lets us hold notes while a key is depressed
+void kb(void *cbdata, int key) {
+  auto key_mask = cbdata;
+
+  bool state = (bool)cbdata;
+  if (state && key < 128) {
+    inf.keys[2] = key;
+  } else {
+    switch (key) {
+      case 0xe0 ... 0xe6 :  inf.keys[1] = key; inf.modifier = (KeyModifier) key; break;
+      default: inf.modifier = (KeyModifier) 0; break;
+    }
+  }
+  inf.state = state;  // true for key down
+
+   Serial.printf("Keyboard1: %02x %s = '%c' mask = '%d' \n", key, state ? "DOWN" : "UP", state ? keystream.peek() : '-', key_mask);
+
+  // The HIDKeyStream object converts a key and state into ASCII.  HID key IDs do not map 1:1 to ASCII!
+  // Write the key and make/break state, then read 1 ASCII char back out.
+  keystream.flush();
+  keystream.write((uint8_t)key);
+  keystream.write((uint8_t)state);
   
+  Serial.printf("Keyboard2: %02x %s = '%c' mask = '%d' \n", key, state ? "DOWN" : "UP", state ? keystream.peek() : '-', key_mask);
+ 
+  // enqueue
+  inf.size = 8;  // fake the size to pass through the  
+  new_bt_key = true;
+  //xQueueSendToBack(event_queue_, &inf, 0);
+}
+#endif
+
+void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for BLE and BT Classic  
   #if defined(FEATURE_BT_KEYBOARD)
   
-    esp_log_level_set("*", ESP_LOG_NONE);
-    //esp_log_level_set("bt", ESP_LOG_VERBOSE);
-    //esp_log_level_set("ESP_HIDH", ESP_LOG_VERBOSE);
-    
+    #if defined(HARDWARE_ESP32_DEV) 
+      esp_err_t ret;
+      esp_log_level_set("*", ESP_LOG_NONE);
+      //esp_log_level_set("bt", ESP_LOG_VERBOSE);
+      //esp_log_level_set("ESP_HIDH", ESP_LOG_VERBOSE);
+
+      // To test the Pairing code entry, uncomment the following line as pairing info is
+      // kept in the nvs. Pairing will then be required on every boot.
+      //ESP_ERROR_CHECK(nvs_flash_erase());
+
+      ret = nvs_flash_init();
+      if ((ret == ESP_ERR_NVS_NO_FREE_PAGES) || (ret == ESP_ERR_NVS_NEW_VERSION_FOUND)) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+      }
+      ESP_ERROR_CHECK(ret);
+      
+      btStarted();  // workarond to avoid bt_controller init failure #259
+      //btStart();
+      //btStartMode(BT_MODE_CLASSIC_BT);
+
+      if (bt_keyboard.setup(pairing_handler, keyboard_connected_handler,
+                            keyboard_lost_connection_handler)) { // Must be called once
+          bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
+                                    // Default duration is 5 seconds
+      }
+    #endif
+
+    #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+      // Setup the bt_keyboard key to ASCII conversion
+      keystream.begin();
+      // We can use the cbData as a flag to see if we're making or breaking a key
+      bt_keyboard.onKeyDown(kb, (void *)true);
+      bt_keyboard.onKeyUp(kb, (void *)false);
+        // Consumer keys are the special function ones like "mute" or "home"
+      bt_keyboard.onConsumerKeyDown(ckb, (void *)true);
+      bt_keyboard.onConsumerKeyUp(ckb, (void *)false);
+      //loadEEPROM(); // See about reconnecting
+      if (use_BLE) bt_keyboard.begin(true);   // BLE
+      else bt_keyboard.begin();  // BT Classic
+    #endif
+
     pinMode(bt_keyboard_LED, OUTPUT);
     digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
-    // To test the Pairing code entry, uncomment the following line as pairing info is
-          // kept in the nvs. Pairing will then be required on every boot.
-    //ESP_ERROR_CHECK(nvs_flash_erase());
-    
-    ret = nvs_flash_init();
-    if ((ret == ESP_ERR_NVS_NO_FREE_PAGES) || (ret == ESP_ERR_NVS_NEW_VERSION_FOUND)) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
+    debug_serial_port->print(F("BT keyboard connected LED inacive state = ")); debug_serial_port->println(bt_keyboard_LED_pin_inactive_state);
+   
     debug_serial_port->println(F("BT and BLE device Scan Setup"));
-
-    btStarted();  // workarond to avoid bt_controller init failure #259
-
-    //btStart();
-    //btStartMode(BT_MODE_CLASSIC_BT);
-
-    if (bt_keyboard.setup(pairing_handler, keyboard_connected_handler,
-                          keyboard_lost_connection_handler)) { // Must be called once
-        bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing
-                                  // Default duration is 5 seconds
-    }
 
     if (!bt_keyboard.is_connected()) {
         debug_serial_port->println(F("No BT keyboards found"));
@@ -19183,12 +19459,14 @@ void queueflush()
 }
 //#endif // BT_KEYBOARD
 
-void mydelay(uint32_t _ms)
+void myDelay(uint32_t _ms)
 {
     //unsigned long t = millis() ;
-
-    vTaskDelay(portTICK_PERIOD_MS * _ms);
-
+    #if defined(USE_TOUCH_TASK) || defined(USE_BT_TASK) || defined(USE_TASK)
+      vTaskDelay(portTICK_PERIOD_MS * _ms);
+    #else
+      delay(1);
+    #endif
     //while (millis()-t < ms)
     //#ifdef PS2
     //    ps2poll() ;
@@ -19215,7 +19493,7 @@ const char btn4_text[] = {"This is test text Msg #4"};
 void initialize_display() {
 
   #ifdef FEATURE_DISPLAY    
-    #if defined(HARDWARE_ESP32_DEV) //SP5IOU fix for nothing on serial port for ESP32_dev
+    #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
       #ifdef FEATURE_LCD_LIQUIDCRYSTAL_I2C
         Wire.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN); // , 1000000); // SDA = GPIO 25, SCL = GPIO 26 for ESp32-WROOM32 Dev Module
       #endif
@@ -19285,7 +19563,7 @@ void initialize_display() {
           lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW3, 4);
         #endif
         lcd.drawString("V:" + String(CODE_VERSION), SCROLL_BOX_CENTER, SCROLL_BOX_ROW5, 4);
-        mydelay(100);
+        myDelay(100);
       #else
         lcd_center_print_timed("K3NG Keyer", 0, 4000);
         lcd_center_print_timed("BT Keyboard Search..", 1, 4000);
@@ -19309,7 +19587,7 @@ void initialize_display() {
     }
 
     #if defined(FEATURE_WIFI) //SP5IOU 20220129
-        mydelay(1000);
+        myDelay(1000);
         char IPString[18];
         sprintf(IPString, "%03d.%03d.%03d.%03d", configuration.ip[0], configuration.ip[1], configuration.ip[2], configuration.ip[3]);
         lcd_center_print_timed(IPString, 0, 4000);
@@ -19562,7 +19840,7 @@ void TX_enable_key(uint16_t key_ID) {
   #ifdef FEATURE_TOUCH_DISPLAY
     queueflush(); 
     queueadd(PS2_I_CTRL);
-    #ifdef FEATURE_BT_KEYBOARD
+    #if defined(FEATURE_BT_KEYBOARD) ||defined(FEATURE_TOUCH_DISPLAY)
       check_ps2_keyboard();
     #endif
     if (key_tx) {
@@ -19715,7 +19993,7 @@ void process_buttons() { // (uint8_t button_ID) {
         uint16_t threshold = 320;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also                                    
 
           // Scan buttons every 50ms at most when not sending out cw
-          if (!ptt_line_activated && millis() - scanTime >= 50) {  // check every 50ms for any activity
+          if (millis() - scanTime >= 50) {  // check every 50ms for any activity
             scanTime = millis();
 
             #ifdef TOUCH_GT911_BUTTONS          
@@ -19725,20 +20003,23 @@ void process_buttons() { // (uint8_t button_ID) {
                 t_x = tp.points[0].x;
                 t_y = tp.points[0].y;  
               }
+              //if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);     
             #endif
             
-            #ifdef FEATURE_TFT_HOSYOND_320x480_LCD              
+            #ifdef USE_RES_TOUCH
               //if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex  
-              uint16_t threshold = 320;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also              
+              uint16_t threshold = 20;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also              
+              //debug_serial_port->printf("GetTouch1: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed); 
+                          
               pressed = lcd.getTouch(&t_x, &t_y, threshold);
+              int z = lcd.getTouchRawZ();
+              //debug_serial_port->printf("GetTouch2: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, z, pressed);     
               //  xSemaphoreGive (xMutex);  // release the mutex 
               //}
             #endif              
-                      
-              if (pressed) {              
-              //debug_serial_port->printf("GetTouch: x:%d y:%d z:%d\n", t_x, t_y, threshold);
-              //button_active = false;     // set active flag if any valid button triggered on       
-
+                        
+            if (pressed) {                                          
+              //button_active = false;     // set active flag if any valid button triggered on                     
               for (uint8_t b = 0; b < buttonCount; b++) {
                 btn[b].p_btn.press(false);       
                 duration = 0;
@@ -19746,25 +20027,28 @@ void process_buttons() { // (uint8_t button_ID) {
                 btn[b].duration = 0;    
 
                 if (btn[b].p_btn.contains(t_x, t_y)) {
-                  // look for just pressed                  
-
+                  // look for just pressed                   
                   tpTime = millis();
                   while (pressed) {  // measure duration of button press
-                    mydelay(20);
+                    myDelay(20);
                     
                     #ifdef TOUCH_GT911_BUTTONS 
                       tp.read();
                       pressed = tp.isTouched;
                     #endif
 
-                    #ifdef FEATURE_TFT_HOSYOND_320x480_LCD
+                    #ifdef USE_RES_TOUCH
                       //if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
-                        pressed = lcd.getTouch(&t_x, &t_y, threshold);     
+                      pressed = lcd.getTouch(&t_x, &t_y, threshold);     
+                      //debug_serial_port->printf("GetTouch3: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed); 
                       //  xSemaphoreGive (xMutex);  // release the mutex  
                       //}               
-                    #endif
-                    
+                    #endif              
+
                     duration += (millis() - tpTime);      // add each touch to total duration            
+
+                    //debug_serial_port->printf("Touch Event: x:%d y:%d pressed:%d  duration:%lu\n", t_x, t_y, pressed, duration);  
+
                     if (duration >= 100 && duration < 1000) {               
                       //debug_serial_port->print(F("*Short duration = ")); debug_serial_port->println(duration);
                       btn[b].len = 1;
@@ -19788,6 +20072,8 @@ void process_buttons() { // (uint8_t button_ID) {
                     btn[b].p_btn.press(false); 
                     break;
                   }
+                  
+                  //debug_serial_port->print(F("Button Active Flag Set"));
                   btn[b].p_btn.press(true); // record state info for valid button. - process_buttons() will pick up event and add it to the ch queue)
                   button_active = true;     // set active flag if any valid button triggered on                                 
                 } else {
@@ -19797,7 +20083,7 @@ void process_buttons() { // (uint8_t button_ID) {
             }   // touched
           }   // end of scan period          
       #ifdef USE_TOUCH_TASK
-      mydelay(10);
+      myDelay(10);
       } // end of while loop for task mode 
       debug_serial_port->println("Error: Exited Check Buttons Task Loop");
       #endif   
@@ -19814,18 +20100,18 @@ void blink_ptt_dits_and_dahs(char const * cw_to_send){
     switch(cw_to_send[x]){
       case '.':
         ptt_key();
-        mydelay(100);
+        myDelay(100);
         ptt_unkey();
-        mydelay(100);
+        myDelay(100);
         break;
       case '-':
         ptt_key();
-        mydelay(300);
+        myDelay(300);
         ptt_unkey();
-        mydelay(100);
+        myDelay(100);
         break;
       case ' ':
-        mydelay(400);
+        myDelay(400);
         break;        
     }
 
@@ -20273,7 +20559,7 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key)
         } else if (configuration.sidetone_mode == SIDETONE_ON) {
           configuration.sidetone_mode = SIDETONE_PADDLE_ONLY;
           beep();
-             mydelay(200);
+             myDelay(200);
           beep();
           #ifdef FEATURE_DISPLAY
             if (LCD_COLUMNS < 9){
@@ -20635,22 +20921,22 @@ void initialize_usb()
       debug_serial_port->println(F("\rinitialize_usb: initializing"));
       #endif //DEBUG_USB
     }      
-    mydelay(200);
+    myDelay(200);
     next_time = millis() + 5000;
     #endif // (FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
     
     #ifdef FEATURE_USB_KEYBOARD
-    HidKeyboard.SetReportParser(0, (HIDReportParser*)&KeyboardPrs);
+    bt_keyboardKeyboard.SetReportParser(0, (bt_keyboardReportParser*)&KeyboardPrs);
     #endif //FEATURE_USB_KEYBOARD
     
     #ifdef FEATURE_USB_MOUSE
-    HidMouse.SetReportParser(0,(HIDReportParser*)&MousePrs);
+    bt_keyboardMouse.SetReportParser(0,(bt_keyboardReportParser*)&MousePrs);
     #endif //FEATURE_USB_MOUSE
     
     #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
     unsigned long start_init = millis();
     while ((millis() - start_init) < 2000){
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      myDelay(1);
       Usb.Task();
     }
     #ifdef DEBUG_USB
@@ -20770,7 +21056,7 @@ uint8_t read_capacitive_pin(int pinToMeasure) {
   // Discharge the pin first by setting it low and output
   *port &= ~(bitmask);
   *ddr  |= bitmask;
-  vTaskDelay(1 / portTICK_PERIOD_MS);
+  myDelay(1);
   // Prevent the timer IRQ from disturbing our measurement
   noInterrupts();
   // Make the pin an input with the internal pull-up on
@@ -21058,7 +21344,7 @@ void command_alphabet_send_practice(){
   
   do
   {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
     cw_char = get_cw_input_from_user(0);
     if (letter == (char)(convert_cw_number_to_ascii(cw_char))){  
       if (correct_answer_led) {
@@ -21158,7 +21444,7 @@ boolean wifiConnect(char* ssid = WIFI_SSID, char* password = WIFI_PASSWORD, int 
 #endif    
         WiFi.begin(ssid, password); //begin with credentials from function parameters
     for (int i = 0; (i < attempts) && (WiFi.status() != WL_CONNECTED); i++) {
-        mydelay(500);
+        myDelay(500);
 #if defined DEBUG_WIFI
         debug_serial_port->print(F("."));
 #endif    
@@ -21341,7 +21627,7 @@ void service_web_server() {
     valid_request = 0;
 
     while (client.connected()){ 
-      vTaskDelay(1 / portTICK_PERIOD_MS);  
+      myDelay(1);  
       if (client.available()){
         char c = client.read();
      
@@ -21427,7 +21713,7 @@ void service_web_server() {
             web_print_page_404(client);                      
           }
 
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+          myDelay(1);
           client.stop();
           web_server_incoming_string = "";  
          }
@@ -23899,9 +24185,9 @@ void nosineTone(uint8_t pin_dummy_variable) {    // disable tone on specified pi
 void debug_blink(){
   #if defined(DEBUG_STARTUP_BLINKS)
     digitalWrite(13,HIGH);
-    mydelay(250);
+    myDelay(250);
     digitalWrite(13,LOW);
-    mydelay(1000);
+    myDelay(1000);
   #endif //DEBUG_STARTUP
 }    
 
@@ -24292,11 +24578,10 @@ void update_time(){
 
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
-
     #ifndef USE_BT_TASK
      void check_bt_keyboard(void) {
-    #else
-    void check_bt_keyboard(void * pvParameters) {
+    #elif defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+     void check_bt_keyboard(void * pvParameters) {
 
         /* The parameter value is expected to be 1 as 1 is passed in the
         pvParameters value in the call to xTaskCreate() below. */
@@ -24306,7 +24591,15 @@ void update_time(){
         while (1)
         {
     #endif    
-          vTaskDelay(1 / portTICK_PERIOD_MS);
+
+          #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)    
+            if (!bt_keyboard.connected()) {
+              keyboard_lost_connection_handler(); 
+              connectOrPair();
+            }
+          #endif
+
+          myDelay(1);
           #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
                 //uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
@@ -24338,26 +24631,48 @@ void update_time(){
                 #endif
           #else  // this one has 2 methods, both work the same.
             char ch;
-            bool ret;
+            bool ret = 0;
             bool keyDN = false;
             bool keyUP = false;
             static bool CMD_KEY = false;
             static bool last_key = true;
             uint8_t modifier = 0;
-            TickType_t    repeat_period_;
-            BTKeyboard::KeyInfo inf;                
+            #ifdef HARDWARE_ESP32_DEV
+              TickType_t repeat_period_;
+            #else
+              uint32_t repeat_period_;
+            #endif
+            #ifdef HARDWARE_ESP32_DEV
+              BTKeyboard::KeyInfo inf;            
+            #endif
 
             #ifdef USE_BT_TASK
-              mydelay(1);
+              myDelay(1);
               do (
                   ret = bt_keyboard.wait_for_low_event(inf);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
             #else
               do {
-                  ret = bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
-                  //bt_keyboard.get_ascii_char();
-                  if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much
-            #endif
-                
+                  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)                                      
+                    if (!new_bt_key) {                    
+                      return;
+                    }
+                    new_bt_key = false;                    
+                    
+                    while (keystream.available())  {
+                      debug_serial_port->print("Peek ="); debug_serial_port->print (keystream.peek());
+                      ret = inf.keys[2] = keystream.read();                      
+                      debug_serial_port->print(" Key ="); debug_serial_port->print(inf.keys[2]);
+                      debug_serial_port->print("  ");
+                    }
+                    
+                  #else
+                   ret = bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  //bt_keyboard.get_ascii_char();                                   
+                  #endif
+
+                  if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much                
+            #endif                                           
+
                   // if there is delay getting here than can be multiple char arrays.  They are in a buffer, and once read here, the next read is brand new.  
                   //  We have to loop through all chars strings or store all the strings and then loop through them later.
                   // Since here is a timeout, the content of the buffer should be ignored. There is a immediate return when wait is false.
@@ -24367,13 +24682,12 @@ void update_time(){
                   
                   #ifdef DEBUG_BT_KEYBOARD_A     
                     if (inf.size > 2 && inf.size < 9 && inf.keys[2] !=0)  {
-                      debug_serial_port->print(" Keys=");                       
+                      debug_serial_port->print(" Keys = ");                       
                       for (int n = 0; n < inf.size; n++) {   // print out each char in each keys string                        
-                          debug_serial_port->printf(" %02X:",inf.keys[n]);                        
+                          debug_serial_port->printf("%02X:",inf.keys[n]);                        
                       }
-                      debug_serial_port->printf(" Char = %c", inf.keys[2]+0x5D);  // capture normal keys
-                      debug_serial_port->printf(" Size = %d\n",inf.size);
-                      debug_serial_port->println("Done");                      
+                      debug_serial_port->printf(" Char = %c", inf.keys[2]+0x5D); 
+                      debug_serial_port->printf(" Size = %d\n", inf.size);                      
                     }
                   #endif
 
@@ -24403,12 +24717,18 @@ void update_time(){
                         ch = inf.keys[1];  // capture normal keys
                       }
 
+                      if (ch == 0) return;
+
                       if (ch != 0 && !keyDN) {
                         keyDN = true;  // this is a valid alphanumeric key
-                        //debug_serial_port->print(F(" Key DN == "));
+                        //debug_serial_port->print(F(" Key DN == 0x")); debug_serial_port->println(ch, HEX);
                       }
 
-                      if (keyDN != last_key) // only process new key events separated by key-up
+                      //#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+                      if (1) // (inf.state != 0) // will only get a new key so much of the above is not required.
+                      //#else
+                      //if (keyDN != last_key) // only process new key events separated by key-up
+                      //#endif
                       {
                         #ifdef DEBUG_BT_KEYBOARD_B  // change #ifdef to #ifndef to use
                           debug_serial_port->print(F("[size="));
@@ -24423,7 +24743,7 @@ void update_time(){
                           debug_serial_port->print((uint8_t) modifier, HEX);
                           debug_serial_port->print(F(")-Char(0x"));
                           debug_serial_port->print((uint8_t) ch,HEX);
-                          debug_serial_port->print(F(")] "));
+                          debug_serial_port->println(F(")] "));
                         #endif
                         
                         #ifdef DEBUG_BT_KEYBOARD_A
@@ -24491,8 +24811,14 @@ void update_time(){
                             // x=0x10 is Right Ctl+key
                             // x=0x04 is Left Alt+key
                             // x=0x40 is Right Alt+key
+
+                            #ifdef HARDWARE_ESP32_DEV
+                              SHIFT_MASK = bt_keyboard.SHIFT_MASK;
+                              CTRL_MASK = bt_keyboard.CTRL_MASK;
+                              ALT_MASK = bt_keyboard.ALT_MASK;
+                            #endif                              
                             
-                            if (modifier & bt_keyboard.CTRL_MASK) // bt_keyboard.SHIFT_MASK) // left or right side key pressed
+                            if (modifier & CTRL_MASK) // bt_keyboard.SHIFT_MASK) // left or right side key pressed
                             {                                     
                                 switch (ch) 
                                 {
@@ -24504,7 +24830,7 @@ void update_time(){
                                 //debug_serial_port->print(F("CTRL key = 0x"));
                                 //debug_serial_port->println(ch, HEX);
                             }
-                            else if (modifier & bt_keyboard.ALT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
+                            else if (modifier & ALT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
                             {   
                                 switch (ch) 
                                 {
@@ -24518,7 +24844,7 @@ void update_time(){
                                 //debug_serial_port->print(F("ALT key = 0x"));
                                 //debug_serial_port->println(ch, HEX);
                             }
-                            else if (modifier & bt_keyboard.SHIFT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
+                            else if (modifier & SHIFT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
                             {
                                 //debug_serial_port->print(F("SHIFT key  modifier = 0x"));
                                 //debug_serial_port->println(modifier, HEX);
@@ -24667,7 +24993,7 @@ void update_time(){
                         }  // ens of switch
                         */
 
-                        queueadd(ch);   // add char to the queue                          
+                        if (ch != 0) queueadd(ch);   // add char to the queue                          
                         #ifdef DEBUG_BT_KEYBOARD_A
                             debug_serial_port->print(F("["));
                             if (queueempty())
@@ -24684,7 +25010,7 @@ void update_time(){
                   last_key = keyDN;
                   keyDN = false;
                 ch = 0;
-              mydelay(5); 
+              myDelay(5); 
             } while (ret);
           #endif
           #ifdef USE_BT_TASK
@@ -24943,7 +25269,7 @@ void ST7789(void *pvParameters)
 
     // never reach here
 	  while (1) {
-		  mydelay(5000);
+		  myDelay(5000);
 	  }
 }
 
@@ -24951,7 +25277,7 @@ static void listSPIFFS(char * path) {
 	DIR* dir = opendir(path);
 	assert(dir != NULL);
 	while (true) {
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    myDelay(1);
 		struct dirent*pe = readdir(dir);
 		if (!pe) break;
 		ESP_LOGI(__FUNCTION__,"d_name=%s d_ino=%d d_type=%x", pe->d_name,pe->d_ino, pe->d_type);
@@ -25054,7 +25380,7 @@ void initialize_st7789_lcd()
             tft.setTouch(calData);
             */
             while(1) {
-              mydelay(1000);
+              myDelay(1000);
               // Clear the screen
               lcd.fillScreen(TFT_BLACK);
               lcd.setTextColor(TFT_WHITE, TFT_BLACK);  
@@ -25147,7 +25473,7 @@ void initialize_st7789_lcd()
             #ifdef CAL_TOUCH
               lcd.calibrateTouch(calibrationData, TFT_WHITE, TFT_RED, 15);
             #endif
-            //debug_serial_port->printf("Cal data - x:%d x1:%d y:%d y1:%d bits=0x%X\n", calibrationData[0], calibrationData[1], calibrationData[2], calibrationData[3], calibrationData[4]);
+            debug_serial_port->printf("Cal data - x:%d x1:%d y:%d y1:%d bits=0x%X\n", calibrationData[0], calibrationData[1], calibrationData[2], calibrationData[3], calibrationData[4]);
             lcd.setTouch(calibrationData);              
           #endif
         #endif
@@ -25169,7 +25495,7 @@ void initialize_st7789_lcd()
     // now updae scroll box area with satus messages and eventually CW text to send
     //lcd.drawCentreString("Searching for BT Keyboard ...", SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 2);
     //lcd.drawString("Searching for BT Keyboard ...", SCROLL_BOX_LEFT_SIDE, SCREEN_HEIGHT/2, 2);
-    //mydelay(5000);
+    //myDelay(5000);
     
     //  Some possibly useful draw functions
     //lcd.setAddrWindow(10, 31, 316, 166);
@@ -25352,7 +25678,7 @@ void displayInfo()
   //if (gps.location.isUpdated())
   if (gps.location.isValid())
   {
-    Convert_to_MH();
+    Convert_to_MH(grid_sq_str);
     debug_serial_port->print(F("Grid Square = "));
     debug_serial_port->println(grid_sq_str);
     debug_serial_port->print(gps.location.lat(), 6);
@@ -25454,28 +25780,27 @@ void check_gps(bool force_update, bool ignore_gps) {
 
       while (*gpsStream) {
         if (gps.encode(*gpsStream++)) {
-          //displayInfo();
+          //displayInfo();          
           if (gps.location.isValid()) {
-            Convert_to_MH();
-            debug_serial_port->print(F("Grid Square = "));
-            debug_serial_port->println(grid_sq_str);
+            //debug_serial_port->print(F("Grid Square = ")); debug_serial_port->println(grid_sq_str);
             stop_msg = false;
           }
         }
       }
     #else
-      while (Serial2.available() > 0) {
+      while (gps_serial_port->available() > 0) {
         char c;
         int d;
-        c = d = Serial2.peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout  
+        c = d = gps_serial_port->peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout  
         if (isAlphaNumeric(c) || ispunct(c) || c == '\r' || c == '\n') {  // valid data at correct baud rate
-          gps.encode(Serial2.read());
+          gps.encode(gps_serial_port->read());
           stop_msg = false;
           lost_gps_timer = millis();
         } else {
-          Serial2.read();
+          gps_serial_port->read();
         }
       }
+    #endif
 
       if (gps.time.isValid() && gps.time.isUpdated())
       {
@@ -25514,16 +25839,17 @@ void check_gps(bool force_update, bool ignore_gps) {
       } else {
         if (!gps.location.isValid()) stop_msg = true;
       }
-    #endif
 
-    if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
-    {
-      debug_serial_port->println(F("No GPS detected: Check wiring."));
-      if (!stop_msg) _do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid  
-      strcpy(gps_grid, "");
-      stop_msg = true;
-      lost_gps_timer = millis();      
-    } 
+    #ifndef GPS_TEST
+      if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
+      {
+        debug_serial_port->println(F("No GPS detected: Check wiring."));
+        if (!stop_msg) _do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid  
+        strcpy(gps_grid, "");
+        stop_msg = true;
+        lost_gps_timer = millis();      
+      } 
+    #endif
 
     if (_do_process) {
       do_process = true;
@@ -25574,9 +25900,9 @@ void process_gps(char * memory_str, bool force_update, uint8_t source) {
   if (!do_process) return;
   do_process = false;
 
-  #ifdef GPS_PROCESS_DEBUG
+  #ifdef DEBUG_GPS
     debug_serial_port->print(F("\nProcess_gps: Function Input    = ")); debug_serial_port->print(memory_str); 
-      debug_serial_port->print(F("  Source = ")); debug_serial_port->println(source); 
+    debug_serial_port->print(F("  Source = ")); debug_serial_port->println(source); 
     debug_serial_port->print(F("Process_gps: Grid (current)    = ")); debug_serial_port->println(grid_sq_str);
     debug_serial_port->print(F("Process_gps: Grid FILE value   = ")); debug_serial_port->println(default_grid);
     debug_serial_port->print(F("Process_gps: Grid GPS value    = ")); debug_serial_port->println(configuration.GPS_GridSq);
@@ -25699,9 +26025,11 @@ void setup_esp()
     #ifdef FEATURE_GPS
       pinMode(GPS_RX_PIN, INPUT);
       if (configuration.gps_baud == 0) configuration.gps_baud = GPS_BAUD_RATE;
-      Serial2.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
+      #if !defined(GPS_TEST)
+        gps_serial_port->begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
+        gps_serial_port->flush();  // move the read string queue char ptr to the front so the next read works      
+      #endif
       lcd_center_print_timed("GPS Baud = " + String(configuration.gps_baud), 1, default_display_msg_delay);
-      Serial2.flush();  // move the read string queue char ptr to the front so the next read works      
       stop_msg = false;
       #ifdef DEFAULT_GRID
           validate_grid(DEFAULT_GRID, default_grid);  // done, haved a validated grid from file, could be ""
@@ -25736,20 +26064,20 @@ void main_loop(void)
     //if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
       #if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
         if (keyer_machine_mode == BEACON) {
-            vTaskDelay(1 / portTICK_PERIOD_MS);                                                                 // an odd duration delay before we enter BEACON mode
+            myDelay(1);                                                                 // an odd duration delay before we enter BEACON mode
             #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
                 unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
             #endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
 
             while (keyer_machine_mode == BEACON) {                                        // if we're in beacon mode, just keep playing memory 1
-                vTaskDelay(1 / portTICK_PERIOD_MS);
+                myDelay(1);
                 if (!send_buffer_bytes) {
                     add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
                     add_to_send_buffer(0);
                 }
                 service_send_buffer(PRINTCHAR);
                 #ifdef OPTION_BEACON_MODE_PTT_TAIL_TIME
-                    mydelay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
+                    myDelay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
                     check_ptt_tail();                                                         // this resets things so that the ptt line will go high during the next playout
                     digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
                 #endif                                                                      // OPTION_BEACON_MODE_PTT_TAIL_TIME
@@ -25763,7 +26091,7 @@ void main_loop(void)
                 #endif                                                                      // OPTION_WATCHDOG_TIMER
 
                 #ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
-                    if (time_to_delay > 0) mydelay(time_to_delay);                              // this provdes a delay between succesive playouts of the memory contents
+                    if (time_to_delay > 0) myDelay(time_to_delay);                              // this provdes a delay between succesive playouts of the memory contents
                 #endif                                                                      // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
             }                                                                             // end while (keyer_machine_mode == BEACON)
         }                                                                               // end if (keyer_machine_mode == BEACON)
@@ -25815,7 +26143,7 @@ void main_loop(void)
             #endif
         #endif
 
-        #if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD)
+        #if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
             check_ps2_keyboard();
         #endif
         
@@ -25939,7 +26267,10 @@ extern "C" { void app_main (void)
 void app_main(void)
 #endif
 {
-  BaseType_t xReturned;
+  
+  #if defined(USE_TOUCH_TASK) || defined(USE_BT_TASK) || defined(USE_TASK)
+    BaseType_t xReturned;
+  #endif
 
   #if defined(PROJECT_ESP32_COMPILER)
     initArduino();  // Initialize the Arduino environment
@@ -25991,12 +26322,12 @@ void app_main(void)
   while (1)
   {
     #ifdef USE_TASK
-      mydelay(5000);
+      myDelay(5000);
     #else
       main_loop();
     #endif        
     
-    #if defined (FEATURE_BT_KEYBOARD) 
+    #if defined(FEATURE_BT_KEYBOARD) 
       #ifdef USE_BT_TASK
         //check_bt_keyboard((void*)1);
       #endif

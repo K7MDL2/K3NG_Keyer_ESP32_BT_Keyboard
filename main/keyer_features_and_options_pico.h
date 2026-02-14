@@ -6,7 +6,7 @@
 #endif
 
 #define CODE_VERSION "K7MDL-2026.2.13"
-#define eeprom_magic_number 35          // you can change this number to have the unit re-initialize EEPROM
+#define eeprom_magic_number 32          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -21,15 +21,17 @@
 #define FEATURE_WINKEY_EMULATION    // disabling Automatic Software Reset is highly recommended (see documentation)
 #define FEATURE_BEACON                // Go into beacon mode if paddle_left pin is LOW at boot up
 #define FEATURE_BEACON_SETTING        // Go into beacon mode at boot up if EEPROM setting is enabled (\_ CLI Command)
-#define FEATURE_TRAINING_COMMAND_LINE_INTERFACE
+//#define FEATURE_TRAINING_COMMAND_LINE_INTERFACE
 ////#define FEATURE_POTENTIOMETER         // do not enable unless you have a potentiometer connected, otherwise noise will falsely trigger wpm changes
 // #define FEATURE_SIDETONE_SWITCH   // adds switch control for the sidetone output. requires an external toggle switch (assigned to an arduino pin - see keyer_pin_settings.h). 
 //#define FEATURE_SIDETONE_NEWTONE      // Use the NewTone library, ~1k smaller code size than the standard tone library. Uses timer1 (pins 9 or 10)  https://bitbucket.org/teckel12/arduino-new-tone/wiki/Home
 #define FEATURE_SERIAL_HELP
 //#define FEATURE_HELL
-////// #define FEATURE_PS2_KEYBOARD        // Use a PS2 keyboard to send code - Change keyboard layout (non-US) in K3NG_PS2Keyboard.h.  Additional options below.
-////// #define FEATURE_USB_KEYBOARD          // Use a USB keyboard to send code - Uncomment three lines in k3ng_keyer.ino (search for note_usb_uncomment_lines)
-#define FEATURE_BT_KEYBOARD  // ESP32-WROOM-32  BT 4.2 BLE and BT Classic Bluetooth using a BT Keyboard class library
+////#define FEATURE_PS2_KEYBOARD        // Use a PS2 keyboard to send code - Change keyboard layout (non-US) in K3NG_PS2Keyboard.h.  Additional options below.
+////#define FEATURE_USB_KEYBOARD          // Use a USB keyboard to send code - Uncomment three lines in k3ng_keyer.ino (search for note_usb_uncomment_lines)
+
+//#define FEATURE_BT_KEYBOARD  // ESP32-WROOM-32  BT 4.2 BLE and BT Classic Bluetooth using a BT Keyboard class library, PICO2W BLE and BT Classic
+
 // #define FEATURE_CW_COMPUTER_KEYBOARD  // Have an Arduino Due or Leonardo act as a USB HID (Human Interface Device) keyboard and use the paddle to "type" characters on the computer -- uncomment this line in ino file: #include <Keyboard.h>
 #define FEATURE_DEAD_OP_WATCHDOG
 #define FEATURE_AUTOSPACE
@@ -63,11 +65,8 @@
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
-//#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
-//#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
-//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
+#define DISPLAY_TYPE TFT_PICO_320x480_RES_LCD  // 3.5" 320x480 Waveshare with XPT2046 resistive Touch controller, IL:9488 display, usng TFT_eSPI lib
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // The Setup file is then automatically selected.  When the TFT_eSPI library is updated, it will overwrite the changes in the User_Setup_Select.h file.
@@ -78,80 +77,14 @@
     #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
     #define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
 #endif
-#if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_1_9_IDEASPARK_LCD)
-    //#define CONFIG_DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD  // CONFIG_ is added to name in Project level CMakeLists.txt to control 
-                                                         // TFT_eSPI User_Select.h choice of file to match this display
-    #define FEATURE_IDEASPARK_LCD  // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
-    #define FEATURE_STRAIGHT_KEY   // This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
-    #define FEATURE_TFT_DISPLAY    
-    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
-    #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
-    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used. Valid values are 4800, 9600, 38400, 57600, 115200
-    #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
-    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
-    #define DEFAULT_GRID "CN87"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
-    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
-    //#define OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR  // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder 
-    //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  
-#endif
-#if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
-    //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
-    #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
-    #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
-    #define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
-    #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
-    #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
-    #define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
-    //#define USE_BT_TASK 
-    //#define USE_TASK
-    //#define FEATURE_SINEWAVE_SIDETONE
-    //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
-    #define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
-    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
-    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
-    #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
-    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
-    #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
-    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
-    #define DEFAULT_GRID "CN87xs"  // substitute for GPS supplied grid square. This and GPS time will display on status row. Must be between 4 and 8 chars
-    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
-    //#define OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR  // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder 
-    //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  
-#endif
 
-#if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
-    //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
-    #define FEATURE_M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
-    //#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
-    //#define FEATURE_TFT_DISPLAY
-#endif
-#if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
-    //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
-    #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-    ///#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
-    #define FEATURE_TFT_DISPLAY
-    #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
-    #define RES_320_480
-    #define TOUCH_BUTTON_16
-    ////#define USE_TASK // runs main loop in a task
-    ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
-    #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
-    ////#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
-    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
-    #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.    
-    #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
-    #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
-    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
-    #define DEFAULT_GRID "CN87ts"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
-    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
-#endif
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
-    #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
+    #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
     //#define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
     #define RES_320_480
+    #define TOUCH_BUTTON_16
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define TOUCH_BUTTON_16
@@ -164,6 +97,36 @@
     #define DEFAULT_GRID "CN88ss"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
+#endif
+
+#if (DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_PICO_320x480_RES_LCD)
+    //#define CONFIG_DISPLAY_TYPE  TFT_PICO_320x480_RES_LCD
+    #define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
+    #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
+    #define TOUCH_BUTTON_16
+    //#define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
+    #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
+    //#define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
+    #define USE_RES_TOUCH
+    #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
+    //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
+    //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
+    //#define USE_BT_TASK 
+    //#define USE_TASK
+    #define USE_BLE  // uncomment to usee BLE, else use BT Classic keyboard
+    //#define FEATURE_SINEWAVE_SIDETONE
+    //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
+    //#define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
+    #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
+    #define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
+    #define DEFAULT_GRID "CN87xs"  // substitute for GPS supplied grid square. This and GPS time will display on status row. Must be between 4 and 8 chars
+    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
+    //#define OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR  // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder 
+    //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  
 #endif
 
 //#define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
@@ -206,7 +169,7 @@
 ///#define OPTION_INCLUDE_PTT_TAIL_FOR_MANUAL_SENDING
 ///#define OPTION_EXCLUDE_PTT_HANG_TIME_FOR_MANUAL_SENDING
 /// #define OPTION_WINKEY_DISCARD_BYTES_AT_STARTUP     // if ASR is not disabled, you may need this to discard errant serial port bytes at startup
- #define OPTION_WINKEY_STRICT_EEPROM_WRITES_MAY_WEAR_OUT_EEPROM // with this activated the unit will write non-volatile settings to EEPROM when set by Winkey commands
+#define OPTION_WINKEY_STRICT_EEPROM_WRITES_MAY_WEAR_OUT_EEPROM // with this activated the unit will write non-volatile settings to EEPROM when set by Winkey commands
 // #define OPTION_WINKEY_SEND_WORDSPACE_AT_END_OF_BUFFER
 //#define OPTION_WINKEY_STRICT_HOST_OPEN               // require an admin host open Winkey command before doing any other commands
 #define OPTION_WINKEY_2_SUPPORT                      // comment out to revert to Winkey version 1 emulation
@@ -274,5 +237,6 @@
 // #define OPTION_BEACON_MODE_PTT_TAIL_TIME             // adds the ptt tail time to each playing of memory 1 in beacon mode
 
 //  #define OPTION_WINKEY_PROSIGN_COMPATIBILITY  // Additional character mappings to support K1EL Winkey emulation prosigns
+
 
 #endif // ESP_CONFIG_H
