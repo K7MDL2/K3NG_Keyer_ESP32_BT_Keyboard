@@ -56,16 +56,17 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  22
       #endif //FEATURE_STRAIGHT_KEY          
     #endif
-    #define GPS_RX_PIN       5   // UART1 TX = 4   UART1 RX = 5
+    #define GPS_RX_PIN      5   // UART1 TX = 4   UART1 RX = 5
+    #define GPS_TX_PIN      4
     #define TOUCH_X         4400     // x  300 default
     #define TOUCH_X1        3550    // x1 3600 default
     #define TOUCH_Y         4300     // y  300 default
     #define TOUCH_Y1        3550    // y1 3600 default
     #define TOUCH_BITS      (0x05) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
     #define potentiometer   26 // ADC0 = Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-    #define tx_key_line_1   18 // (high = key down/tx on)
-    #define tx_key_line_2    4 
-    #define sidetone_line    6  //26 connect a passive buzzer for sidetone
+    #define tx_key_line_1    6 // (high = key down/tx on)
+    #define tx_key_line_2   14 
+    #define sidetone_line   18  //26 connect a passive buzzer for sidetone
     #define audio_enable     0  // audio amp enable = LOW for this display (only?)
     #define ptt_tx_1        19  // 22 for PTT ("push to talk") lines, GPIO22 is RED LED
     #define ptt_tx_2         7  //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors

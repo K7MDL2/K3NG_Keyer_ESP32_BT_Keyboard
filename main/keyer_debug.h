@@ -63,5 +63,6 @@
 // #define DEBUG_BT_KEYBOARD
 // #define DEBUG_GPS
 // #define DEBUG_TOUCH
+// #define DEBUG_COMPASS
 
 // #define OPTION_WINKEY_IGNORE_FIRST_STATUS_REQUEST

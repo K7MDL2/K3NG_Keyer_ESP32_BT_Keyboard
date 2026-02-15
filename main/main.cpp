@@ -1673,7 +1673,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     } KeyInfo;  
 
     KeyInfo inf;
-    bool new_bt_key = false;
+    //bool new_bt_key = false;
     #ifdef USE_BLE
       bool use_BLE = true;
     #else
@@ -1773,11 +1773,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
     #define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
     #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
-    #define ICON_SPACING (ICON_COLUMN_WIDTH+5)
+    #define ICON_SPACING (ICON_COLUMN_WIDTH+4)
     #define TX_NUM_ANCHOR (122)
     #define GRID_ANCHOR (167)
     #define WPM_ANCHOR (307)
-    #define ICON_ANCHOR (382)
+    #define ICON_ANCHOR (380)
     #define STATUS_BAR_X_CURSOR (8)
   #else   // 240x320 and 170x320
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
@@ -2786,8 +2786,11 @@ PRIMARY_SERIAL_CLS * primary_serial_port;
 
 PRIMARY_SERIAL_CLS * debug_serial_port;
 
-#if defined(FEATURE_GPS) && !defined(GPS_TEST)  
-  GPS_SERIAL_CLS * gps_serial_port;
+#if defined(FEATURE_GPS) && !defined(GPS_TEST)
+  //#include <SerialPIO.h>
+  //SerialPIO GPS_SERIAL_PORT(NOPIN, GPS_RX_PIN, 32);  
+  //GPS_SERIAL_CLS * gps_serial_port;
+  #define gps_serial_port Serial2 
 #endif
 
 #ifdef FEATURE_PTT_INTERLOCK
@@ -2822,7 +2825,6 @@ PRIMARY_SERIAL_CLS * debug_serial_port;
 #if defined(FEATURE_CW_COMPUTER_KEYBOARD) 
   byte cw_keyboard_capslock_on = 0;
 #endif //defined(FEATURE_CW_COMPUTER_KEYBOARD)
-
 
 #if defined(OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE) && defined(FEATURE_WINKEY_EMULATION)
   byte send_winkey_breakin_byte_flag = 0;
@@ -4016,7 +4018,7 @@ int touch_button_available() {
     #ifndef USE_TOUCH_TASK
       //check_touch_buttons();
     #endif
-    #if defined(DEBUG_TOUCH_x)
+    #if defined(DEBUG_TOUCH_X)
       debug_serial_port->print(F("Check if Touch Event is Waiting: "));
       debug_serial_port->println(button_active, DEC);
     #endif //DEBUG_TOUCH
@@ -4625,10 +4627,6 @@ void check_ps2_keyboard()
                         keystroke = touch_key_read();  // certain buttons will be translated to equivalent keystrokes  
                     }
             #endif
-                    #if defined(DEBUG_PS2_KEYBOARD) || defined(DEBUG_BT_KEYBOARD) || defined(DEBUG_LOOP)
-                        debug_serial_port->print(F("check_ps2_keyboard: keystroke: "));
-                        debug_serial_port->println(keystroke,DEC);
-                    #endif //DEBUG_PS2_KEYBOARD
 
                     #ifdef FEATURE_SLEEP
                         last_activity_time = millis(); 
@@ -5146,8 +5144,14 @@ void check_ps2_keyboard()
                                   configuration.gps_baud = next_baud;                                  
                                  
                                   #if !defined(GPS_TEST)
-                                    gps_serial_port->updateBaudRate(next_baud);   // serial processing resumes after a few seconds delay
-                                    gps_serial_port->read();  // similar to flush                                 
+                                    #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)                                    
+                                    gps_serial_port.flush();
+                                    gps_serial_port.end();
+                                    gps_serial_port.begin(next_baud);
+                                    #else
+                                      gps_serial_port.updateBaudRate(next_baud);   // serial processing resumes after a few seconds delay
+                                    #endif
+                                    gps_serial_port.read();  // similar to flush                                 
                                   #endif 
                                   #ifdef FEATURE_DISPLAY
                                     lcd_center_print_timed("Serial Baud " + String(next_baud), 0, default_display_msg_delay); 
@@ -17954,11 +17958,24 @@ int memory_end(byte memory_number) {
 #if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
 #include <Wire.h>
 void initialize_i2c(void) {   
-  #ifdef USE_WIRE1 
-    Wire1.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
-  #else
-    Wire.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
+  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+    #ifdef USE_WIRE1 // for i2c1 bus pins
+      Wire1.setSDA(I2CDEV_SDA_PIN);
+      Wire1.setSCL(I2CDEV_SCL_PIN);
+      Wire1.begin();   // Touch has 1 instance set in library so we get 2nd
+    #else  // for i2c0 bus pins
+      Wire.setSDA(I2CDEV_SDA_PIN);
+      Wire.setSCL(I2CDEV_SCL_PIN);
+      Wire.begin();   // Touch has 1 instance set in library so we get 2nd
+    #endif
+  #else  // ESP32 and maybe others
+    #ifdef USE_WIRE1 
+      Wire1.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
+    #else
+      Wire.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
+    #endif
   #endif
+  debug_serial_port->printf("Intialized I2C Bus on Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
 }
 #endif
 
@@ -17973,7 +17990,7 @@ void initialize_i2c(void) {
 
   IST8310 ist8310;
 
-  float convert_to_rad(float declination) { 
+  float convert_to_rad(float declination) {     
     //debug_serial_port->print(F("  Declination in Rad: ")); debug_serial_port->println(declination * (M_PI/180));
     return (declination * (M_PI/180));
   }
@@ -17989,16 +18006,20 @@ void initialize_i2c(void) {
     if (declination != last_declination || force_update) {  // grid or digits changed, store new value
       // See if there is any valid declination info we can use.  Try to use value in config structure. Use config file declination if not blank    
       if (configuration.declination == 0 || force_update) { // find a good data souce in priority order
-        //debug_serial_port->print(F("Process Declination for Memory "));debug_serial_port->print(DECLINATION_WORKING_MEMORY);
+        #ifdef DEBUG_COMPASS
+          debug_serial_port->print(F("Process Declination for Memory "));debug_serial_port->print(DECLINATION_WORKING_MEMORY);
+        #endif
         char tmp_dec_str[LCD_COLUMNS] = {};
         int tmp_dec_str_len = read_memory(DECLINATION_WORKING_MEMORY-1, tmp_dec_str);
         tmp_dec_str[tmp_dec_str_len] = '\0';  // replace the 255 with null
         strupr(tmp_dec_str);
+        
+        #ifdef DEBUG_COMPASS
+          debug_serial_port->print(F(" - configuration.declination = ")); debug_serial_port->print(configuration.declination);
+          debug_serial_port->print(F(" - string = ")); debug_serial_port->print(tmp_dec_str); 
+          debug_serial_port->print(F(" - length (20 max!)= ")); debug_serial_port->println(tmp_dec_str_len); 
+        #endif
 
-        //debug_serial_port->print(F(" - configuration.declination = ")); debug_serial_port->print(configuration.declination);
-        //debug_serial_port->print(F(" - string = ")); debug_serial_port->print(tmp_dec_str); 
-        //debug_serial_port->print(F(" - length (20 max!)= ")); debug_serial_port->println(tmp_dec_str_len); 
-  
         if (tmp_dec_str_len != 0 || force_update) {  // not an empty memory, check to see if it is a number (X, or x.y)
           float tmp_f = atof(tmp_dec_str);          
           //debug_serial_port->print(F("Memory is not empty, check if string is a valid number = ")); debug_serial_port->println(tmp_f);             
@@ -18037,7 +18058,9 @@ void initialize_i2c(void) {
         }
       }
       EEPROM.write((memory_start(declination_memory_number)+x),255);   // write terminating 255
-      //debug_serial_port->print(F("\nWrote Declination to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+      #ifdef DEBUG_COMPASS
+        debug_serial_port->print(F("\nWrote Declination to Keyboard Memory ")); debug_serial_port->println(declination_memory_number+1);
+      #endif
       config_dirty = 1;
       #if defined(HARDWARE_ESP32_DEV)
         EEPROM.commit();
@@ -18089,10 +18112,14 @@ void initialize_i2c(void) {
       {
           debug_serial_port->println(F("Failed to update IST8310"));
       } else {
-          //Vec3f* mag_latest_val = ist8310.get_magnetometer();          
-          //debug_serial_port->printf("Mag (x, y, z): (%f, %f, %f)\n", mag_latest_val->x, mag_latest_val->y, mag_latest_val->z);
+          #if defined(DEBUG_COMPASS)
+            Vec3f* mag_latest_val = ist8310.get_magnetometer();          
+            debug_serial_port->printf("Mag (x, y, z): (%f, %f, %f)\n", mag_latest_val->x, mag_latest_val->y, mag_latest_val->z);
+          #endif
           heading = ist8310.get_heading_degrees();
-          //debug_serial_port->printf("Heading: %3.2f degrees (declination = %3.2f)\n", heading, declination);  // 0 degrees at true north (or magnetic north if declination is 0)
+          #if defined(DEBUG_COMPASS)
+            debug_serial_port->printf("Heading: %3.2f degrees (declination = %3.2f)\n", heading, declination);  // 0 degrees at true north (or magnetic north if declination is 0)
+          #endif
           if (update_heading_display_flag) display_heading();
           process_compass(false,false);
       }  
@@ -19102,16 +19129,49 @@ void check_for_debug_modes(){
   #endif
 }
 
+void initialize_gps_port(void) {
+    #ifdef FEATURE_GPS
+        pinMode(GPS_RX_PIN, INPUT);
+        if (configuration.gps_baud == 0) configuration.gps_baud = GPS_BAUD_RATE;
+        #if !defined(GPS_TEST)
+            #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+                //GPS_SERIAL_CLS SerialPIO(NOPIN, GPS_RX_PIN, 128);                
+                //gps_serial_port = GPS_SERIAL_PORT;
+              
+                gps_serial_port_baud_rate = GPS_SERIAL_PORT_BAUD; 
+                gps_serial_port.setFIFOSize(1024);  // default was too small.
+                gps_serial_port.setRX(GPS_RX_PIN);
+                gps_serial_port.setTX(GPS_TX_PIN);
+                gps_serial_port.setInvertRX(GPS_SERIAL_INVERT);
+                gps_serial_port.setInvertTX(GPS_SERIAL_INVERT);
+                
+                gps_serial_port.begin(gps_serial_port_baud_rate, SERIAL_8N1);                
+                
+                debug_serial_port->print("Intialized GPS Serial Port on Pin "); debug_serial_port->println(GPS_RX_PIN);
+            #else
+                gps_serial_port.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, NOPIN, GPS_SERIAL_INVERT);              
+            #endif
+            gps_serial_port.flush();  // move the read string queue char ptr to the front so the next read works      
+        #endif
+        #ifdef FEATURE_DISPLAY
+            lcd_center_print_timed("GPS Baud = " + String(configuration.gps_baud), 1, default_display_msg_delay);
+        #endif
+        stop_msg = false;
+        #ifdef DEFAULT_GRID
+            validate_grid(DEFAULT_GRID, default_grid);  // done, haved a validated grid from file, could be ""
+            strcpy(grid_sq_str, default_grid);  // stgart out with this, process_gps will look at source and adjust it.
+        #else
+          strcpy(grid_sq_str, "");
+        #endif
+    #endif
+}
+
 //--------------------------------------------------------------------- 
 
 void initialize_serial_ports(){
 
   // initialize serial port
   #if defined(FEATURE_SERIAL)
-
-    #ifdef FEATURE_GPS
-      gps_serial_port_baud_rate = GPS_SERIAL_PORT_BAUD;
-    #endif
 
     #if defined(FEATURE_WINKEY_EMULATION) && defined(FEATURE_COMMAND_LINE_INTERFACE) //--------------------------------------------
     
@@ -19157,11 +19217,6 @@ void initialize_serial_ports(){
     
     primary_serial_port = PRIMARY_SERIAL_PORT;
     primary_serial_port->begin(primary_serial_port_baud_rate);
-
-    #if defined(FEATURE_GPS) && !defined(GPS_TEST)  
-      gps_serial_port = GPS_SERIAL_PORT;
-      gps_serial_port->begin(gps_serial_port_baud_rate);
-    #endif
 
     #ifdef DEBUG_STARTUP
       debug_serial_port->println(F("setup: serial port opened"));
@@ -19302,15 +19357,56 @@ void keyboard_connected_handler() {
 #endif
 
 #if defined(FEATURE_BT_KEYBOARD) && (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO))
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+//#include "freertos/task.h"
+QueueHandle_t event_queue;
+
+inline bool    wait_for_low_event(KeyInfo &inf, TickType_t duration = portMAX_DELAY) {
+    myDelay(10);
+    return xQueueReceive(event_queue, &inf, duration); }
+
+/**
+ * @brief Pushes keyboard event data to the event queue
+ *
+ * This method takes raw keyboard event data and enqueues it for processing.
+ * If the input size exceeds MAX_KEY_DATA_SIZE, it will be truncated and a
+ * warning message will be logged.
+ *
+ * @param keys Pointer to array containing keyboard event data
+ * @param size Size of the keyboard event data in bytes
+ *
+ * @note The data is copied into a KeyInfo struct before being enqueued
+ * @note No blocking occurs if queue is full (timeout = 0)
+ */
+void push_key(uint8_t *keys, bool state, KeyModifier modifier) {
+  KeyInfo inf;
+  uint8_t size = 8;  // Emulate BT_keyboard lib with fixed size message = 8
+
+  if (size > MAX_KEY_DATA_SIZE) {    
+    debug_serial_port->printf("push_key: Keyboard event data size bigger than expected: %d  state %d  modifier 0x%02x\n.", size, state, modifier);
+    size = MAX_KEY_DATA_SIZE;
+  }
+
+  // enqueue
+  inf.size = size;
+  memcpy(&inf.keys, keys, size);
+  inf.modifier = (KeyModifier) *keys;
+  inf.state = state;
+
+  xQueueSendToBack(event_queue, &inf, 0);
+}
+
 // Consumer keys are the special media keys on most modern keyboards (mute/etc.)
 void ckb(void *cbdata, int key) {
     bool state = (bool)cbdata;
-    Serial.printf("Consumer: %02x %s \n", key, state ? "DOWN" : "UP");
+    debug_serial_port->printf("Consumer: %02x %s \n", key, state ? "DOWN" : "UP");
     inf.size = 8;  // fake the size to pass through the 
     inf.state = state;
     if (state) inf.keys[2] = key;
     else inf.keys[2] = 0;
-    new_bt_key = true;
+    //new_bt_key = true;
+    myDelay(10);
 }
 
 // We get make/break for every key which lets us hold notes while a key is depressed
@@ -19321,15 +19417,21 @@ void kb(void *cbdata, int key) {
     inf.size = 8;  // fake the size to match the ESP32 bt_keyboard class string info to pass through the key value translation code
     inf.state = state;
     
-    // Modifier key has let go. Set Modifier flag to false and exit
-    if (_holding && !state && ((key == 0xe1) || (key == 0xe5) || (key == 0xe0) || (key == 0xe4) || (key == 0xe2) || (key == 0xe6) || (key == 0xe3))) {
+    // Any key up or Modifier key has let go. Set Modifier flag to false and exit
+    if (!state || (_holding && !state && ((key == 0xe1) || (key == 0xe5) || (key == 0xe0) || (key == 0xe4) || (key == 0xe2) || (key == 0xe6) || (key == 0xe3)))) {
       _holding = false;
       inf.modifier =(KeyModifier) 0;
+      inf.keys[2] = 0;
       inf.keys[0] = 0; // redundant but emulates the ESP32 class bt_keyboard behavior.
-      //debug_serial_port->println("Released Modifier Key");
+      #ifdef DEBUG_BT_KEYBOARD
+        debug_serial_port->println("kb: Released Modifier Key or Regular Key");
+      #endif
+      push_key(inf.keys, state, inf.modifier);
       return;
     }
     
+    myDelay(10);
+
     // Modifier key has been pressed.  Set hold key flag and bit mask and exit, then only process regular keys until modifier key is let up
     if (!_holding && state && ((key == 0xe1) || (key == 0xe5) || (key == 0xe0) || (key == 0xe4) || (key == 0xe2) || (key == 0xe6) || (key == 0xe3))) {
         _heldKey = key;
@@ -19345,15 +19447,29 @@ void kb(void *cbdata, int key) {
         }
         inf.keys[0] = (uint8_t) inf.modifier;  // redundant but emulates the ESP32 class bt_keyboard behavior.
         //debug_serial_port->printf("Kbd  out: mod:0x%02x keys[0]:0x%02x\n", inf.modifier, inf.keys[0]);
+        #ifdef DEBUG_BT_KEYBOARD
+          debug_serial_port->print("kb: Modifier Key Pressed : "); debug_serial_port->println(inf.keys[0]);
+        #endif
         return;
     }
 
     // if we get here than it is a regular key either standalone or between modifier key events.
-    if (state && key < 128) inf.keys[2] = key;
-    else inf.keys[2] = 0;
-    new_bt_key = true;
+    //if (state && key < 128) inf.keys[2] = key;
+    //else inf.keys[2] = 0;
     
-    //if (state) debug_serial_port->printf("Kbd  out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
+    inf.keys[2] = key;
+    
+    //inf.keys[0] = 0;
+    //if (!state) inf.keys[2] = 0;  // Key up, clerar the first byte.
+    //else inf.keys[2] = key;
+    
+    push_key(inf.keys, state, inf.modifier);
+    
+    //new_bt_key = true;
+    
+    #ifdef DEBUG_BT_KEYBOARD
+      if (state) debug_serial_port->printf("Kb (callback) out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
+    #endif
 }
 #endif
 
@@ -19389,6 +19505,7 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
     #endif
 
     #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+      event_queue = xQueueCreate(30, sizeof(KeyInfo));
       // We can use the cbData as a flag to see if we're making or breaking a key
       bt_keyboard.onKeyDown(kb, (void *)true);
       bt_keyboard.onKeyUp(kb, (void *)false);
@@ -19408,7 +19525,9 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
 
     if (!bt_keyboard.is_connected()) {
         debug_serial_port->println(F("No BT Keyboards found"));
-        lcd_center_print_timed("No BT Keyboards", 2, 2000);
+        #ifdef FEATURE_DISPLAY
+          lcd_center_print_timed("No BT Keyboards", 2, 2000);
+        #endif
     }
 
     queueflush();
@@ -20019,12 +20138,16 @@ void process_buttons() { // (uint8_t button_ID) {
             
             #ifdef USE_RES_TOUCH
               //if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex  
-              uint16_t threshold = 20;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also              
-              //debug_serial_port->printf("GetTouch1: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed); 
+              uint16_t threshold = 20;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also      
+              #ifdef DEBUG_TOUCH        
+                debug_serial_port->print(F("GetTouch1: Check for pressed - ")); 
+              #endif
                           
               pressed = lcd.getTouch(&t_x, &t_y, threshold);
               int z = lcd.getTouchRawZ();
-              //debug_serial_port->printf("GetTouch2: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, z, pressed);     
+              #ifdef DEBUG_TOUCH        
+                debug_serial_port->printf("GetTouch2: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, z, pressed);     
+              #endif
               //  xSemaphoreGive (xMutex);  // release the mutex 
               //}
             #endif              
@@ -20051,7 +20174,9 @@ void process_buttons() { // (uint8_t button_ID) {
                     #ifdef USE_RES_TOUCH
                       //if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
                       pressed = lcd.getTouch(&t_x, &t_y, threshold);     
-                      //debug_serial_port->printf("GetTouch3: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed); 
+                      #ifdef DEBUG_TOUCH        
+                        debug_serial_port->printf("GetTouch3: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed); 
+                      #endif
                       //  xSemaphoreGive (xMutex);  // release the mutex  
                       //}               
                     #endif              
@@ -20083,8 +20208,9 @@ void process_buttons() { // (uint8_t button_ID) {
                     btn[b].p_btn.press(false); 
                     break;
                   }
-                  
-                  //debug_serial_port->print(F("Button Active Flag Set"));
+                  #ifdef DEBUG_TOUCH
+                    debug_serial_port->print(F("Button Active Flag Set"));
+                  #endif
                   btn[b].p_btn.press(true); // record state info for valid button. - process_buttons() will pick up event and add it to the ch queue)
                   button_active = true;     // set active flag if any valid button triggered on                                 
                 } else {
@@ -24656,25 +24782,21 @@ void update_time(){
               BTKeyboard::KeyInfo inf;            
             #endif
 
-            #ifdef USE_BT_TASK
-              myDelay(1);
-              do (
-                  ret = bt_keyboard.wait_for_low_event(inf);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+            #ifdef USE_BT_TASK            
+                    TickType_t duration = portMAX_DELAY; // blocking - can wait forever when running inside a task
             #else
-              do {
-                  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-                    if (new_bt_key) {
-                      new_bt_key = false;
-                      ret = 1;                           
-                    }         
-                    else ret = 0;
-                  #else
-                   ret = bt_keyboard.wait_for_low_event(inf,1);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
-                  //bt_keyboard.get_ascii_char();                                   
-                  #endif
+                    TickType_t duration = 1;  // bail so we are non-blocking when not runnign in a task
+            #endif
 
+              do {                  
+                  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+                    ret = wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  #else
+                    ret = bt_keyboard.wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+                  #endif
+                  //bt_keyboard.get_ascii_char();                                   
                   if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much                
-            #endif                                           
+                  myDelay(1);
 
                   // if there is delay getting here than can be multiple char arrays.  They are in a buffer, and once read here, the next read is brand new.  
                   //  We have to loop through all chars strings or store all the strings and then loop through them later.
@@ -24728,11 +24850,7 @@ void update_time(){
                         //debug_serial_port->print(F(" Key DN == 0x")); debug_serial_port->println(ch, HEX);
                       }
 
-                      //#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
                       if (1) // (inf.state != 0) // will only get a new key so much of the above is not required.
-                      //#else
-                      //if (keyDN != last_key) // only process new key events separated by key-up
-                      //#endif
                       {
                         #ifdef DEBUG_BT_KEYBOARD_B  // change #ifdef to #ifndef to use
                           debug_serial_port->print(F("[size="));
@@ -25522,23 +25640,27 @@ void initialize_st7789_lcd()
 #ifdef FEATURE_BT_KEYBOARD
   void BT_Keyboard_Status(void)
   {
-        //ToDo: Set up as a periodic scan for reconnect or new keyboard
-        if (BT_Keyboard_Lost == true) {
-            if (Keyboard_Disconnected_signal) {                
-                debug_serial_port->println(F("Lost BT Keyboard Connection"));
+      //ToDo: Set up as a periodic scan for reconnect or new keyboard
+      if (BT_Keyboard_Lost == true) {
+          if (Keyboard_Disconnected_signal) {                
+              debug_serial_port->println(F("Lost BT Keyboard Connection"));                
+              #ifdef FEATURE_DISPLAY
                 //clear_display_row(1);
                 lcd_center_print_timed("Lost Connection", 2, 3000);
-                Keyboard_Disconnected_signal = false;
-            }
-        }
-        else{
-            if (Keyboard_Connected_signal) {
+              #endif
+              Keyboard_Disconnected_signal = false;
+          }
+      }
+      else{
+          if (Keyboard_Connected_signal) {
+              #ifdef FEATURE_DISPLAY
                 lcd_center_print_timed("Keyboard Connected", 2, 3000);
                 //clear_display_row(1);
-                debug_serial_port->println(F("BT Keyboard Connected"));
-                Keyboard_Connected_signal = false;
-            }
-        }
+              #endif                
+              debug_serial_port->println(F("BT Keyboard Connected"));
+              Keyboard_Connected_signal = false;
+          }
+      }
   }
 #endif
 
@@ -25751,12 +25873,17 @@ void displayInfo()
 
 #endif  // FEATURE_GPS
 
+//void check_gps(void * pvParameters)
 void check_gps(bool force_update, bool ignore_gps) {
   #ifdef FEATURE_GPS
     static uint32_t lost_gps_timer = 0;
     bool _do_process = false;
     char gps_grid[9];
     struct tm timeinfo;
+
+    #ifdef DEBUG_GPS_X
+      debug_serial_port->print("Check GPS.  Ignore (0=Use, 1=ignore) : ");debug_serial_port->println(configuration.ignore_gps);
+    #endif
 
     if (ignore_gps) {
       if (!configuration.ignore_gps) {
@@ -25771,7 +25898,9 @@ void check_gps(bool force_update, bool ignore_gps) {
         #endif
       }
       config_dirty = 1;  // changed ignore_gps in struct memory
-      //debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
+      #ifdef DEBUG_GPS
+        debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
+      #endif
     }   
     uint8_t gps_hour = 0;
     uint8_t gps_minute = 0;
@@ -25792,17 +25921,25 @@ void check_gps(bool force_update, bool ignore_gps) {
         }
       }
     #else
-      while (gps_serial_port->available() > 0) {
+      while (gps_serial_port.available() > 0) {
         char c;
         int d;
-        c = d = gps_serial_port->peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout  
-        if (isAlphaNumeric(c) || ispunct(c) || c == '\r' || c == '\n') {  // valid data at correct baud rate
-          gps.encode(gps_serial_port->read());
+        
+        #ifdef DEBUG_GPS
+          c = d = gps_serial_port.peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout  
+          debug_serial_port->print(c);
+        #endif
+
+        //if (isAlphaNumeric(c) || ispunct(c) || c == '\r' || c == '\n') {  // valid data at correct baud rate
+          gps.encode(gps_serial_port.read());
+          #ifdef DEBUG_GPS_X
+            debug_serial_port->print(".");
+          #endif
           stop_msg = false;
           lost_gps_timer = millis();
-        } else {
-          gps_serial_port->read();
-        }
+        //} else {
+        //  gps_serial_port.read();
+        //}
       }
     #endif
 
@@ -25818,7 +25955,9 @@ void check_gps(bool force_update, bool ignore_gps) {
             time_t t = mktime(&timeinfo);
             struct timeval now = { .tv_sec = t };
             settimeofday(&now, NULL); // Set ESP32 system time
-            //debug_serial_port->printf("Setting time (UTC): %s", asctime(&timeinfo));
+            #ifdef DEBUG_GPS
+              debug_serial_port->printf("Setting time (UTC): %s", asctime(&timeinfo));
+            #endif
           }
 
           gps_hour = gps.time.hour();
@@ -25826,7 +25965,9 @@ void check_gps(bool force_update, bool ignore_gps) {
           gps_second = gps.time.second();
           sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
           stop_msg = false;
-          //debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
+          #ifdef DEBUG_GPS
+            debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
+          #endif
       } else {
         if (!gps.time.isValid()) stop_msg = true;
       }
@@ -25838,7 +25979,9 @@ void check_gps(bool force_update, bool ignore_gps) {
           config_dirty = 1;
         }
         stop_msg = false;
-        //debug_serial_port->print(F("check_gps: Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq); 
+        #ifdef DEBUG_GPS
+          debug_serial_port->print(F("check_gps: Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq); 
+        #endif
         _do_process = true;
       } else {
         if (!gps.location.isValid()) stop_msg = true;
@@ -25846,7 +25989,7 @@ void check_gps(bool force_update, bool ignore_gps) {
 
     #ifndef GPS_TEST
       if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
-      {
+      {        
         debug_serial_port->println(F("No GPS detected: Check wiring."));
         if (!stop_msg) _do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid  
         strcpy(gps_grid, "");
@@ -25856,6 +25999,9 @@ void check_gps(bool force_update, bool ignore_gps) {
     #endif
 
     if (_do_process) {
+      #ifdef DEBUG_GPS
+        debug_serial_port->print(F("check_gps: Continue on to Process Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq); 
+      #endif
       do_process = true;
       process_gps(gps_grid, force_update, 1);   // 1 = GPS source
     }
@@ -25993,6 +26139,7 @@ void setup_esp()
       initialize_i2c();
     #endif
     initialize_pins();
+    initialize_gps_port();
     initialize_display();
     create_buttons();
     update_icons();
@@ -26026,22 +26173,6 @@ void setup_esp()
     initialize_web_server();
     initialize_sd_card();  
     initialize_debug_startup();
-    #ifdef FEATURE_GPS
-      pinMode(GPS_RX_PIN, INPUT);
-      if (configuration.gps_baud == 0) configuration.gps_baud = GPS_BAUD_RATE;
-      #if !defined(GPS_TEST)
-        gps_serial_port->begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
-        gps_serial_port->flush();  // move the read string queue char ptr to the front so the next read works      
-      #endif
-      lcd_center_print_timed("GPS Baud = " + String(configuration.gps_baud), 1, default_display_msg_delay);
-      stop_msg = false;
-      #ifdef DEFAULT_GRID
-          validate_grid(DEFAULT_GRID, default_grid);  // done, haved a validated grid from file, could be ""
-          strcpy(grid_sq_str, default_grid);  // stgart out with this, process_gps will look at source and adjust it.
-      #else
-        strcpy(grid_sq_str, "");
-      #endif
-    #endif
     #ifdef FEATURE_COMPASS
       initialize_compass();  //  ist8310 compass
     #endif
@@ -26287,16 +26418,27 @@ void app_main(void)
   //                pdTRUE, NULL,
   //                timer_1s_callback);
 
+
+  #if defined(FEATURE_GPS) && defined(USE_GPS_TASK)
+    TaskHandle_t xHandle_GPS = NULL;
+    xReturned = xTaskCreate(
+                check_gps,      /* Function that implements the task. */
+                "Chk_GPS",          /* Text name for the task. */
+                2048,      /* Stack size in words, not bytes. */
+                ( void * ) 1,    /* Parameter passed into the task. */
+                5, /* Priority at which the task is created. */
+                &xHandle_GPS);
+  #endif
+
   #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
     TaskHandle_t xHandle_TOUCH = NULL;
-    xReturned = xTaskCreatePinnedToCore(
+    xReturned = xTaskCreate(
                 check_touch_buttons,      /* Function that implements the task. */
                 "Chk_Touch",          /* Text name for the task. */
                 2048,      /* Stack size in words, not bytes. */
                 ( void * ) 1,    /* Parameter passed into the task. */
                 5, /* Priority at which the task is created. */
-                &xHandle_TOUCH,
-                1);  //tskNO_AFFINITY ); 
+                &xHandle_TOUCH);
   #endif
 
 
@@ -26307,7 +26449,7 @@ void app_main(void)
                 "Chk_BT_Keys",          /* Text name for the task. */
                 8192,      /* Stack size in words, not bytes. */
                 ( void * ) 1,    /* Parameter passed into the task. */
-                6,/* Priority at which the task is created. */
+                7,/* Priority at which the task is created. */
                 NULL); //&xHandle_BT );
   #endif
   

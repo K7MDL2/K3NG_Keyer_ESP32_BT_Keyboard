@@ -5,8 +5,8 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.13"
-#define eeprom_magic_number 32          // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "K7MDL-2026.2.15"
+#define eeprom_magic_number 33          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -104,25 +104,26 @@
     #define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
     #define TOUCH_BUTTON_16
+    #define RES_320_480
     //#define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     //#define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
-    #define USE_RES_TOUCH
+    #define USE_RES_TOUCH // For XPT2046 resistive Touch Controller
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
-    //#define USE_BT_TASK 
+    #define USE_BT_TASK // On pico this and touch interact and cause issues, panic for Ctrl-F-key combos (for now 2/2026)
     //#define USE_TASK
+    //#define USE_GPS_TASK // !! ToDo : Not ready to use yet // run the Serial GPS in a separate task.
     #define USE_BLE  // uncomment to usee BLE, else use BT Classic keyboard
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
-    //#define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
-    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
-    #define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
+    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87xs"  // substitute for GPS supplied grid square. This and GPS time will display on status row. Must be between 4 and 8 chars
     #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
     //#define OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR  // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder 

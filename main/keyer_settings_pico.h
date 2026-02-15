@@ -182,7 +182,7 @@
 #define PRIMARY_SERIAL_PORT_BAUD 115200     // This applies only when the port is in Command Line Interface mode.  In Winkey mode it will default to 1200.
 
 #define GPS_SERIAL_PORT &Serial2
-#define GPS_SERIAL_PORT_BAUD 115200     // This applies only when the port is in Command Line Interface mode.  In Winkey mode it will default to 1200.
+#define GPS_SERIAL_PORT_BAUD 38400     // This applies only when the port is in Command Line Interface mode.  In Winkey mode it will default to 1200.
 
 #ifdef FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
   #define SECONDARY_SERIAL_PORT &Serial1
@@ -316,8 +316,13 @@
 
 #define audio_enable_active_state LOW
 #define audio_enable_inactive_state HIGH
+
+
+//#define sidetone_line_active_state LOW
+//#define sidetone_line_inactive_state HIGH
 #define sidetone_line_active_state HIGH
 #define sidetone_line_inactive_state LOW
+
 #define sequencer_pins_active_state HIGH
 #define sequencer_pins_inactive_state LOW
 #define ptt_line_active_state LOW
