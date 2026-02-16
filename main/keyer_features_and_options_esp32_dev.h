@@ -29,7 +29,9 @@
 //#define FEATURE_HELL
 ////// #define FEATURE_PS2_KEYBOARD        // Use a PS2 keyboard to send code - Change keyboard layout (non-US) in K3NG_PS2Keyboard.h.  Additional options below.
 ////// #define FEATURE_USB_KEYBOARD          // Use a USB keyboard to send code - Uncomment three lines in k3ng_keyer.ino (search for note_usb_uncomment_lines)
-#define FEATURE_BT_KEYBOARD  // ESP32-WROOM-32  BT 4.2 BLE and BT Classic Bluetooth using a BT Keyboard class library
+
+#define FEATURE_BT_KEYBOARD  // ESP32-WROOM-32  BT 4.2 BLE and BT Classic Bluetooth using a BT Keyboard class library AND  Pico 2W boards
+
 // #define FEATURE_CW_COMPUTER_KEYBOARD  // Have an Arduino Due or Leonardo act as a USB HID (Human Interface Device) keyboard and use the paddle to "type" characters on the computer -- uncomment this line in ino file: #include <Keyboard.h>
 #define FEATURE_DEAD_OP_WATCHDOG
 #define FEATURE_AUTOSPACE
@@ -57,17 +59,19 @@
 #define M5STACK_CORE2_LCD      4
 #define TFT_HOSYOND_320x480_LCD 5
 #define TFT_320x480_CAP_LCD    6
+#define TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD 7
 
 // Choose one of the display types by uncommenting it.  
 // If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
-//#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
+#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
 //#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
-#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
+//#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // The Setup file is then automatically selected.  When the TFT_eSPI library is updated, it will overwrite the changes in the User_Setup_Select.h file.
@@ -78,6 +82,7 @@
     #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
     #define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
 #endif
+
 #if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_1_9_IDEASPARK_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD  // CONFIG_ is added to name in Project level CMakeLists.txt to control 
                                                          // TFT_eSPI User_Select.h choice of file to match this display
@@ -94,6 +99,7 @@
     //#define OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR  // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder 
     //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  
 #endif
+
 #if (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_3_2_DIYMALLS_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
     #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
@@ -125,6 +131,7 @@
     //#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
     //#define FEATURE_TFT_DISPLAY
 #endif
+
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
@@ -147,6 +154,7 @@
     #define DEFAULT_GRID "CN87ts"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
     #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
 #endif
+
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
     #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
@@ -165,6 +173,31 @@
     #define DEFAULT_GRID "CN88ss"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
+#endif
+
+#if (DISPLAY_TYPE == TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD)
+    //#define CONFIG_DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD   
+    #define FEATURE_TTFT_WAVESHARE_S3_TOUCH_LCD_43_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
+    //#define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
+    //#define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY    
+    //#define FEATURE_TFT_DISPLAY   // graphics, does not require touch
+    #define TFT_320_480   // use 320x480 layout (vs default 240x320)
+    #define TOUCH_BUTTON_16  // PUt up a single panel of 16 button vs cycling though 4 rows of 4 buttons each
+    #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
+    //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
+    //#define USE_BT_TASK 
+    //#define USE_TASK
+    //#define FEATURE_SINEWAVE_SIDETONE
+    //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
+    //#define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    //#define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
+    #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
+    //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
+    #define DEFAULT_GRID "CN87xs"  // substitute for GPS supplied grid square. This and GPS time will display on status row. Must be between 4 and 8 chars
+    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button   
 #endif
 
 //#define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library

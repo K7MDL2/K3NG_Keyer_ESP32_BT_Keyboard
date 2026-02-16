@@ -48,7 +48,7 @@
      #include <../TFT_e_SPI_Custom_Config/User_Setup_ST7796_320x480_Cap.h>
 #elif (DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD || CONFIG_DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD)
      //#define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
-     #include <./TFT_e_SPI_Custom_Config/User_Setup_Pico_320x480_res.h>    
+     #include <../TFT_e_SPI_Custom_Config/User_Setup_Pico_320x480_res.h>    
 #else
      #include <User_Setup.h>           // Default setup is root library folder
 #endif

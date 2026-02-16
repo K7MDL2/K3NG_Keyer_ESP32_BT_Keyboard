@@ -243,6 +243,50 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     //#define cw_decoder_audio_input_pin 39 // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
     //#define cw_decoder_indicator 16       // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
 
+#elif defined (FEATURE_TTFT_WAVESHARE_S3_TOUCH_LCD_43_LCD)    // for ESP32-3248S05C 3.5" 320x480 TFT ST7796 and GT911
+    #define bt_keyboard_LED 20 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    
+    
+    #if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
+      #define I2CDEV_SDA_PIN  21   // override the sdkconfig pair of 21, 22
+      #define I2CDEV_SCL_PIN  22
+    #endif
+
+    #ifdef FEATURE_MCP23017_EXPANDER
+      #ifdef FEATURE_STRAIGHT_KEY
+        #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
+      #endif //FEATURE_STRAIGHT_KEY
+      #define MCP23X17_ADDR 0x27          
+      #define MCP23017_INTA_GPIO 35 // input only, no pullup on this pin
+      #define paddle_left     MCP23017_PIN0 // expander pin PA0
+      #define paddle_right    MCP23017_PIN1 // expander pin PA1
+    #else
+      #define paddle_left     15 //32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #define paddle_right    16 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
+      #ifdef FEATURE_STRAIGHT_KEY
+        #define pin_straight_key  25 //TXD0
+      #endif //FEATURE_STRAIGHT_KEY
+      #define GPS_RX_PIN       0 // will conflict with NCP23017 if used     
+    #endif
+    #define TOUCH_SDA    8  // intenral bus for i2c touch controller GT911 pins
+    #define TOUCH_SCL    9
+    #define TOUCH_INT    4  // not actually used because R25 is not installed on DIYMalls 3.2" display and 21 is for i2c
+    #define TOUCH_RST   -1 // EXIO1 on the CH422G
+    #define TOUCH_WIDTH  800  
+    #define TOUCH_HEIGHT 480
+    #define tx_key_line_1   19 // (high = key down/tx on) (16 on 3.2" DIY malls st7789 TFT, green LED)
+    #define tx_key_line_2    0 
+    #define sidetone_line    0 // connect a speaker for sidetone
+    #define audio_enable     0 // Only for 3.5" Hoysond Display
+    #define potentiometer    0 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+    #define ptt_tx_1         0 // PTT ("push to talk") lines   (4 on 3.2" DIY malls st7789 TFT, red LED)
+    #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
+    #define tx_inhibit_pin   0 //13 ((2, 27, 12-15 used for 3.2" DIY Malls st7789 TFT)
+    #define tx_pause_pin     0 //14 
+    // FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
+    // See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details
+    //#define cw_decoder_pin 13             // This is for use with external decoding hardware
+    //#define cw_decoder_audio_input_pin 39 // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
+    //#define cw_decoder_indicator 16       // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
 
 #else // ESP-WROOM-32, 27, 5 33
 
