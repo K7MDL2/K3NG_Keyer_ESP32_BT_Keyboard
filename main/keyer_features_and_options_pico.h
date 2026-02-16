@@ -52,31 +52,21 @@
 // Edit the Components/TFT_eSPI/User_Select.h to add a new #elif to point to the new User_Setup.h.  Clone the existing definitions
 
 // These are for build automation.  Precompiled files will be renamed for each display type at each build.
-#define NO_DISPLAY             0
-#define TEXT_I2C_4x20_LCD      1
-#define TFT_1_9_IDEASPARK_LCD  2
-#define TFT_3_2_DIYMALLS_LCD   3
-#define M5STACK_CORE2_LCD      4
-#define TFT_HOSYOND_320x480_LCD 5
-#define TFT_320x480_CAP_LCD    6
+#define NO_DISPLAY               0
+#define TFT_320x480_CAP_LCD      1
+#define TFT_PICO_320x480_RES_LCD 2
 
 // Choose one of the display types by uncommenting it.  
 // If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
+
 //#define DISPLAY_TYPE NO_DISPLAY
-//#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 #define DISPLAY_TYPE TFT_PICO_320x480_RES_LCD  // 3.5" 320x480 Waveshare with XPT2046 resistive Touch controller, IL:9488 display, usng TFT_eSPI lib
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // The Setup file is then automatically selected.  When the TFT_eSPI library is updated, it will overwrite the changes in the User_Setup_Select.h file.
 // You need to restore the changes to point to the corerct User_Setup_xxx.h file for build automation to work right.
-
-#if (DISPLAY_TYPE == TEXT_I2C_4x20_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TEXT_I2C_4x20_LCD)
-    //#define CONFIG_DISPLAY_TYPE TEXT_I2C_4x20_LCD
-    #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
-    #define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
-#endif
 
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
