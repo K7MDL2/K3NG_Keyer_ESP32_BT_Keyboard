@@ -1830,23 +1830,27 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
 #endif
 
-#if defined(HARDWARE_ESP32_DEV)
-  #include <driver/gpio.h>
-  #include <freertos/event_groups.h>
-  //#include "freertos/semphr.h"
-  #include <freertos/task.h>
+#if defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
   volatile bool paddle_left_state  = true;   // 1 is pulled high, 0 is contact closed
   volatile bool paddle_right_state = true;
   volatile bool straight_key_state = true;
-  static EventGroupHandle_t Key_Events = NULL;
-  #ifdef FEATURE_MCP23017_EXPANDER    
-    #include "MCP23017.h"
-    #ifdef USE_WIRE1 
-      MCP23017 mcp23017 = MCP23017(MCP23X17_ADDR, Wire1);
-    #else
-      MCP23017 mcp23017 = MCP23017(MCP23X17_ADDR, Wire);
-    #endif
+#endif
+
+#ifdef FEATURE_MCP23017_EXPANDER 
+  //#include <driver/gpio.h>   
+  #include "MCP23017.h"
+  #ifdef USE_WIRE1 
+    MCP23017 mcp23017 = MCP23017(MCP23X17_ADDR, Wire1);
+  #else
+    MCP23017 mcp23017 = MCP23017(MCP23X17_ADDR, Wire);
   #endif
+#endif
+
+#if defined(HARDWARE_ESP32_DEV) || defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
+  #include <freertos/event_groups.h>
+  //#include "freertos/semphr.h"
+  #include <freertos/task.h>
+  static EventGroupHandle_t Key_Events = NULL;
 #endif
 
 #if defined(FEATURE_LCD_HD44780)
@@ -3256,7 +3260,7 @@ void service_keypad(){
 
     static byte last_straight_key_state = 0;
 
-    #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
+    #if defined(USE_KEY_PIN_INTERRUPTS)
       if (straight_key_state == STRAIGHT_KEY_ACTIVE_STATE) {
     #else
       if (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE){
@@ -3764,33 +3768,34 @@ void TC3_Handler ( void ) {
   
 }
 #endif
+
 #if defined(HARDWARE_ESP32_DEV) // Sleep function for ESP323 hardware SP5IOU 20220201
-#ifdef FEATURE_SLEEP
-void wakeup() {
+  #ifdef FEATURE_SLEEP
+  void wakeup() {
 
-}
-#endif
+  }
+  #endif
 #else
+  #ifdef FEATURE_SLEEP     // Code contributed by Graeme, ZL2APV 2016-01-18
+  void wakeup() {
+    sleep_disable();
+    detachInterrupt (0);
+  }  // end of wakeup
 
-#ifdef FEATURE_SLEEP     // Code contributed by Graeme, ZL2APV 2016-01-18
-void wakeup() {
-  sleep_disable();
-  detachInterrupt (0);
-}  // end of wakeup
+  ISR (PCINT1_vect)
+    {
+    PCICR = 0;  // cancel pin change interrupts
+    sleep_disable();
+    } // end of ISR (PCINT1_vect)
 
-ISR (PCINT1_vect)
-  {
-  PCICR = 0;  // cancel pin change interrupts
-  sleep_disable();
-  } // end of ISR (PCINT1_vect)
-
-ISR (PCINT2_vect)
-  {
-  PCICR = 0;  // turn off all pin change interrupt ports
-  sleep_disable();
-  } // end of ISR (PCINT2_vect)
-#endif //FEATURE_SLEEP
+  ISR (PCINT2_vect)
+    {
+    PCICR = 0;  // turn off all pin change interrupt ports
+    sleep_disable();
+    } // end of ISR (PCINT2_vect)
+  #endif //FEATURE_SLEEP
 #endif //HARDWARE_ESP32_DEV
+
 //-------------------------------------------------------------------------------------------------------
 /*  Sleep code prior to 2016-01-18
 #ifdef FEATURE_SLEEP
@@ -3822,97 +3827,93 @@ void check_sleep(){
     debug_serial_port->println(F("check_sleep: I'm awake!"));
     #endif //DEBUG_SLEEP
   }
-  
-  
 }
 #endif //FEATURE_SLEEP
 */
 
 #if defined(HARDWARE_ESP32_DEV) // Sleep function for ESP323 hardware SP5IOU 20220201
-#ifdef FEATURE_SLEEP
-void check_sleep() {
+  #ifdef FEATURE_SLEEP
+  void check_sleep() {
 
-}
-#endif
+  }
+  #endif
 #else
 #ifdef FEATURE_SLEEP   // Code contributed by Graeme, ZL2APV  2016-01-18
-void check_sleep(){
+  void check_sleep(){
 
-  if ((millis() - last_activity_time) > ((unsigned long)go_to_sleep_inactivity_time*60000)){
+    if ((millis() - last_activity_time) > ((unsigned long)go_to_sleep_inactivity_time*60000)){
 
-    if (config_dirty) {  // force a configuration write to EEPROM if the config is dirty
-      last_config_write = 0;
-      check_for_dirty_configuration();
+      if (config_dirty) {  // force a configuration write to EEPROM if the config is dirty
+        last_config_write = 0;
+        check_for_dirty_configuration();
+      }
+
+      byte old_ADCSRA = ADCSRA;
+      // disable ADC to save power
+      ADCSRA = 0;
+
+      set_sleep_mode (SLEEP_MODE_PWR_DOWN);
+      sleep_enable();
+
+      // Do not interrupt before we go to sleep, or the ISR will detach interrupts and we won't wake.
+      noInterrupts ();
+
+      // will be called when pin D2, D5 or A1 goes low
+      attachInterrupt(0, wakeup, FALLING);
+      EIFR = bit(INTF0);  // clear flag for interrupt 0
+      PCIFR = 0; // Clear all pin change flags
+      PCICR  = 0b00000110;    //Turn on ports C and D only
+      PCMSK2 = bit(PCINT21);  //Turn on pin D5
+      PCMSK1 = bit(PCINT9);   //Turn on pin A1
+
+      // turn off brown-out enable in software
+      // BODS must be set to one and BODSE must be set to zero within four clock cycles
+      #if !defined(__AVR_ATmega2560__)
+        MCUCR = bit (BODS) | bit (BODSE);
+        // The BODS bit is automatically cleared after three clock cycles
+        MCUCR = bit (BODS);
+      #endif
+
+      #ifdef DEBUG_SLEEP
+        debug_serial_port->println(F("check_sleep: entering sleep"));
+        myDelay(1000);
+      #endif //DEBUG_SLEEP
+
+      if (keyer_awake){
+        digitalWrite(keyer_awake,KEYER_AWAKE_PIN_ASLEEP_STATE);
+      }
+
+      interrupts();
+      sleep_cpu();
+
+      // shhhhh! we are asleep here !!
+
+      // An interrupt on digital 2 will call the wake() interrupt service routine
+      // and then return us to here while a change on D5 or A1 will vector to their
+      // interrupt handler and also return to here.
+
+      detachInterrupt (0);
+      PCICR  = 0;    //Turn off all ports
+      PCMSK2 = 0;    //Turn off pin D5
+      PCMSK1 = 0;    //Turn off pin A1
+
+      ADCSRA = old_ADCSRA;   // re-enable ADC conversion
+
+      if (keyer_awake){
+        digitalWrite(keyer_awake,KEYER_AWAKE_PIN_AWAKE_STATE);
+      }
+
+      last_activity_time = millis();
+      #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+        last_active_time = millis(); 
+      #endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
+
+      #ifdef DEBUG_SLEEP
+        debug_serial_port->println(F("check_sleep: I'm awake!"));
+      #endif //DEBUG_SLEEP
     }
-
-    byte old_ADCSRA = ADCSRA;
-    // disable ADC to save power
-    ADCSRA = 0;
-
-    set_sleep_mode (SLEEP_MODE_PWR_DOWN);
-    sleep_enable();
-
-    // Do not interrupt before we go to sleep, or the ISR will detach interrupts and we won't wake.
-    noInterrupts ();
-
-    // will be called when pin D2, D5 or A1 goes low
-    attachInterrupt(0, wakeup, FALLING);
-    EIFR = bit(INTF0);  // clear flag for interrupt 0
-    PCIFR = 0; // Clear all pin change flags
-    PCICR  = 0b00000110;    //Turn on ports C and D only
-    PCMSK2 = bit(PCINT21);  //Turn on pin D5
-    PCMSK1 = bit(PCINT9);   //Turn on pin A1
-
-    // turn off brown-out enable in software
-    // BODS must be set to one and BODSE must be set to zero within four clock cycles
-    #if !defined(__AVR_ATmega2560__)
-      MCUCR = bit (BODS) | bit (BODSE);
-      // The BODS bit is automatically cleared after three clock cycles
-      MCUCR = bit (BODS);
-    #endif
-
-    #ifdef DEBUG_SLEEP
-      debug_serial_port->println(F("check_sleep: entering sleep"));
-      myDelay(1000);
-    #endif //DEBUG_SLEEP
-
-    if (keyer_awake){
-      digitalWrite(keyer_awake,KEYER_AWAKE_PIN_ASLEEP_STATE);
-    }
-
-    interrupts();
-    sleep_cpu();
-
-    // shhhhh! we are asleep here !!
-
-    // An interrupt on digital 2 will call the wake() interrupt service routine
-    // and then return us to here while a change on D5 or A1 will vector to their
-    // interrupt handler and also return to here.
-
-    detachInterrupt (0);
-    PCICR  = 0;    //Turn off all ports
-    PCMSK2 = 0;    //Turn off pin D5
-    PCMSK1 = 0;    //Turn off pin A1
-
-    ADCSRA = old_ADCSRA;   // re-enable ADC conversion
-
-    if (keyer_awake){
-      digitalWrite(keyer_awake,KEYER_AWAKE_PIN_AWAKE_STATE);
-    }
-
-    last_activity_time = millis();
-    #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-      last_active_time = millis(); 
-    #endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
-
-    #ifdef DEBUG_SLEEP
-      debug_serial_port->println(F("check_sleep: I'm awake!"));
-    #endif //DEBUG_SLEEP
   }
-
-
-}
-#endif //FEATURE_SLEEP
+  #endif //FEATURE_SLEEP
 #endif //HARDWARE_ESP32_DEV
 //-------------------------------------------------------------------------------------------------------
 
@@ -5515,10 +5516,8 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
     repeat_memory = 255;
   #endif
 
-  while (looping) {
-    #ifdef HARDWARE_ESP32_DEV
+  while (looping) {    
       myDelay(1);
-    #endif
     #ifdef FEATURE_PS2_KEYBOARD
     if (keyboard.available() == 0) {        // wait for the next keystroke
     #endif
@@ -6651,7 +6650,7 @@ void write_settings_to_eeprom(int initialize_eeprom) {
       EEPROM.write(ee++, *p++);  
     }
     #if defined(HARDWARE_ESP32_DEV)
-    EEPROM.commit();;
+      EEPROM.commit();;
     #endif       
 
     async_eeprom_write = 1;  // initiate an asynchronous eeprom write
@@ -7271,21 +7270,7 @@ void tx_and_sidetone_key (int state)
         }
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
-        #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-            #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-                #ifdef FEATURE_M5STACK_CORE2
-                    M5.Speaker.tone(700, configuration.hz_sidetone);
-                #else
-                    s_tone(sidetone_line,configuration.hz_sidetone,0);
-                #endif                                            // generate a tone on the speaker pin
-            #else  
-              s_tone(sidetone_line,configuration.hz_sidetone,0);
-            #endif
-        #else
-          if (sidetone_line) {
-            digitalWrite(sidetone_line, sidetone_line_active_state);
-          }
-        #endif
+          s_tone(sidetone_line,configuration.hz_sidetone,0);
       }
       key_state = 1;
     } else {
@@ -7300,24 +7285,7 @@ void tx_and_sidetone_key (int state)
           ptt_key();
         }
         if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
-          #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-            #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-              #ifdef FEATURE_M5STACK_CORE2
-                  if (M5.Speaker.isPlaying(0))
-                  {
-                      M5.Speaker.stop();
-                  }
-              #else
-                  s_noTone(sidetone_line);
-              #endif
-            #else  
-              s_noTone(sidetone_line);
-            #endif
-          #else
-             if (sidetone_line) {
-               digitalWrite(sidetone_line, sidetone_line_inactive_state);
-             }          
-          #endif
+          s_noTone(sidetone_line);
         }
         key_state = 0;
       }
@@ -7340,13 +7308,7 @@ void tx_and_sidetone_key (int state)
         }
       }
       if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
-        #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-          s_tone(sidetone_line, configuration.hz_sidetone,0);
-        #else
-          if (sidetone_line) {
-            digitalWrite(sidetone_line, sidetone_line_active_state);
-          }
-        #endif          
+          s_tone(sidetone_line, configuration.hz_sidetone,0);        
       }
       key_state = 1;
     } else {
@@ -7363,15 +7325,7 @@ void tx_and_sidetone_key (int state)
           }
         }
         if ((configuration.sidetone_mode == SIDETONE_ON) || (keyer_machine_mode == KEYER_COMMAND_MODE) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_mode == MANUAL_SENDING))) {
-          #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-            #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-              s_noTone(sidetone_line);
-            #else
-              if (sidetone_line) {
-                digitalWrite(sidetone_line, sidetone_line_inactive_state);
-              }
-            #endif
-          #endif
+          s_noTone(sidetone_line);
         }
         key_state = 0;
       }
@@ -7383,7 +7337,6 @@ void tx_and_sidetone_key (int state)
   #endif
 
   check_ptt_tail();
-
 
 }
 
@@ -8849,15 +8802,8 @@ void command_progressive_5_char_echo_practice() {
               #endif                                                                      // FEATURE_DISPLAY
               unsigned int NEWtone               =  400;                                  // the initial tone freuency for the tone sequence
               unsigned int TONEduration          =   50;                                  // define the duration of each tone element in the tone sequence to drive a speaker
-              for (int k=0; k<6; k++) {
-                #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-                  s_tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
-                #else  
-                // a loop to generate some increasing tones
-                  tone(sidetone_line,NEWtone);                                              // generate a tone on the speaker pin
-                  myDelay(TONEduration);                                                      // hold the tone for the specified delay period
-                  noTone(sidetone_line); 
-                #endif                                                                   // turn off the tone
+              for (int k=0; k<6; k++) {              
+                s_tone(sidetone_line, NEWtone, TONEduration);                                              // generate a tone on the speaker pin                
                 NEWtone = NEWtone*1.25;                                                                  // calculate a new value for the tone frequency
               }                                                                           // end for
               send_char(' ',0);
@@ -9225,15 +9171,7 @@ void command_sidetone_freq_adj() {
 
   while (looping) {
     myDelay(1);
-    #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-        #ifdef FEATURE_M5STACK_CORE2
-          M5.Speaker.tone(700, configuration.hz_sidetone);
-        #else
-          s_tone(sidetone_line,configuration.hz_sidetone,100);                                              // generate a tone on the speaker pin
-        #endif
-    #else  
-        tone(sidetone_line, configuration.hz_sidetone, 0);
-    #endif
+    s_tone(sidetone_line, configuration.hz_sidetone, 0);
     if (paddle_pin_read(paddle_left) == LOW) {
       #ifdef FEATURE_DISPLAY
 	#ifdef OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
@@ -9286,12 +9224,8 @@ void command_sidetone_freq_adj() {
     #endif  //OPTION_WATCHDOG_TIMER
 
   }
-  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
-          #if defined HARDWARE_ESP32_DEV //SP5IOU 20220123
-            s_noTone(sidetone_line);
-          #else
-            noTone(sidetone_line);
-          #endif
+  while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high          
+    s_noTone(sidetone_line);
 }
 #endif                                                        //FEATURE_COMMAND_MODE
 
@@ -9803,136 +9737,50 @@ void service_dit_dah_buffers()
 
 void beep()
 {
-  #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
     // #if defined(FEATURE_SINEWAVE_SIDETONE)
     //   tone(sidetone_line, hz_high_beep);
     //   myDelay(200);
     //   noTone(sidetone_line);
     // #else
-    #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-      #ifdef FEATURE_M5STACK_CORE2a
-        M5.Speaker.tone(hz_high_beep, 200);
-      #else  
-        s_tone(sidetone_line, hz_high_beep, 200);
-      #endif
-    #else  
-      tone(sidetone_line, hz_high_beep, 0);
-      myDelay(100);
-      noTone(sidetone_line);
-    #endif
-
-  #else
-    if (sidetone_line) {
-      digitalWrite(sidetone_line, sidetone_line_active_state);
-      myDelay(200);
-      digitalWrite(sidetone_line, sidetone_line_inactive_state);
-    }
-  #endif
+    s_tone(sidetone_line, hz_high_beep, 200);
 }
 
 //-------------------------------------------------------------------------------------------------------
 
 void boop()
 {
-    #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-        #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-            #ifdef FEATURE_M5STACK_CORE2a
-                M5.Speaker.tone(hz_low_beep, 100);
-            #else
-                s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
-            #endif
-        #else  
-            tone(sidetone_line, hz_low_beep, 0);
-            myDelay(100);
-            noTone(sidetone_line);
-        #endif
-    #else
-        if (sidetone_line) {
-        digitalWrite(sidetone_line, sidetone_line_active_state);
-        myDelay(100);
-        digitalWrite(sidetone_line, sidetone_line_inactive_state);
-        }
-    #endif    
+  s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
 }
 
 //-------------------------------------------------------------------------------------------------------
 
 void beep_boop()
 {
-    #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-        #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-            #ifdef FEATURE_M5STACK_CORE2a
-                M5.Speaker.tone(hz_high_beep, 100);
-                M5.Speaker.tone(hz_low_beep, 100);
-            #else
-                s_tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
-                s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
-            #endif
-        #else  
-            tone(sidetone_line, hz_high_beep);
-            myDelay(100);
-            tone(sidetone_line, hz_low_beep);
-            myDelay(100);
-            noTone(sidetone_line);
-        #endif
-    #else
-            if (sidetone_line) {
-            digitalWrite(sidetone_line, sidetone_line_active_state);
-            myDelay(200);
-            digitalWrite(sidetone_line, sidetone_line_inactive_state);
-            }
-    #endif     
+  s_tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
+  s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
 }
 
 //-------------------------------------------------------------------------------------------------------
 
 void boop_beep()
 {
-  #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
-    #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
-        #ifdef FEATURE_M5STACK_CORE2a
-            M5.Speaker.tone(hz_low_beep, 100);
-            M5.Speaker.tone(hz_high_beep, 100);
-        #else
-            s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
-            s_tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
-        #endif
-     #else  
-        tone(sidetone_line, hz_low_beep);
-        myDelay(100);
-        tone(sidetone_line, hz_high_beep);
-        myDelay(100);
-        noTone(sidetone_line);
-    #endif
-  #else
-    if (sidetone_line) {
-      digitalWrite(sidetone_line, sidetone_line_active_state);
-      myDelay(200);
-      digitalWrite(sidetone_line, sidetone_line_inactive_state);
-    }
-  #endif         
+  s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+  s_tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
 }
-
-
 
 //-------------------------------------------------------------------------------------------------------
 void send_the_dits_and_dahs(char const * cw_to_send){
 
 
   /* American Morse - Special Symbols
-
     ~  long dah (4 units)
-
     =  very long dah (5 units)
-
     &  an extra space (1 unit)
-
   */ 
 
   //debug_serial_port->println(F("send_the_dits_and_dahs()"));
 
   sending_mode = AUTOMATIC_SENDING;
-
 
   #if defined(FEATURE_SERIAL) && !defined(OPTION_DISABLE_SERIAL_PORT_CHECKING_WHILE_SENDING_CW)
     dump_current_character_flag = 0;
@@ -15298,17 +15146,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
               unsigned int NEWtone               =  400;                                // the initial tone freuency for the tone sequence
               unsigned int TONEduration          =   50;                                // define the duration of each tone element in the tone sequence to drive a speaker
               for (int k=0; k<6; k++) {                                                 // a loop to generate some increasing tones
-                 #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220115
-                    #ifdef FEATURE_M5STACK_CORE2a
-                        M5.Speaker.tone(NEWtone, TONEduration);
-                    #else
-                        s_tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
-                    #endif
-                #else  
-                    tone(sidetone_line,NEWtone);                                            // generate a tone on the speaker pin
-                    myDelay(TONEduration);                                                    // hold the tone for the specified delay period
-                    noTone(sidetone_line);
-                #endif                                                  // turn off the tone
+                s_tone(sidetone_line,NEWtone,TONEduration);                                              // generate a tone on the speaker pin
                 NEWtone = NEWtone*1.25;                                                 // calculate a new value for the tone frequency
               }                                                                         // end for
               send_char(' ', 0);
@@ -17628,7 +17466,7 @@ byte play_memory(byte memory_number) {
         }
         if (keyer_machine_mode != BEACON) {
           #ifdef FEATURE_STRAIGHT_KEY
-            #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
+            #if defined(USE_KEY_PIN_INTERRUPTS)
               if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (straight_key_state == STRAIGHT_KEY_ACTIVE_STATE)) {   // exit if the paddle or button0 was hit
             #else
               if ((dit_buffer) || (dah_buffer) || (button0_buffer) || (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE)) {   // exit if the paddle or button0 was hit
@@ -17788,7 +17626,7 @@ void program_memory(int memory_number)
   #endif
 
   #if defined(FEATURE_BUTTONS) && defined(FEATURE_STRAIGHT_KEY)
-    #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
+    #if defined(USE_KEY_PIN_INTERRUPTS)
       while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { myDelay(1);}  // loop until user starts sending or hits the button
     #else
       while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { myDelay(1);}  // loop until user starts sending or hits the button
@@ -18109,6 +17947,8 @@ void initialize_i2c(void) {
     static uint32_t last_measure = 0;
     int delay_time = 5000;
 
+    if (ptt_line_activated) return;  // do not interrupt CW send timing
+
     if (update_heading_display_flag)
       delay_time = 500;
     else 
@@ -18170,7 +18010,41 @@ void display_heading(void) {
 // Paddle and Key Interrupt Handlers
 /*-----------------------------------------------------------*/
 
-#if defined(HARDWARE_ESP32_DEV) && !defined(FEATURE_MCP23017_EXPANDER)
+// Non-ESP32 local pin interrupt setup
+#if defined(USE_KEY_PIN_INTERRUPTS) && !defined(FEATURE_MCP23017_EXPANDER) && !defined(HARDWARE_ESP32_DEV)
+//---------------------------------------------------------------------
+static void left_paddle_intr_handler()
+{
+    paddle_left_state = digitalRead(paddle_left); 
+}
+
+//---------------------------------------------------------------------
+static void right_paddle_intr_handler()
+{
+    paddle_right_state = digitalRead(paddle_right);   
+}
+
+//---------------------------------------------------------------------
+#ifdef FEATURE_STRAIGHT_KEY
+  static void straight_key_intr_handler()
+  {
+      straight_key_state = digitalRead(pin_straight_key);       
+  }
+#endif
+
+void init_GPIO_key_pins(void) {   // standard Arduino method
+    pinMode (paddle_left, INPUT_PULLUP);
+    pinMode (paddle_right, INPUT_PULLUP);
+    attachInterrupt(paddle_left, left_paddle_intr_handler, CHANGE);
+    attachInterrupt(paddle_right, right_paddle_intr_handler, CHANGE);
+    #ifdef FEATURE_STRAIGHT_KEY
+      attachInterrupt(pin_straight_key, straight_key_intr_handler, CHANGE);
+    #endif
+}
+#endif // non ESP32 local pin interrupt setup
+
+// ESP32 local pin interrupt setup
+#if defined(USE_KEY_PIN_INTERRUPTS) && !defined(FEATURE_MCP23017_EXPANDER) && defined(HARDWARE_ESP32_DEV)
 //---------------------------------------------------------------------
 static void IRAM_ATTR left_paddle_intr_handler(void *arg)
 {
@@ -18217,47 +18091,65 @@ void init_ESP32_GPIO_key_pins(void) {
 #endif
 
 //---------------------------------------------------------------------
-#if defined(FEATURE_MCP23017_EXPANDER) && defined(HARDWARE_ESP32_DEV)
-#define BIT_PADDLE_LEFT	  ( 1 << 0)
-#define BIT_PADDLE_RIGHT	( 1 << 1)    
-#define BIT_STRAIGHT_KEY	( 1 << 2)
-#include "freertos/FreeRTOS.h"
-#include <freertos/event_groups.h>
+#if defined(FEATURE_MCP23017_EXPANDER)
+  #define BIT_PADDLE_LEFT	  ( 1 << 0)
+  #define BIT_PADDLE_RIGHT	( 1 << 1)    
+  #define BIT_STRAIGHT_KEY	( 1 << 2)
+  #include "freertos/FreeRTOS.h"
+  #include <freertos/event_groups.h>
+
 //------ For Port Expander Only ---------------------------------------------------------------
-static void IRAM_ATTR paddle_intr_handler(void *arg)
-{
-    // On interrupt set bit in event group
-    BaseType_t hp_task, xResult;
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    if (xEventGroupSetBitsFromISR(Key_Events,  BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {        
-      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
-        portYIELD_FROM_ISR(hp_task);
-      #else
-        portYIELD_FROM_ISR();
-      #endif
+  #ifdef HARDWARE_ESP32_DEV
+    static void IRAM_ATTR paddle_intr_handler(void *arg)
+    {
+        // On interrupt set bit in event group
+        BaseType_t hp_task, xResult;
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        if (xEventGroupSetBitsFromISR(Key_Events,  BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {        
+          #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
+            portYIELD_FROM_ISR(hp_task);
+          #else
+            portYIELD_FROM_ISR();
+          #endif
+        }
     }
-}
+  #else
+    static void paddle_intr_handler(void)
+    {
+        // On interrupt set bit in event group
+        BaseType_t hp_task, xResult;
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        if (xEventGroupSetBitsFromISR(Key_Events,  BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {               
+            portYIELD_FROM_ISR(hp_task);
+
+        }
+    }
+  #endif
 
 //-------------------------------------------------------------------
-IRAM_ATTR void read_io_handler(void *pvParameters)
-{
-    //EventBits_t e_bits;
-    uint8_t bits = 0;
-    myDelay(100);
-    while (1)
-    {
-        if (xEventGroupWaitBits(Key_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {            
-            bits = mcp23017.readPort(MCP23017Port::A);
-            paddle_left_state = bits & (1 << paddle_left);  // mask left paddle                                    
-            paddle_right_state = bits & (1 << paddle_right);  // mask right paddle                         
-            #ifdef FEATURE_STRAIGHT_KEY
-                straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle                             
-            #endif
-            bits = 0x00;
-        }
-        myDelay(1);
-    } 
-}
+  #ifdef HARDWARE_ESP32_DEV
+  IRAM_ATTR void read_io_handler(void *pvParameters)
+  #else
+  void read_io_handler(void *pvParameters)
+  #endif
+  {
+      //EventBits_t e_bits;
+      uint8_t bits = 0;
+      myDelay(100);
+      while (1)
+      {
+          if (xEventGroupWaitBits(Key_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {            
+              bits = mcp23017.readPort(MCP23017Port::A);
+              paddle_left_state = bits & (1 << paddle_left);  // mask left paddle                                    
+              paddle_right_state = bits & (1 << paddle_right);  // mask right paddle                         
+              #ifdef FEATURE_STRAIGHT_KEY
+                  straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle                             
+              #endif
+              bits = 0x00;
+          }
+          myDelay(1);
+      } 
+  }
 
 //-------------------------------------------------------------------
 
@@ -18280,16 +18172,22 @@ IRAM_ATTR void read_io_handler(void *pvParameters)
     // create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.
     xReturned = xTaskCreate(read_io_handler, "read_io_handler", 4096, NULL, 0, NULL);
 
-    // Setup CPU side GPIO interrupt for IntA 
-    gpio_set_direction((gpio_num_t) MCP23017_INTA_GPIO, GPIO_MODE_INPUT);
-    //gpio_set_pull_mode((gpio_num_t) MCP23017_INTA_GPIO, GPIO_PULLUP_ONLY);  // no pullup on pin 35
-    gpio_set_intr_type((gpio_num_t) MCP23017_INTA_GPIO, GPIO_INTR_ANYEDGE);
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add((gpio_num_t) MCP23017_INTA_GPIO, paddle_intr_handler, (void *)(gpio_num_t) MCP23017_INTA_GPIO);
-    
-    //uint16_t val;
-    mcp23017.readPort(MCP23017Port::A);
-    //debug_serial_port->print("MCP23107 Port A read:"); debug_serial_port->println(val, HEX);
+    #if defined(HARDWARE_ESP32_DEV)
+      // Setup CPU side GPIO interrupt for IntA 
+      gpio_set_direction((gpio_num_t) MCP23017_INTA_GPIO, GPIO_MODE_INPUT);
+      //gpio_set_pull_mode((gpio_num_t) MCP23017_INTA_GPIO, GPIO_PULLUP_ONLY);  // no pullup on pin 35
+      gpio_set_intr_type((gpio_num_t) MCP23017_INTA_GPIO, GPIO_INTR_ANYEDGE);
+      gpio_install_isr_service(0);
+      gpio_isr_handler_add((gpio_num_t) MCP23017_INTA_GPIO, paddle_intr_handler, (void *)(gpio_num_t) MCP23017_INTA_GPIO);
+    #else
+      // Setup CPU side GPIO interrupt for IntA       
+      pinMode (MCP23017_INTA_GPIO, INPUT);
+      attachInterrupt(MCP23017_INTA_GPIO, paddle_intr_handler, CHANGE);      
+    #endif
+
+    uint16_t val;
+    val = mcp23017.readPort(MCP23017Port::A);
+    debug_serial_port->print("MCP23107 Port A read:"); debug_serial_port->println(val, HEX);
     // Now any pin state change will call the handler.
   }
 #endif
@@ -18298,10 +18196,12 @@ IRAM_ATTR void read_io_handler(void *pvParameters)
 void initialize_pins() {
 #if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
   #ifdef FEATURE_MCP23017_EXPANDER
-    init_MCP23017();
-  #elif defined(HARDWARE_ESP32_DEV)
+    init_MCP23017();  // pin interrupts used on the expander, not local io pins.
+  #elif (defined(HARDWARE_ESP32_DEV) && defined(USE_KEY_PIN_INTERRUPTS))
     init_ESP32_GPIO_key_pins();
-  #else
+  #elif (!defined(HARDWARE_ESP32_DEV) && defined(USE_KEY_PIN_INTERRUPTS))
+    init_GPIO_key_pins();
+  #else  // no interrupts
     pinMode (paddle_left, INPUT_PULLUP);
     pinMode (paddle_right, INPUT_PULLUP);
   #endif
@@ -18446,16 +18346,13 @@ void initialize_pins() {
     // }
   #endif //FEATURE_PTT_INTERLOCK
 
-  #if defined(FEATURE_STRAIGHT_KEY) && !defined(FEATURE_MCP23017_EXPANDER) && !defined(HARDWARE_ESP32_DEV)
-    pinMode(pin_straight_key,INPUT);
+  #if defined(FEATURE_STRAIGHT_KEY) && !defined(USE_KEY_PIN_INTERRUPTS)
+    pinMode(pin_straight_key,INPUT_PULLUP);
     if (STRAIGHT_KEY_ACTIVE_STATE == HIGH){
       digitalWrite (pin_straight_key, LOW);
     } else {
       digitalWrite (pin_straight_key, HIGH);
     }
-    #if defined(ARDUINO_MAPLE_MINI)|| defined(ARDUINO_GENERIC_STM32F103C) || defined(__STM32F1__)//SP5IOU 20210802
-          pinMode(pin_straight_key,INPUT_PULLUP); //SP5IOU 20210802
-    #endif //SP5IOU 20210802
   #endif //FEATURE_STRAIGHT_KEY
 
   #if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
@@ -21410,7 +21307,7 @@ int paddle_pin_read(int pin_to_read) {
         }                                                     // end switch
     #endif                                                  // OPTION_SAVE_MEMORY_NANOKEYER
     #if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
-        #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
+        #if defined(USE_KEY_PIN_INTERRUPTS)
             // !OPTION_INVERT_PADDLE_PIN_LOGIC
             if (pin_to_read == paddle_left) {                            
               //debug_serial_port->print(F("Paddle Left  Val = ")); debug_serial_port->println(paddle_left_state);
@@ -21425,7 +21322,7 @@ int paddle_pin_read(int pin_to_read) {
         #endif
     #endif                                                  // !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
   #else                                               // !OPTION_INVERT_PADDLE_PIN_LOGIC
-      #if defined(FEATURE_MCP23017_EXPANDER) || defined(HARDWARE_ESP32_DEV)
+      #if defined(USE_KEY_PIN_INTERRUPTS)
             if (pin_to_read == paddle_left) {              
               //debug_serial_port->print(F("Paddle Left  Val = ")); debug_serial_port->println(paddle_left_state);
               return (int) !paddle_left_state;
@@ -24187,13 +24084,42 @@ void so2r_command() {
 // eventually replace tone() with a better adjustable volume version
 void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration_ms)
 {
-    //debug_serial_port->printf("pin:%d Freq:%d dur:%lu", sidetone_line_pin_num, frequency, duration_ms);
-    tone(sidetone_line_pin_num, frequency, duration_ms);
+  #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
+    #ifdef FEATURE_M5STACK_CORE2
+        M5.Speaker.tone(frequency, configuration.hz_sidetone);
+        myDelay(duration_ms);
+        if (M5.Speaker.isPlaying(0))
+        {
+            M5.Speaker.stop();
+        }
+    #elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+       //debug_serial_port->printf("pin:%d Freq:%d dur:%lu", sidetone_line_pin_num, frequency, duration_ms);
+       tone(sidetone_line_pin_num, frequency, duration_ms);
+    #endif
+  #else
+    if (sidetone_line) {
+      digitalWrite(sidetone_line, sidetone_line_active_state);
+    }
+  #endif
+  
 }
 
  void s_noTone(uint8_t sidetone_line_pin_num)
  {
-    noTone(sidetone_line_pin_num);
+    #if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
+      #ifdef FEATURE_M5STACK_CORE2
+        if (M5.Speaker.isPlaying(0))
+        {
+            M5.Speaker.stop();
+        }
+      #elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+        noTone(sidetone_line_pin_num);
+      #endif
+    #else
+      if (sidetone_line) {
+        digitalWrite(sidetone_line, sidetone_line_inactive_state);
+      }        
+    #endif
  }
 
 
@@ -25893,6 +25819,8 @@ void check_gps(bool force_update, bool ignore_gps) {
     #ifdef DEBUG_GPS_X
       debug_serial_port->print("Check GPS.  Ignore (0=Use, 1=ignore) : ");debug_serial_port->println(configuration.ignore_gps);
     #endif
+
+    if (ptt_line_activated) return;  // do not interrupt CW send timing
 
     if (ignore_gps) {
       if (!configuration.ignore_gps) {

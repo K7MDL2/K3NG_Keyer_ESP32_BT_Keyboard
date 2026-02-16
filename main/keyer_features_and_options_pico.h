@@ -71,7 +71,9 @@
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
     #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-    //#define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
+    //#define FEATURE_STRAIGHT_KEY
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define FEATURE_TFT_DISPLAY
     #define TFT_320_480
     #define TOUCH_BUTTON_16
@@ -95,7 +97,9 @@
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
     #define TOUCH_BUTTON_16
     #define TFT_320_480
-    //#define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
+    #define FEATURE_STRAIGHT_KEY
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
+    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     //#define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define USE_RES_TOUCH // For XPT2046 resistive Touch Controller

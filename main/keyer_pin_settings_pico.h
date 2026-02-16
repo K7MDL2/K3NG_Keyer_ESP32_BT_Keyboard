@@ -72,10 +72,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define ptt_tx_2         7  //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 
     #define tx_pause_pin     0 
-    #ifdef FEATURE_STRAIGHT_KEY
-      #define pin_straight_key 27 //TXD0 - GREEN LED
-    #endif //FEATURE_STRAIGHT_KEY
-    // free pins are 7, 14, 16 (UART1 TX).
+    // free pins are 7, 14, 16 (UART1 TX), 27 and more on RP2350B boards.
     // --->   that leaves onboard pins 19 21 free  in both cases  <-----
     // FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
     // See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details

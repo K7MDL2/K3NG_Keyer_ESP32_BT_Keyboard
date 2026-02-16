@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.13"
+#define CODE_VERSION "K7MDL-2026.2.16"
 #define eeprom_magic_number 35          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
@@ -65,9 +65,9 @@
 // If using SDKConfig (with MenuConfig too) then leave all these commented out as it wil be defined in sdkconfig.h
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
-#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
+//#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
+#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
 //#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
@@ -80,14 +80,16 @@
 #if (DISPLAY_TYPE == TEXT_I2C_4x20_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TEXT_I2C_4x20_LCD)
     //#define CONFIG_DISPLAY_TYPE TEXT_I2C_4x20_LCD
     #define FEATURE_LCD_LIQUIDCRYSTAL_I2C            // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
-    #define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
+    #define FEATURE_STRAIGHT_KEY
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
 #endif
 
 #if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_1_9_IDEASPARK_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD  // CONFIG_ is added to name in Project level CMakeLists.txt to control 
                                                          // TFT_eSPI User_Select.h choice of file to match this display
     #define FEATURE_IDEASPARK_LCD  // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
-    #define FEATURE_STRAIGHT_KEY   // This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
+    #define FEATURE_STRAIGHT_KEY
     #define FEATURE_TFT_DISPLAY    
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
@@ -104,7 +106,8 @@
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
     #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
-    #define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
+    #define FEATURE_STRAIGHT_KEY
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
@@ -135,7 +138,8 @@
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-    ///#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
+    ///#define FEATURE_STRAIGHT_KEY
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
@@ -158,7 +162,8 @@
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
     #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
-    //#define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
+    //#define FEATURE_STRAIGHT_KEY
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY
     #define TFT_320_480
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
@@ -179,6 +184,7 @@
     //#define CONFIG_DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD   
     #define FEATURE_TTFT_WAVESHARE_S3_TOUCH_LCD_43_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     //#define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     //#define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY    
     //#define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
