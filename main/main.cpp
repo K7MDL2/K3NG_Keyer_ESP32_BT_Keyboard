@@ -1763,7 +1763,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #define COLUMN_WIDTH 15         // width of mono-spaced scroll box font in pixels
   #define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
 
-  #ifdef RES_320_480   // 320x480 display
+  #ifdef TFT_320_480   // 320x480 display
     // Define handle to receive return value
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
     #define SCREEN_HEIGHT (TFT_WIDTH-1)
@@ -7278,6 +7278,8 @@ void tx_and_sidetone_key (int state)
                 #else
                     s_tone(sidetone_line,configuration.hz_sidetone,0);
                 #endif                                            // generate a tone on the speaker pin
+            #else  
+              s_tone(sidetone_line,configuration.hz_sidetone,0);
             #endif
         #else
           if (sidetone_line) {
@@ -7308,11 +7310,13 @@ void tx_and_sidetone_key (int state)
               #else
                   s_noTone(sidetone_line);
               #endif
-            #else
-            if (sidetone_line) {
-              digitalWrite(sidetone_line, sidetone_line_inactive_state);
-            }
+            #else  
+              s_noTone(sidetone_line);
             #endif
+          #else
+             if (sidetone_line) {
+               digitalWrite(sidetone_line, sidetone_line_inactive_state);
+             }          
           #endif
         }
         key_state = 0;
@@ -9811,7 +9815,12 @@ void beep()
       #else  
         s_tone(sidetone_line, hz_high_beep, 200);
       #endif
+    #else  
+      tone(sidetone_line, hz_high_beep, 0);
+      myDelay(100);
+      noTone(sidetone_line);
     #endif
+
   #else
     if (sidetone_line) {
       digitalWrite(sidetone_line, sidetone_line_active_state);
@@ -9837,7 +9846,6 @@ void boop()
             myDelay(100);
             noTone(sidetone_line);
         #endif
-
     #else
         if (sidetone_line) {
         digitalWrite(sidetone_line, sidetone_line_active_state);
@@ -19149,7 +19157,7 @@ void initialize_gps_port(void) {
                 
                 debug_serial_port->print("Intialized GPS Serial Port on Pin "); debug_serial_port->println(GPS_RX_PIN);
             #else
-                gps_serial_port.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, NOPIN, GPS_SERIAL_INVERT);              
+                gps_serial_port.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);              
             #endif
             gps_serial_port.flush();  // move the read string queue char ptr to the front so the next read works      
         #endif
@@ -24179,7 +24187,8 @@ void so2r_command() {
 // eventually replace tone() with a better adjustable volume version
 void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration_ms)
 {
-  tone(sidetone_line_pin_num, frequency, duration_ms);
+    //debug_serial_port->printf("pin:%d Freq:%d dur:%lu", sidetone_line_pin_num, frequency, duration_ms);
+    tone(sidetone_line_pin_num, frequency, duration_ms);
 }
 
  void s_noTone(uint8_t sidetone_line_pin_num)

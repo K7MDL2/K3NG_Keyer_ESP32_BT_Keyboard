@@ -66,7 +66,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define potentiometer   26 // ADC0 = Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define tx_key_line_1    6 // (high = key down/tx on)
     #define tx_key_line_2   14 
-    #define sidetone_line   18  //26 connect a passive buzzer for sidetone
+    #define sidetone_line   42 // 18  //26 connect a passive buzzer for sidetone   42 is RP2350B
     #define audio_enable     0  // audio amp enable = LOW for this display (only?)
     #define ptt_tx_1        19  // 22 for PTT ("push to talk") lines, GPIO22 is RED LED
     #define ptt_tx_2         7  //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors

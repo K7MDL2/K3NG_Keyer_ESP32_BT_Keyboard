@@ -83,7 +83,7 @@
     #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
     //#define FEATURE_STRAIGHT_KEY    //This features disables memory macros on ESP32 SP5IOU 20220124 - ?? Need to verify.  /I works.
     #define FEATURE_TFT_DISPLAY
-    #define RES_320_480
+    #define TFT_320_480
     #define TOUCH_BUTTON_16
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
@@ -104,7 +104,7 @@
     #define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
     #define TOUCH_BUTTON_16
-    #define RES_320_480
+    #define TFT_320_480
     //#define FEATURE_STRAIGHT_KEY  // no pins left on this CPU, enable only when using the MCP23017 expander
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     //#define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
