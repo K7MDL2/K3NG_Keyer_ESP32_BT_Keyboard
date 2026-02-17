@@ -47,11 +47,11 @@
 #define winkey_xon_threshold 10          // the number of chars in the buffer below which we deactivate XOFF
 #define default_memory_repeat_time 3000  // time in milliseconds
 
-#ifdef RES_320_480   // for 480px wide display
-  #define LCD_COLUMNS 30  // sets the char per line in cw text scroll box
-  #define LCD_ROWS 5      // number of rows in teh CW Scroill Box
-#elif defined(FEATURE_TFT_DISPLAY)  // all 320px wideTFT displays
+#if defined(TFT_320_480)   // for 480px wide display
   #define LCD_COLUMNS 20  // sets the char per line in cw text scroll box
+  #define LCD_ROWS 3      // number of rows in teh CW Scroill Box
+#elif defined(FEATURE_TFT_DISPLAY)  // all 320px wideTFT displays
+  #define LCD_COLUMNS 18  // sets the char per line in cw text scroll box
   #define LCD_ROWS 5      // number of rows in the CW Scroill Box
 #else
   #define LCD_COLUMNS 20

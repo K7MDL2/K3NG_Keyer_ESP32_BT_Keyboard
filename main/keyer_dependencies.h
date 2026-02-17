@@ -1,3 +1,4 @@
+// keyer_dependencies.h
 
 #if defined(FEATURE_LCD_4BIT) || defined(FEATURE_LCD_8BIT) || defined(FEATURE_LCD_ADAFRUIT_I2C) || defined(FEATURE_LCD_ADAFRUIT_BACKPACK) \
   || defined(FEATURE_LCD_YDv1) ||defined(FEATURE_LCD1602_N07DH) || defined(FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_M5STACK_CORE2) \
@@ -57,10 +58,6 @@
   #error "FEATURE_BT_KEYBOARD requires HARDWARE_ESP32_DEV or ARDUINO_RASPBERRY_PI_PICO_W"
 #endif
 
-//#if defined(FEATURE_TOUCH_DISPLAY) // && !defined(FEATURE_BT_KEYBOARD)
-//  #error "FEATURE_TOUCH_DISPLAY requires FEATURE_BT_KEYBOARD"
-//#endif
-
 #if defined(FEATURE_TOUCH_DISPLAY) && !defined(FEATURE_TFT_DISPLAY)
   #error "FEATURE_TOUCH_DISPLAY requires FEATURE_TFT_DISPLAY"
 #endif
@@ -68,4 +65,9 @@
 #if defined(FEATURE_DISPLAY) && (!defined(FEATURE_TOUCH_DISPLAY) && !defined(FEATURE_TFT_DISPLAY) && !defined(FEATURE_LCD_LIQUIDCRYSTAL_I2C))
   #error "This board type has a display. You must set one or more of these: FEATURE_LCD_LIQUIDCRYSTAL_I2C, FEATURE_TOUCH_DISPLAY, or FEATURE_TFT_DISPLAY"
 #endif
+
+// example how to catch a #define that should not be empty.
+//#if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check val;ue exists and is not empty, must be 1-4.
+//  #error "BUTTON_ROWS must be defined with a value = 1-4, or, TOUCH_BUTTON_16 must be defined in keyer_features_and_options.h. Defualting to 4 Rows."
+//#endif
 

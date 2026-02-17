@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.16"
+#define CODE_VERSION "K7MDL-2026.2.17"
 #define eeprom_magic_number 33          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
@@ -77,6 +77,7 @@
     #define FEATURE_TFT_DISPLAY
     #define TFT_320_480
     #define TOUCH_BUTTON_16
+    #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled.
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define TOUCH_BUTTON_16
@@ -94,14 +95,14 @@
 #if (DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_PICO_320x480_RES_LCD)
     //#define CONFIG_DISPLAY_TYPE  TFT_PICO_320x480_RES_LCD
     #define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
+    #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
-    #define TOUCH_BUTTON_16
-    #define TFT_320_480
+    //#define TOUCH_BUTTON_16   Must have FEATURE_TOUCH_DISPLAY enabled
+    #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
+    #define TFT_320_480  // sets screen layout appropriate for this resolution
     #define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
-    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
-    #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
-    //#define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define USE_RES_TOUCH // For XPT2046 resistive Touch Controller
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.

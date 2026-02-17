@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.16"
+#define CODE_VERSION "K7MDL-2026.2.17"
 #define eeprom_magic_number 35          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
@@ -67,9 +67,9 @@
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
-//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 //#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
@@ -106,6 +106,7 @@
     //#define CONFIG_DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD
     #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
+    #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
@@ -141,9 +142,10 @@
     ///#define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY
-    #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
+    #define FEATURE_TOUCH_DISPLAY  // Enable Touch features 
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
-    #define TOUCH_BUTTON_16  // PUt up a single panel of 16 button vs cycling though 4 rows of 4 buttons each
+    //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each
+    #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define USE_RES_TOUCH  // Enables touch with XPT2046
     ////#define USE_TASK // runs main loop in a task
     ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
@@ -168,7 +170,8 @@
     #define TFT_320_480
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
-    #define TOUCH_BUTTON_16
+    //#define TOUCH_BUTTON_16  //single panel of 16 buttons, only on 320x480 or larger displays
+    #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
@@ -189,6 +192,7 @@
     //#define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
     #define TOUCH_BUTTON_16  // PUt up a single panel of 16 button vs cycling though 4 rows of 4 buttons each
+    #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     //#define USE_BT_TASK 

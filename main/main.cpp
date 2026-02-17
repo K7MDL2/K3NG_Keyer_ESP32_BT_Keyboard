@@ -1751,77 +1751,129 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #else
     #include "SPI.h"
     #include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
+    #include "Free_Fonts.h" // Include the header file attached to this sketch
     TFT_eSPI lcd = TFT_eSPI();  // Invoke library
-    #define FM9 &FreeMono9pt7b
-    #define FS9 &FreeSans9pt7b
-    #define FMB12 &FreeMonoBold12pt7b
+
+/*   See FreeFonts library for complete list
+    #define FM9 &FreeMono9pt7b // mono
+    #define FMB9 &FreeMonoBold9pt7b // mono
+    #define FM12 &FreeMono12pt7b // mono
+    #define FMB12 &FreeMonoBold12pt7b // mono
+    
+    #define FM18 &FreeMono18pt7b // mono
+    #define FMB18 &FreeMonoBold18pt7b // mono
+    
+    #define FS9 &FreeSans9pt7b // proportional
+    #define FSB9 &FreeSansBold9pt7b // proportional
+    #define FS12 &FreeSans12pt7b // mono
+    #define FSB12 &FreeSansBold12pt7b // mono
+    #define FS18 &FreeSans18pt7b // mono
+    #define FSB18 &FreeSansBold18pt7b // mono
+*/
+
   #endif
   //#include "Free_Fonts.h" // Include the header file attached to this sketch  
   #define GFXFF 1                 // enable FreeFont set of custom fonts from AdaFruit
-  #define TFT_FONT_SMALL FS9      // FreeFont mono 9pt, not bold.
-  #define TFT_FONT_MEDIUM FMB12  	// FreeFont Mono Bold 12pt
-  #define COLUMN_WIDTH 15         // width of mono-spaced scroll box font in pixels
   #define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
+  #define SCROLL_BOX_DATUM BL_DATUM
+  #define SCROLL_BOX_CENTER_DATUM BC_DATUM //BC_DATUM
 
   #ifdef TFT_320_480   // 320x480 display
-    // Define handle to receive return value
+
+    #define TFT_FONT_SMALL FS9      // FreeFont mono 9pt, not bold.
+    #define TFT_FONT_MEDIUM FMB18  // FM18, FMB18 	// FreeFont Mono Bold 12pt
+    #define SCROLL_BOX_FONT TFT_FONT_MEDIUM
+    #define BUTTON_FONT FS12
+    #define COLUMN_WIDTH (lcd.textWidth("W")+2)    // width of mono-spaced scroll box font in pixels, W is a wide letter
+    #define FONT_HEIGHT (lcd.fontHeight()+2)   // using 2px padding for line separation
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
     #define SCREEN_HEIGHT (TFT_WIDTH-1)
-    #define SCROLL_BOX_LEFT_SIDE 3
+    #define SCROLL_BOX_LEFT_SIDE 2
     #define SCREEN_BOX_HEIGHT 180    // This is set to the working area defined in the currently red border area.  
     #define SCROLL_BOX_TOP 39   // 1 row below the status bar border line
+    #define SCROLL_BOX_WIDTH (TFT_HEIGHT-(2*SCROLL_BOX_LEFT_SIDE)) // pixel width of scroll box area
+    #define SCROLL_BOX_HEIGHT (SCREEN_BOX_HEIGHT-SCROLL_BOX_TOP-3)  // pixel height of scroll box area inside borders
+    #define SCROLL_TEXT_TOP_LINE (SCROLL_BOX_TOP+FONT_HEIGHT-10)   // start of first row of text (y)
+    #define SCROLL_TEXT_LEFT_SIDE (SCROLL_BOX_LEFT_SIDE+(COLUMN_WIDTH/2)-2)   // start of text columns (x)
+    #define LINE_SPACER 14  // between scroll text lines
+
+    // Status Bar
     #define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
-    #define ICON_COLUMN_WIDTH COLUMN_WIDTH    // width of mono-spaced status bar font in pixels
-    #define SCROLL_BOX_FONT FMB12   // 4
-    #define ICON_SPACING (ICON_COLUMN_WIDTH+4)
-    #define TX_NUM_ANCHOR (122)
-    #define GRID_ANCHOR (167)
-    #define WPM_ANCHOR (307)
-    #define ICON_ANCHOR (380)
-    #define STATUS_BAR_X_CURSOR (8)
+    #define ICON_COLUMN_WIDTH COLUMN_WIDTH-4    // width of mono-spaced status bar font in pixels
+    #define ICON_SPACING (ICON_COLUMN_WIDTH-1)
+    #define TIME_ANCHOR (4)
+    #define TX_NUM_ANCHOR (116)
+    #define GRID_ANCHOR (158)
+    #define WPM_ANCHOR (292)
+    #define ICON_ANCHOR (373)
+    #define STATUS_BAR_Y_CURSOR (8)
+  
   #else   // 240x320 and 170x320
+
+    #define TFT_FONT_SMALL FS9      // FreeFont mono 9pt, not bold.
+    #define TFT_FONT_MEDIUM FS12 //FMB12  	// FreeFont Mono Bold 12pt
+    #define SCROLL_BOX_FONT TFT_FONT_MEDIUM
+    #define BUTTON_FONT FS12
+    #define COLUMN_WIDTH (lcd.textWidth("W")+2)    // width of mono-spaced scroll box font in pixels, W is a wide letter
+    #define FONT_HEIGHT ((lcd.fontHeight()+2))    // using 2px padding for line separation
     #define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
     #define SCREEN_HEIGHT (TFT_WIDTH-1)
-    #define SCROLL_BOX_LEFT_SIDE 3
+    #define SCROLL_BOX_LEFT_SIDE 5
     #define SCREEN_BOX_HEIGHT 170    // This is set to the working area defined in the currently red border area.  
     // 170 for the 170x320 and 240x320 displays
     // On screens that are larger than 170px, the extra area is intended to be used for buttons or status windows.
     // you can set this to full height and increase the LCD_ROWS setting but 5 rows seems plenty to avoid much clutter. 
     #define SCROLL_BOX_TOP 29   // 1 row below the status bar border line
+    #define SCROLL_BOX_WIDTH (TFT_HEIGHT-(2*SCROLL_BOX_LEFT_SIDE)) // pixel width of scroll box area
+    #define SCROLL_BOX_HEIGHT (SCREEN_BOX_HEIGHT-SCROLL_BOX_TOP-3)  // pixel height of scroll box area inside borders
+    #define SCROLL_TEXT_TOP_LINE (SCROLL_BOX_TOP+FONT_HEIGHT-12)   // start of first row of text (y)
+    #define SCROLL_TEXT_LEFT_SIDE (SCROLL_BOX_LEFT_SIDE+12)   // start of text columns (x)
+    #define LINE_SPACER 12  // between scroll text lines
+    
+    // Status Bar
     #define STATUS_BAR_FONT 2   // 2  or FM9 or FS9
     #define ICON_COLUMN_WIDTH 12    // width of mono-spaced status bar font in pixels
     #define SCROLL_BOX_FONT FMB12   // 4
     #define ICON_SPACING (ICON_COLUMN_WIDTH+2)
-    #define TX_NUM_ANCHOR (72)
+    #define TIME_ANCHOR (2)
+    #define TX_NUM_ANCHOR (76)
     #define GRID_ANCHOR (108)
     #define WPM_ANCHOR (202)
     #define ICON_ANCHOR (250)
-    #define STATUS_BAR_X_CURSOR (6)
-  #endif
+    #define STATUS_BAR_Y_CURSOR (6)
 
-  #define SCROLL_BOX_WIDTH (TFT_HEIGHT-(2*SCROLL_BOX_LEFT_SIDE)) // pixel width of scroll box area
-  #define SCROLL_BOX_HEIGHT (SCREEN_BOX_HEIGHT-SCROLL_BOX_TOP-3)  // pixel height of scroll box area inside borders
-  #define SCROLL_TEXT_TOP_LINE (SCROLL_BOX_TOP+20)   // stat of first row of text
-  #define SCROLL_TEXT_LEFT_SIDE (SCROLL_BOX_LEFT_SIDE+8)   // start of text columns
+  #endif
   
   #define TFT_GREY 0x5AEB // New color
-  #define FONT_HEIGHT ((lcd.fontHeight()+2))    // using 2px padding for line separation
-  #ifdef TOUCH_BUTTON_16
+ 
+  #if defined(TOUCH_BUTTON_16)
+    #define BUTTON_FONT TFT_FONT_SMALL
     #define BUTTON_HEIGHT 57
     #define BUTTON_WIDTH  57
     #define BUTTON_ROW  (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+12)
     #define BUTTON_ROW2 (BUTTON_ROW+66)  // used when 2 rows are displayed at a time
   #else
-    #define BUTTON_HEIGHT 60
-    #define BUTTON_WIDTH  60
-    #define BUTTON_ROW  (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+8)
-    #define BUTTON_ROW2 (BUTTON_ROW+66)  // only used when 2 rows are displayed at a time
+    #if defined(TFT_320_480)
+      #define BUTTON_FONT FS12
+      #define BUTTON_HEIGHT 86
+      #define BUTTON_WIDTH  86
+      #define BUTTON_ROW  (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+30)
+      #define BUTTON_ROW2 (BUTTON_ROW+66)  // only used when 2 rows are displayed at a time
+    #else
+      #define BUTTON_FONT FS9
+      #define BUTTON_HEIGHT 60
+      #define BUTTON_WIDTH  60
+      #define BUTTON_ROW  (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT+8)
+      #define BUTTON_ROW2 (BUTTON_ROW+66)  // only used when 2 rows are displayed at a time
+    #endif
   #endif
-  #define SCROLL_BOX_ROW1 (SCROLL_TEXT_TOP_LINE)
-  #define SCROLL_BOX_ROW2 (SCROLL_TEXT_TOP_LINE+FONT_HEIGHT)
-  #define SCROLL_BOX_ROW3 (SCROLL_TEXT_TOP_LINE+(2*FONT_HEIGHT))
-  #define SCROLL_BOX_ROW4 (SCROLL_TEXT_TOP_LINE+(3*FONT_HEIGHT))
-  #define SCROLL_BOX_ROW5 (SCROLL_TEXT_TOP_LINE+(4*FONT_HEIGHT))
+
+  
+  #define SCROLL_BOX_ROW1 (SCROLL_TEXT_TOP_LINE+LINE_SPACER)
+  #define SCROLL_BOX_ROW2 (SCROLL_TEXT_TOP_LINE+FONT_HEIGHT+LINE_SPACER)
+  #define SCROLL_BOX_ROW3 (SCROLL_TEXT_TOP_LINE+(2*FONT_HEIGHT)+LINE_SPACER)
+  #define SCROLL_BOX_ROW4 (SCROLL_TEXT_TOP_LINE+(3*FONT_HEIGHT)+LINE_SPACER)
+  #define SCROLL_BOX_ROW5 (SCROLL_TEXT_TOP_LINE+(4*FONT_HEIGHT)+LINE_SPACER)
   #define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
   #define SCROLL_BOX_BOTTOM (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT)
  
@@ -2121,10 +2173,14 @@ enum button_ID{
     const int NUM_BUTTON_ROWS = 1; // number of rows of buttons
     const int NUM_KEYS = buttonCount;  // +1 is CW Scroll Box touch zone.  Fx key counts as a regular key
   #else
-    const uint8_t buttonCount = 5 + 1;  // sizeof(btn) / sizeof(btn[0]);  
-    const int NUM_BUTTON_ROWS = 4; // number of rows of buttons
-    const int NUM_KEYS = (NUM_BUTTON_ROWS*5)+1;  // +1 is CW Scroll Box touch zone.  Fx key counts as a regular key
-
+    #if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check val;ue exists and is not empty, must be 1-4.
+      #error "BUTTON_ROWS must be defined with a value = 1-4, or, TOUCH_BUTTON_16 must be defined in keyer_features_and_options.h"
+    #endif
+    const int MAX_ROWS = 4;
+    const int BUTTONS_PER_ROW = 5;
+    const uint8_t buttonCount = BUTTONS_PER_ROW + 1;  // sizeof(btn) / sizeof(btn[0]); // 5 keys per row, plus scrowsl box = 6 buttons on screen.  Their roles change with row change
+    const int NUM_BUTTON_ROWS = BUTTON_ROWS;  // at run time number of rows will be limited to this number.
+    const int NUM_KEYS = MAX_ROWS * BUTTONS_PER_ROW + 1;  // +1 is CW Scroll Box touch zone.  Fx key counts as a regular key
   #endif
   // The +1 is the CW Scroll Box touch zone. More may added for Yes/No confirmation buttons. 
   // This includs the Fx kay though it might be hidden or unused in some cases
@@ -2318,7 +2374,7 @@ char default_grid[9] = {};
 #endif
 float heading; // populated by the i2c compass computation
 bool update_heading_display_flag = false;
-char popup_text[(LCD_COLUMNS*LCD_ROWS)+20] = {}; // Text to display in popup
+char popup_text[(LCD_COLUMNS*LCD_ROWS)+30] = {}; // Text to display in popup
 bool popup_active = false;
 
 #ifdef FEATURE_GPS
@@ -2519,12 +2575,8 @@ void saveEEPROM() {
   memcpy(configuration.hdr, DATAHEADER, sizeof(configuration.hdr));
   memcpy(configuration.addr, lastAddress, sizeof(configuration.addr));
   configuration.addrType = lastAddressType;
-  //EEPROM.begin(sizeof(EEPROMDATA));
-  //EEPROM.put(0, data);
-  //EEPROM.commit();
-  //EEPROM.end();
+  EEPROM.commit();
   Serial.printf("Wrote paired device to EEPROM: %s\n", macToString(lastAddress, lastAddressType));
-  config_dirty = 1;
 }
 
 // Either try continually to reconnect to the last device connected,
@@ -4039,7 +4091,7 @@ void update_icons(void) {
     static bool stop_msg_changed = false;
     char tx_str[7] = "";
     static uint8_t last_tx = 0;
-    const int32_t row = STATUS_BAR_X_CURSOR;
+    const int32_t row = STATUS_BAR_Y_CURSOR;
 
     if (last_stop_msg != stop_msg) {
       stop_msg_changed = true;
@@ -4064,7 +4116,7 @@ void update_icons(void) {
       }      
       
       if (time_disp_updated) {
-        lcd.drawString(time_str, SCROLL_TEXT_LEFT_SIDE-6, STATUS_BAR_X_CURSOR);  
+        lcd.drawString(time_str, TIME_ANCHOR, STATUS_BAR_Y_CURSOR);  
         time_disp_updated = false;
       }
     #endif
@@ -4276,12 +4328,34 @@ void service_display() {
           lcd.backlight();
         #endif  // FEATURE_LCD_BACKLIGHT_AUTO_DIM
     #ifdef FEATURE_TFT_DISPLAY
-          int y1=SCROLL_TEXT_TOP_LINE+(y*FONT_HEIGHT);
-          int x1=SCROLL_TEXT_LEFT_SIDE+(x*COLUMN_WIDTH);
-          lcd.setFreeFont(TFT_FONT_MEDIUM);
-          lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-          char c = lcd_scroll_buffer[y].charAt(x);
-          lcd.drawChar(c, x1, y1);  // use char in scroll buffer and place at x1, y1 on graphics screen
+          lcd.setTextDatum(SCROLL_BOX_DATUM);
+          lcd.setFreeFont(SCROLL_BOX_FONT);
+
+          //int y1=SCROLL_TEXT_TOP_LINE+(y*FONT_HEIGHT);
+          uint32_t y1 = SCROLL_BOX_ROW1;
+          switch (y) {
+            case 0: y1 = SCROLL_BOX_ROW1; break;
+            case 1: y1 = SCROLL_BOX_ROW2; break;
+            case 2: y1 = SCROLL_BOX_ROW3; break;
+            case 3: y1 = SCROLL_BOX_ROW4; break;
+            case 4: y1 = SCROLL_BOX_ROW5; break;
+            default: break;
+          }          
+          
+          uint32_t x1 = SCROLL_TEXT_LEFT_SIDE+(x*COLUMN_WIDTH);
+          
+          lcd.setTextColor(TFT_WHITE);
+
+          #ifdef DO_STRING
+            //lcd.setTextPadding(2);
+            //int16_t w = lcd.textWidth(lcd_scroll_buffer[y]);  // width of string with font specified
+            //lcd.drawRect(SCROLL_TEXT_LEFT_SIDE, y1, w, FONT_HEIGHT, TFT_BLACK);
+            lcd.drawString(lcd_scroll_buffer[y], SCROLL_TEXT_LEFT_SIDE, y1);          
+          #else  // do char by char
+            char c = lcd_scroll_buffer[y].charAt(x);
+            lcd.drawChar(c, x1, y1);  // use char in scroll buffer and place at x1, y1 on graphics screen
+          #endif
+
           //lcd.setCursor(x1, y1);
           //lcd.print(c);
     #else
@@ -4426,15 +4500,28 @@ void clear_display_row(byte row_number)
       lcd.noCursor();//sp5iou 20180328
   #endif
 
-    // blank out line
-  #ifdef FEATURE_TFT_DISPLAY
-      lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-      lcd.setFreeFont(TFT_FONT_MEDIUM);
-      lcd.setTextDatum(MC_DATUM);
-      lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP+6+(row_number*FONT_HEIGHT+2), SCROLL_BOX_WIDTH, FONT_HEIGHT, 6, TFT_BLACK);
-      lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-      lcd.setTextDatum(MY_DATUM);
+  uint32_t y1 = 0;
+  switch (row_number) {
+    case 0: y1 = SCROLL_BOX_ROW1; break;
+    case 1: y1 = SCROLL_BOX_ROW2; break;
+    case 2: y1 = SCROLL_BOX_ROW3; break;
+    case 3: y1 = SCROLL_BOX_ROW4; break;
+    case 4: y1 = SCROLL_BOX_ROW5; break;
+    default: y1 = SCROLL_BOX_ROW1; break;
+  }
+    y1 -= FONT_HEIGHT;
 
+    // blank out line
+  #ifdef FEATURE_TFT_DISPLAY      
+      //lcd.setFreeFont(SCROLL_BOX_FONT);
+      //lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
+      //lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP+6+(row_number*FONT_HEIGHT+2), SCROLL_BOX_WIDTH, FONT_HEIGHT, 6, TFT_BLACK);
+      //lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, y1, SCROLL_BOX_WIDTH, FONT_HEIGHT, 6, TFT_BLACK);
+      //lcd.setTextPadding(2);
+      lcd.drawRect(SCROLL_BOX_LEFT_SIDE, y1, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
+      lcd.fillRect(SCROLL_BOX_LEFT_SIDE, y1, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
+      //lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+      //lcd.setTextDatum(SCROLL_BOX_DATUM);  // set back to usual
       // Loop method
       //int32_t y1 = SCROLL_TOP_LINE+(row_number*FONT_HEIGHT);
       //int32_t x1 = SCROLL_LEFT_SIDE-4+(x*COLUMN_WIDTH);
@@ -4453,6 +4540,8 @@ void clear_display_row(byte row_number)
 #ifdef FEATURE_DISPLAY
 void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration)
 {
+  if (row_number >= LCD_ROWS)
+    row_number = LCD_ROWS-1;
   //debug_serial_port->printf("Start lcd_center_print_timed(): Row:%d  Duration:%d  Incoming string is:", row_number, duration);
   //debug_serial_port->println(lcd_print_string);
   #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
@@ -4473,13 +4562,24 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
     clear_display_row(row_number);
   }
   #ifdef FEATURE_TFT_DISPLAY
-    lcd.setFreeFont(TFT_FONT_MEDIUM);
-    lcd.setTextDatum(MC_DATUM);
-    uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT);
+    lcd.setFreeFont(SCROLL_BOX_FONT);
+    lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
+    //uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT)+(FONT_HEIGHT/4);
+    uint32_t y1 = SCROLL_BOX_ROW1;
+    switch (row_number) {
+      case 0: y1 = SCROLL_BOX_ROW1; break;
+      case 1: y1 = SCROLL_BOX_ROW2; break;
+      case 2: y1 = SCROLL_BOX_ROW3; break;
+      case 3: y1 = SCROLL_BOX_ROW4; break;
+      case 4: y1 = SCROLL_BOX_ROW5; break;
+      default: break;
+    }
     //debug_serial_port->print("lcd_center_print_timed(): string = "); debug_serial_port->println(lcd_print_string);
+    lcd.setTextPadding(2);
+    lcd.fillRect(SCROLL_BOX_LEFT_SIDE, y1-FONT_HEIGHT, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
     lcd.setTextColor(TFT_WHITE);
-    lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, 4);
-    lcd.setTextDatum(MY_DATUM);   // restore to generic datum
+    lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1);
+    //lcd.setTextDatum(SCROLL_BOX_DATUM);   // restore to generic datum
   #else
     lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
     lcd.print(lcd_print_string);
@@ -4672,13 +4772,13 @@ void check_ps2_keyboard()
                                     pause_sending_buffer = 0;
                                     #ifdef FEATURE_DISPLAY
                                     #ifdef OPTION_MORE_DISPLAY_MSGS
-                                        lcd_center_print_timed(" Resume ", 1, default_display_msg_delay);
+                                        lcd_center_print_timed(" Resume ", 0, default_display_msg_delay);
                                     #endif
                                     #endif                 
                                 } else {
                                     pause_sending_buffer = 1;
                                     #ifdef FEATURE_DISPLAY
-                                    lcd_center_print_timed("  Pause  ", 1, default_display_msg_delay);
+                                    lcd_center_print_timed("  Pause  ", 0, default_display_msg_delay);
                                     #endif            
                                 }
                                 break;  // pause
@@ -5003,7 +5103,7 @@ void check_ps2_keyboard()
                                 case PS2_O_CTRL : // CTRL-O - cycle through sidetone modes on, paddle only and off - New code Marc-Andre, VE2EVN
                                 if (configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) {
                                     configuration.sidetone_mode = SIDETONE_OFF;
-                                    boop();      
+                                    boop();  
                                     #ifdef FEATURE_DISPLAY
                                     if (LCD_COLUMNS < 9){
                                         lcd_center_print_timed("ST Off", 0, default_display_msg_delay);
@@ -5257,7 +5357,7 @@ void check_ps2_keyboard()
                                   #ifdef FEATURE_DISPLAY                              
                                     sprintf(tmp_str, "M%d = Grid Sq", GRID_WORKING_MEMORY);
                                     debug_serial_port->println(tmp_str); 
-                                    lcd_center_print_timed(tmp_str, 3, default_display_msg_delay);
+                                    lcd_center_print_timed(tmp_str, 2, default_display_msg_delay);
                                   #endif
                                   ps2_keyboard_program_memory(GRID_WORKING_MEMORY-1);                                                                                        
                                   // store user entered memory x value into config structure, overrides defaults
@@ -5284,7 +5384,7 @@ void check_ps2_keyboard()
                                   #ifdef FEATURE_DISPLAY                              
                                     sprintf(tmp_str, "M%d = Declination", DECLINATION_WORKING_MEMORY);
                                     debug_serial_port->println(tmp_str); 
-                                    lcd_center_print_timed(tmp_str, 3, default_display_msg_delay);
+                                    lcd_center_print_timed(tmp_str, 2, default_display_msg_delay);
                                   #endif
                                   ps2_keyboard_program_memory(DECLINATION_WORKING_MEMORY-1);                                                                                        
                                   // store user entered memory x value into config structure, overrides defaults
@@ -9737,35 +9837,37 @@ void service_dit_dah_buffers()
 
 void beep()
 {
-    // #if defined(FEATURE_SINEWAVE_SIDETONE)
-    //   tone(sidetone_line, hz_high_beep);
-    //   myDelay(200);
-    //   noTone(sidetone_line);
-    // #else
-    s_tone(sidetone_line, hz_high_beep, 200);
+  // #if defined(FEATURE_SINEWAVE_SIDETONE)
+  //   tone(sidetone_line, hz_high_beep);
+  //   myDelay(200);
+  //   noTone(sidetone_line);
+  // #else
+  s_tone(sidetone_line, hz_high_beep, 200);
 }
 
 //-------------------------------------------------------------------------------------------------------
 
 void boop()
 {
-  s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+  s_tone(sidetone_line,hz_low_beep,200);   // generate a tone on the speaker pin
 }
 
 //-------------------------------------------------------------------------------------------------------
 
 void beep_boop()
 {
-  s_tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
-  s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
+  s_tone(sidetone_line,hz_high_beep,300);  // generate a tone on the speaker pin
+  myDelay(200);
+  s_tone(sidetone_line,hz_low_beep,200);   // generate a tone on the speaker pin
 }
 
 //-------------------------------------------------------------------------------------------------------
 
 void boop_beep()
 {
-  s_tone(sidetone_line,hz_low_beep,100);                                              // generate a tone on the speaker pin
-  s_tone(sidetone_line,hz_high_beep,100);                                              // generate a tone on the speaker pin
+  s_tone(sidetone_line,hz_low_beep,200);   // generate a tone on the speaker pin
+  myDelay(200);
+  s_tone(sidetone_line,hz_high_beep,300);  // generate a tone on the speaker pin
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -17986,17 +18088,17 @@ void display_heading(void) {
     popup(true);
     lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
 
-    sprintf(h_str, "Heading: %3.2f deg", heading);
+    sprintf(h_str, "Heading: %3.2f Deg", heading);
     strcpy(last_heading, h_str);
-    lcd.setFreeFont(TFT_FONT_MEDIUM);
+    lcd.setFreeFont(SCROLL_BOX_FONT);
     lcd.setTextColor(TFT_BLACK, TFT_BLACK);
     lcd.drawString(last_heading, 10, 40);
     lcd.setTextColor(TFT_WHITE, TFT_BLUE);                                    
     lcd.drawString(h_str, 10, 40);
     
-    sprintf(h_str, "(dec is %3.3f deg)", declination);
+    sprintf(h_str, "(Dec is %3.3f Deg)", declination);
     strcpy(last_dec, h_str);
-    lcd.setFreeFont(TFT_FONT_MEDIUM);
+    lcd.setFreeFont(SCROLL_BOX_FONT);
     lcd.setTextColor(TFT_BLACK, TFT_BLACK);
     lcd.drawString(last_dec, 10, 70);
     lcd.setTextColor(TFT_WHITE, TFT_BLUE);                                    
@@ -18182,12 +18284,13 @@ void init_ESP32_GPIO_key_pins(void) {
     #else
       // Setup CPU side GPIO interrupt for IntA       
       pinMode (MCP23017_INTA_GPIO, INPUT);
-      attachInterrupt(MCP23017_INTA_GPIO, paddle_intr_handler, CHANGE);      
+      attachInterrupt(digitalPinToInterrupt(MCP23017_INTA_GPIO), paddle_intr_handler, CHANGE);      
     #endif
 
     uint16_t val;
     val = mcp23017.readPort(MCP23017Port::A);
     debug_serial_port->print("MCP23107 Port A read:"); debug_serial_port->println(val, HEX);
+    mcp23017.clearInterrupts();
     // Now any pin state change will call the handler.
   }
 #endif
@@ -19431,7 +19534,7 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
     if (!bt_keyboard.is_connected()) {
         debug_serial_port->println(F("No BT Keyboards found"));
         #ifdef FEATURE_DISPLAY
-          lcd_center_print_timed("No BT Keyboards", 2, 2000);
+          lcd_center_print_timed("No BT Keyboards", 1, 2000);
         #endif
     }
 
@@ -19592,13 +19695,17 @@ void initialize_display() {
       lcd_center_print_timed("K3NGKeyr", 0, 4000);
     } else {
       #ifdef FEATURE_TFT_DISPLAY  
-        lcd.setTextDatum(MC_DATUM);
-        lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1, 4);
+        lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
+        lcd.setFreeFont(SCROLL_BOX_FONT);
+        //lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1+(FONT_HEIGHT/4));
+        lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1);
         #ifdef FEATURE_BT_KEYBOARD
-          lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW3, 4);
+          //lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2+(FONT_HEIGHT/4));
+          lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2);
         #endif
-        lcd.drawString("V:" + String(CODE_VERSION), SCROLL_BOX_CENTER, SCROLL_BOX_ROW5, 4);
-        myDelay(100);
+        //lcd.drawString("V:" + String(CODE_VERSION), SCROLL_BOX_CENTER, SCROLL_BOX_ROW3+(FONT_HEIGHT/4));
+        lcd.drawString("V:" + String(CODE_VERSION), SCROLL_BOX_CENTER, SCROLL_BOX_ROW3);
+        myDelay(1000);
       #else
         lcd_center_print_timed("K3NG Keyer", 0, 4000);
         lcd_center_print_timed("BT Keyboard Search..", 1, 4000);
@@ -19696,7 +19803,8 @@ void popup(bool show)
     popup_active = true;
     lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
     lcd.setTextWrap(true,true);
-    lcd.setCursor(10,20);
+    lcd.setCursor(SCROLL_BOX_LEFT_SIDE,SCROLL_BOX_TOP);
+    lcd.setFreeFont(TFT_FONT_MEDIUM);
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     lcd.print(popup_text);
     //lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
@@ -19709,14 +19817,14 @@ void popup(bool show)
 
 #ifdef FEATURE_TOUCH_DISPLAY
 void refresh_button_row(uint8_t row) {
-  lcd.setFreeFont(TFT_FONT_SMALL);
-  for (int t=0; t < NUM_KEYS; t++) {
-    if (key[t].row == row) {
+  lcd.setFreeFont(BUTTON_FONT);
+  for (int t=0; t < NUM_KEYS-1 ; t++) {
+    if (key[t].row == row && key[t].row < NUM_BUTTON_ROWS) {
       if (key[t].hold) {
-        //debug_serial_port->print(F("Hold ON ")); debug_serial_port->println(key[t].text_on);
+        //debug_serial_port->printf("Hold ON %s  Row:%d  NumKeys:%d  Position:%d\n", key[t].text_on, row, NUM_KEYS, t);
         btn[key[t].btn_idx].p_btn.drawButton(true, key[t].text_on);
       } else {
-        //debug_serial_port->print(F("Hold OFF "));debug_serial_port->println(key[t].text_off);
+        //debug_serial_port->printf("Hold OFF %s  Row:%d  NumKeys:%d  Position:%d\n", key[t].text_off, row, NUM_KEYS, t);
         btn[key[t].btn_idx].p_btn.drawButton(false, key[t].text_off);
       }
     }
@@ -19728,44 +19836,63 @@ void refresh_button_row(uint8_t row) {
 // Create all our button objects.  Some diplays have more space so placement changes.
 void create_buttons() {
   #ifdef FEATURE_TOUCH_DISPLAY
-    lcd.setFreeFont(TFT_FONT_SMALL);
+    lcd.setFreeFont(FMB9);
     //lcd.setLabelDatum(MY_DATUM);
     
     int16_t bh = BUTTON_HEIGHT;
     int16_t bw = BUTTON_WIDTH;
     int16_t br = BUTTON_ROW;
     int16_t br2 = BUTTON_ROW2;
-    int16_t ba = 1;  // row start
-    #ifdef TOUCH_BUTTON_16
-      int16_t bs = bw + 3;  // start of next button left edge
-    #else
-      int16_t bs = bw + 4;
-    #endif
-
-    // All touch displays have at least 5 usable keys and a CW Scroll Box touch zone
-    btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size    
-    #ifndef TOUCH_BUTTON_16
-    btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 2);  // library modified to ignore text size
-    #else
-    // These keys are only created if a larger display is used with room for more keys
-    btn[5].p_btn.initButtonUL(&lcd,  ba+(5*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[6].p_btn.initButtonUL(&lcd,  ba+(6*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[7].p_btn.initButtonUL(&lcd,  ba+(7*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size   
+    int16_t ba = 1;  // edge of row start
+    int16_t bs = bw + 4; //spacing between buttons
     
-    // 2nd row of 8    
-    btn[8].p_btn.initButtonUL(&lcd,  ba+(0*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[9].p_btn.initButtonUL(&lcd,  ba+(1*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[10].p_btn.initButtonUL(&lcd, ba+(2*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[11].p_btn.initButtonUL(&lcd, ba+(3*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[12].p_btn.initButtonUL(&lcd, ba+(4*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[13].p_btn.initButtonUL(&lcd, ba+(5*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[14].p_btn.initButtonUL(&lcd, ba+(6*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[15].p_btn.initButtonUL(&lcd, ba+(7*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-    btn[16].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 2);  // library modified to ignore text size
+    #ifndef TOUCH_BUTTON_16
+      
+      // All touch displays have at least 5 usable keys and a CW Scroll Box touch zone
+      #if defined(TFT_320_480)
+        ba = 2;
+        bs = bw + 10;  // start of next button left edge
+        lcd.setFreeFont(BUTTON_FONT);
+        btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
+        btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
+        btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
+        btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
+        btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size    
+        btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 4);  // library modified to ignore text size
+      #else
+        ba = 1;
+        bs = bw + 4;  // start of next button left edge
+        lcd.setFreeFont(BUTTON_FONT);
+        btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+        btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+        btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+        btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+        btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size    
+        btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 2);  // library modified to ignore text size
+      #endif
+    #else
+      ba = 1;
+      bs = bw + 3;   
+      lcd.setFreeFont(BUTTON_FONT);
+      btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size        
+      btn[5].p_btn.initButtonUL(&lcd,  ba+(5*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[6].p_btn.initButtonUL(&lcd,  ba+(6*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[7].p_btn.initButtonUL(&lcd,  ba+(7*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size   
+      
+      // 2nd row of 8    
+      btn[8].p_btn.initButtonUL(&lcd,  ba+(0*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[9].p_btn.initButtonUL(&lcd,  ba+(1*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[10].p_btn.initButtonUL(&lcd, ba+(2*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[11].p_btn.initButtonUL(&lcd, ba+(3*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[12].p_btn.initButtonUL(&lcd, ba+(4*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[13].p_btn.initButtonUL(&lcd, ba+(5*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[14].p_btn.initButtonUL(&lcd, ba+(6*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[15].p_btn.initButtonUL(&lcd, ba+(7*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+      btn[16].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 2);  // library modified to ignore text size
     #endif
 
     refresh_button_row(0);
@@ -19779,10 +19906,10 @@ void clear_holds_key() {
     //if (key[t].hold) {
       //debug_serial_port->print(F("ESC: Btn was in HOLD: "));debug_serial_port->println(key[t].text_off);
     //}
-    lcd.setFreeFont(TFT_FONT_SMALL);
+    //lcd.setFreeFont(TFT_FONT_SMALL);
     if (!key[t].skip) // Do not clear buttons marked with skip == true
       key[t].hold = false;
-    lcd.setFreeFont(TFT_FONT_MEDIUM);
+    //lcd.setFreeFont(TFT_FONT_MEDIUM);
   }
   #endif
 }
@@ -19856,7 +19983,7 @@ void list_memory_key(uint16_t key_ID, uint8_t memory_number) {
   if (BtnX_active == 0 || BtnX_active == key_ID) {      // another keyboard queue key is active until canceled , allow if Button 2     
     if (memory_number < number_of_memories) {// cycle through the 10 memories
       int length = print_memory(memory_number, mem_string);  // Get memory string
-      sprintf(popup_text, "Memory %d:%s len=%d", (int)memory_number+1, mem_string, length);
+      sprintf(popup_text, "Memory %d - %s\n Length = %d", (int)memory_number+1, mem_string, length);
       //memory_number++;           // next memory if buton pressed again  
       key[key_ID].hold = true;
       BtnX_active = key_ID;
@@ -25541,7 +25668,7 @@ void initialize_st7789_lcd()
     lcd.setTextColor(TFT_GREY, TFT_BLACK);
     //lcd.setFreeFont(FM9);
     lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)
-    lcd.drawString("00:00:00", SCROLL_TEXT_LEFT_SIDE-6, STATUS_BAR_X_CURSOR);  
+    lcd.drawString("00:00:00", SCROLL_TEXT_LEFT_SIDE-6, STATUS_BAR_Y_CURSOR);  
     lcd.setTextColor(TFT_RED);
     lcd.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_BOX_HEIGHT, 6, TFT_RED);
     lcd.drawFastHLine(0, SCROLL_BOX_TOP-2, SCREEN_WIDTH, TFT_RED);
@@ -25550,10 +25677,7 @@ void initialize_st7789_lcd()
     lcd.setTextWrap(true, true);                         // turn off text wrap, else will overwrite the borders
     lcd.setTextColor(TFT_WHITE,TFT_BLACK);
     // now updae scroll box area with satus messages and eventually CW text to send
-    //lcd.drawCentreString("Searching for BT Keyboard ...", SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 2);
-    //lcd.drawString("Searching for BT Keyboard ...", SCROLL_BOX_LEFT_SIDE, SCREEN_HEIGHT/2, 2);
-    //myDelay(5000);
-    
+   
     //  Some possibly useful draw functions
     //lcd.setAddrWindow(10, 31, 316, 166);
     // Test some print formatting functions
@@ -25564,11 +25688,11 @@ void initialize_st7789_lcd()
     //lcd.print(F("Binary = ")); lcd.println((int)fnumber, BIN); // Print as integer value in binary
     //lcd.print(F("Hexadecimal = ")); lcd.println((int)fnumber, HEX); // Print as integer number in Hexadecimal
 
-    lcd.setCursor(SCROLL_TEXT_LEFT_SIDE, SCROLL_TEXT_TOP_LINE);
-    lcd.setTextColor(TFT_WHITE,TFT_BLACK);  
+    //lcd.setCursor(SCROLL_TEXT_LEFT_SIDE, SCROLL_TEXT_TOP_LINE);
+    //lcd.setTextColor(TFT_WHITE,TFT_BLACK);  
     //lcd.setTextFont(4); //&fonts::FreeMonoBold12pt7b)
-    lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
-    lcd.setFreeFont(TFT_FONT_MEDIUM);
+    //lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
+    //lcd.setFreeFont(TFT_FONT_MEDIUM);
   }
 #endif
 
@@ -25589,7 +25713,7 @@ void initialize_st7789_lcd()
       else{
           if (Keyboard_Connected_signal) {
               #ifdef FEATURE_DISPLAY
-                lcd_center_print_timed("Keyboard Connected", 2, 3000);
+                lcd_center_print_timed("Keyboard Connected", 1, 3000);
                 //clear_display_row(1);
               #endif                
               debug_serial_port->println(F("BT Keyboard Connected"));
@@ -26061,7 +26185,7 @@ void store_Grid(char * grid) {
     EEPROM.commit();
   #endif
   update_icons();
-  beep();
+  beep(); myDelay(300); beep();
 }  // end store_Grid
 
 void setup_esp()
@@ -26384,7 +26508,7 @@ void app_main(void)
     xReturned = xTaskCreate(
                 check_bt_keyboard,       /* Function that implements the task. */
                 "Chk_BT_Keys",          /* Text name for the task. */
-                8192,      /* Stack size in words, not bytes. */
+                12000,      /* Stack size in words, not bytes. */
                 ( void * ) 1,    /* Parameter passed into the task. */
                 7,/* Priority at which the task is created. */
                 NULL); //&xHandle_BT );
