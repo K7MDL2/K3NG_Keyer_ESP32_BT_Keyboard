@@ -58,6 +58,8 @@
   #define LCD_ROWS 4
 #endif
 
+#define BACKLIGHT_TIMEOUT 360   // Display backlight timeout in seconds. 
+
 #if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
   #define PS2_KEYBOARD_NORMAL 0
 #endif //FEATURE_PS2_KEYBOARD

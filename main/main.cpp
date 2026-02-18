@@ -2038,6 +2038,8 @@ struct config_t {  // 120 bytes total
   uint8_t addr[6];  // BT/BLE MAC of the peer we last connected to
   uint8_t addrType; // BLE Type of address (normal or randomized) of the last peer (ignored for BT Classic)
 
+  bool backlight_timeout_disable; // Disable backlight timeout feature if enabled (1)
+  
   #if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
     char wifissid[20]=WIFI_SSID;//Initialize configuration.wifissid with default set in keyer_settings...h file
     char wifipassword[20]=WIFI_PASSWORD;//Initialize configuration.wifipassword with default set in keyer_settings...h file
@@ -2122,8 +2124,7 @@ int validate_grid(const char * input_grid, char grid[]);
 int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]);
 void process_gps(char * memory_str, bool force_update, uint8_t source);
 void memorycheck();
-void backlight_toggle(int state);  // toggles the backlight GPIO pin on and off from keyboard or long touch
-bool set_backlight(uint8_t key_ID, int state);
+void tft_backlight(int state);  // toggles the backlight GPIO pin on and off from keyboard or long touch
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
@@ -2555,10 +2556,6 @@ uint8_t lastAddress[6] = {};
 uint8_t lastAddressType = 0;
 
 void loadEEPROM() {
-  //struct configuration *data;  // sub struct in configuration struct
-  //EEPROM.begin(sizeof(EEPROMDATA));
-  //EEPROM.get(0, data);
-  //EEPROM.end();
   if (memcmp(configuration.hdr, DATAHEADER, sizeof(configuration.hdr))) {
     // Not our data, just clear things
     Serial.println("No previous paired device found in EEPROM");
@@ -3976,31 +3973,44 @@ void check_backlight() {
 
   static unsigned long last_bl_check = 0 ;
 
+  if (configuration.backlight_timeout_disable) return;
+
   if (millis() - last_bl_check < 1000) return;   // not time-critical
 
   last_bl_check = millis();
-  
-  if ((last_bl_check - last_active_time) > ((unsigned long)dim_backlight_inactive_time*60000)){
+
+  if ((last_bl_check - last_active_time) > ((unsigned long)dim_backlight_inactive_time * BACKLIGHT_TIMEOUT * 1000)){
     
     #ifdef DEBUG_BACKLIGHT
-      debug_serial_port->println(F("check_backlight: I'm asleep!"));
+      debug_serial_port->print(F("check_backlight: I'm asleep!  EEPROM Disable Setting=")); debug_serial_port->println(configuration.backlight_timeout_disable, HEX);
     #endif //DEBUG_BACKLIGHT
 
     if (keyer_power_led){
       analogWrite(keyer_power_led,keyer_power_led_asleep_duty);
-    }      
-    lcd.noBacklight();
+    }     
+
+    #ifdef FEATURE_TFT_DISPLAY
+      tft_backlight(0);  // turn it off
+    #else
+      lcd.noBacklight();
+    #endif
     
   } else {
     
     #ifdef DEBUG_BACKLIGHT
-      debug_serial_port->println(F("check_backlight: I'm awake!"));
+      debug_serial_port->printf("check_backlight: I'm awake!  EEPROM Disable Setting=%d  Timeout Countdown=%lu seconds until backlight turns off\n", \
+            configuration.backlight_timeout_disable, BACKLIGHT_TIMEOUT - ((last_bl_check - last_active_time)/1000));
     #endif //DEBUG_BACKLIGHT
 
     if (keyer_power_led){
       analogWrite(keyer_power_led,keyer_power_led_awake_duty);
     }
-    lcd.backlight();
+
+    #ifdef FEATURE_TFT_DISPLAY
+      tft_backlight(1);  // turn it on
+    #else
+      lcd.backlight();
+    #endif
   }
 }
 #endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
@@ -4327,7 +4337,11 @@ void service_display() {
     } else {
       if (lcd_scroll_buffer[y].charAt(x) > 0){   // called to redraw a screen, not live characters, such as when un- pause type event ended
         #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-          lcd.backlight();
+          #ifdef FEATURE_TFT_DISPLAY
+            tft_backlight(1);  // turn it off
+          #else
+            lcd.backlight();
+          #endif
         #endif  // FEATURE_LCD_BACKLIGHT_AUTO_DIM
     #ifdef FEATURE_TFT_DISPLAY
           lcd.setTextDatum(SCROLL_BOX_DATUM);
@@ -4495,7 +4509,11 @@ void display_scroll_print_char(char charin){
 void clear_display_row(byte row_number)
 {
   #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+    #ifdef FEATURE_TFT_DISPLAY
+      tft_backlight(1);  // turn it off
+    #else
       lcd.backlight();
+    #endif
   #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 
   #ifndef FEATURE_TFT_DISPLAY
@@ -4547,7 +4565,11 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
   //debug_serial_port->printf("Start lcd_center_print_timed(): Row:%d  Duration:%d  Incoming string is:", row_number, duration);
   //debug_serial_port->println(lcd_print_string);
   #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-    lcd.backlight();
+    #ifdef FEATURE_TFT_DISPLAY
+      tft_backlight(1);  // turn it off
+    #else
+      lcd.backlight();
+    #endif
   #endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
   #ifdef FEATURE_TFT_DISPLAY
     if (popup_active) {
@@ -5039,7 +5061,7 @@ void check_ps2_keyboard()
                                     break;
                                 #endif //FEATURE_HELL
 
-                                case PS2_I_CTRL :
+                                case PS2_I_CTRL:
                                 if (key_tx && keyer_machine_mode != KEYER_COMMAND_MODE) { //Added check that keyer is NOT in command mode or keyer might be enabled for paddle commands (WD9DMP)
                                     key_tx = 0;
                                     #ifdef FEATURE_DISPLAY
@@ -5052,6 +5074,12 @@ void check_ps2_keyboard()
                                     lcd_center_print_timed("TX on", 0, default_display_msg_delay);
                                     #endif      
                                 }
+                                break;
+
+                                case PS2_L_CTRL:  // Disable Backlight auto dim timeout
+                                    configuration.backlight_timeout_disable = !configuration.backlight_timeout_disable;  // if a long press will toggle the backlight timeout feature
+                                    tft_backlight(1);
+                                    config_dirty = 1;
                                 break;
 
                                 #ifdef FEATURE_FARNSWORTH
@@ -6767,7 +6795,7 @@ void write_settings_to_eeprom(int initialize_eeprom) {
         #endif
         //configuration.magic_number = eeprom_magic_number;
         EEPROM.write(0, eeprom_magic_number);
-        //EEPROM.commit();
+        EEPROM.commit();
         #ifdef FEATURE_MEMORIES
           initialize_eeprom_memories();
         #endif  //FEATURE_MEMORIES  
@@ -6796,13 +6824,13 @@ void service_async_eeprom_write(){
     if (last_async_eeprom_write_status){ // we have an ansynchronous write to eeprom in progress
 
 
-      #if defined(_BOARD_PIC32_PINGUINO_) || defined(ARDUINO_SAMD_VARIANT_COMPLIANCE) || defined(HARDWARE_ESP32_DEV) //SP5IOU 20210802
+      #if defined(_BOARD_PIC32_PINGUINO_) || defined(ARDUINO_SAMD_VARIANT_COMPLIANCE) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
         if (EEPROM.read(ee) != *p) {
           EEPROM.write(ee, *p);
         }
         ee++;
         p++;
-      #if defined(HARDWARE_ESP32_DEV) //SP5IOU 20220123
+      #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
         EEPROM.commit();
       #endif
       #else
@@ -6919,9 +6947,6 @@ int read_settings_from_eeprom() {
 
 void check_dit_paddle()
 {
-
-
-
   byte pin_value = 0;
   byte dit_paddle = 0;
   #ifdef OPTION_DIT_PADDLE_NO_SEND_ON_MEM_RPT
@@ -6997,8 +7022,6 @@ void check_dit_paddle()
     #endif
     clear_send_buffer();
   }
-
-
 
 }
 
@@ -18012,9 +18035,6 @@ void initialize_i2c(void) {
         debug_serial_port->print(F("\nWrote Declination to Keyboard Memory ")); debug_serial_port->println(declination_memory_number+1);
       #endif
       config_dirty = 1;
-      #if defined(HARDWARE_ESP32_DEV)
-        EEPROM.commit();
-      #endif
       last_declination = declination;
       ist8310.set_declination_offset_radians(convert_to_rad(declination));   // convert in deg min format to rad and apply offset
     }
@@ -19417,6 +19437,7 @@ void ckb(void *cbdata, int key) {
     else inf.keys[2] = 0;
     //new_bt_key = true;
     myDelay(10);
+    last_active_time = millis();  // reset backlight tomeout timer
 }
 
 // We get make/break for every key which lets us hold notes while a key is depressed
@@ -19426,7 +19447,7 @@ void kb(void *cbdata, int key) {
     bool state = (bool) cbdata;
     inf.size = 8;  // fake the size to match the ESP32 bt_keyboard class string info to pass through the key value translation code
     inf.state = state;
-    
+    last_active_time = millis();   // reset backlight tomeout timer
     // Any key up or Modifier key has let go. Set Modifier flag to false and exit
     if (!state || (_holding && !state && ((key == 0xe1) || (key == 0xe5) || (key == 0xe0) || (key == 0xe4) || (key == 0xe2) || (key == 0xe6) || (key == 0xe3)))) {
       _holding = false;
@@ -20087,6 +20108,8 @@ void process_buttons() { // (uint8_t button_ID) {
       }
     #endif
 
+    last_active_time = millis(); // reset backlight timer
+
     // process the action buttons
     switch (key[key_ID].key_event) {
       case BUTTON_PAUSE: pause_btn_toggle_key(key_ID); break;
@@ -20113,8 +20136,13 @@ void process_buttons() { // (uint8_t button_ID) {
       case BUTTON_TX_SELECT:   TX_select_key(key_ID); break;
       case BUTTON_TX_ENABLE:   TX_enable_key(key_ID); break; // TX_enable_key(key_ID); break;
       case BUTTON_TUNE:        queueflush(); queueadd(PS2_T_CTRL); break;  // Toggle TUNE
-      case BUTTON_SIDETONE_EN:  if (!set_backlight(key_ID, 0)){  // if a long press will toggle the backlight
-                                    queueflush(); queueadd(PS2_O_CTRL); } break; //  Toggle Sidetone On/Off                                
+      case BUTTON_SIDETONE_EN:  if (btn[key[key_ID].btn_idx].len >= 3) {  // long press
+                                  BtnX_active = 0;  // Do not hold state on
+                                  key[key_ID].hold = false;
+                                  queueflush(); queueadd(PS2_L_CTRL); //  Toggle Sidetone On/Off  
+                                } else {
+                                  queueflush(); queueadd(PS2_O_CTRL); //  Toggle Sidetone On/Off                                 
+                                } break;
       case BUTTON_POPUP_2:     generic_popup_key(key_ID, btn2_text); break;
       case BUTTON_POPUP_3:     generic_popup_key(key_ID, btn3_text); break;
 
@@ -20127,7 +20155,6 @@ void process_buttons() { // (uint8_t button_ID) {
         mem_number = 0;
         BtnX_active = 0;
         refresh_button_row(button_row);
-        backlight_toggle(1);  //turn on backlight
         queueflush(); queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer                  
         break;
     }      
@@ -24779,33 +24806,32 @@ void update_time(){
 // --------------------------------------------------------------   
 */
 
-//   Backlight Toggle
-//    Inputs: state
-//      0 = on
-//      1 = off
-//     -1 = toggle  
-void backlight_toggle(int state) {
-  static bool backlight = 1;
-  if (state == -1) backlight = !backlight;
-  else backlight = state;  // invert
-  if (backlight) {
-      digitalWrite(TFT_BL, 1);  // turn on backlight pin
-  } else {
-      digitalWrite(TFT_BL, 0);  // turn off backlight
-  }
-  //debug_serial_port->print("Backlight:"); debug_serial_port->println(backlight);
-}
+//   Backlight ON/OFF control
+//   If timeout is enabled in EEPROM setting then turn off the LCD at timeout (if feature enabled)
+void tft_backlight(int state) {
+  static bool state_last = 254;
 
-// check to see if he key passed in is a long press, if so then toggle the backlight
-bool set_backlight(uint8_t key_ID, int state) {
-  if (btn[key[key_ID].btn_idx].len >= 3) {  // long press
-        BtnX_active = 0;  // Do not hold state on
-        key[key_ID].hold = false;
-        backlight_toggle(state);  // -1 to toggle, 0 or 1 to set       
-        return 1;
-  }  
-  return 0;
-} 
+  if (!configuration.backlight_timeout_disable && (state != state_last)) { // do nothing effectively disabling timeout
+    if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
+    else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
+    state_last = state;
+    #ifdef DEBUG_BACKLIGHT 
+      debug_serial_port->printf("tft_backlight: Timeout disabled=%d  state=%d\n", configuration.backlight_timeout_disable, state);
+    #endif
+  }  // else do nothing, timeout is disabled
+
+  
+  static bool last_timeout_disable = 254;
+  
+  if (last_timeout_disable != configuration.backlight_timeout_disable) {
+    last_timeout_disable = configuration.backlight_timeout_disable;
+    #ifdef DEBUG_BACKLIGHT
+      debug_serial_port->printf("tft_backlight: Timeout disabled change state, now=%d\n", configuration.backlight_timeout_disable);
+    #endif
+    if (configuration.backlight_timeout_disable) lcd_center_print_timed("Bklight Timer OFF", 1, 2000);
+    else lcd_center_print_timed("Bklight Timer ON", 1, 2000);
+  }
+}
 
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
@@ -24941,6 +24967,7 @@ bool set_backlight(uint8_t key_ID, int state) {
 
                       if (ch != 0 && !keyDN) {
                         keyDN = true;  // this is a valid alphanumeric key
+                        last_active_time = millis();   // reset backlight timer
                         //debug_serial_port->print(F(" Key DN == 0x")); debug_serial_port->println(ch, HEX);
                       }
 
@@ -25052,7 +25079,7 @@ bool set_backlight(uint8_t key_ID, int state) {
                                 {
                                     //case 0x04 : ch = 0; s_tone(sidetone_line,configuration.hz_sidetone,0); break; // Alt-b
                                     //case 0x05 : ch = 0; noTone(sidetone_line); break;  // Alt-b                           
-                                    case 0x0F : ch = 0; backlight_toggle(-1); break; // Alt-L                                    
+                                    case 0x0F : ch = PS2_L_CTRL; break; // backlight timeout
                                     case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
                                     case 0xC6: ch = PS2_F11_ALT; break; // F1-F12 keys
                                     case 0xC7: ch = PS2_F12_ALT; break; // F1-F12 keys
@@ -26214,9 +26241,6 @@ void store_Grid(char * grid) {
   EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
   debug_serial_port->print(F("Wrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
   config_dirty = 1;
-  #if defined(HARDWARE_ESP32_DEV)
-    EEPROM.commit();
-  #endif
   update_icons();
   beep(); myDelay(300); beep();
 }  // end store_Grid

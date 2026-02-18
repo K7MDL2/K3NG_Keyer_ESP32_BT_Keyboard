@@ -37,8 +37,6 @@
 
 
 /* 
-
-
     HARDWARE_GENERIC_STM32F103C  (Contributed by sp5iou)
 
       How to deal with those boards with Arduino: https://www.techshopbd.com/uploads/product_document/STM32bluepillarduinoguide(1).pdf
