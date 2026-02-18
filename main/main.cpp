@@ -2122,6 +2122,8 @@ int validate_grid(const char * input_grid, char grid[]);
 int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]);
 void process_gps(char * memory_str, bool force_update, uint8_t source);
 void memorycheck();
+void backlight_toggle(int state);  // toggles the backlight GPIO pin on and off from keyboard or long touch
+bool set_backlight(uint8_t key_ID, int state);
 
 #ifdef FEATURE_TOUCH_DISPLAY
 //---------------------------------------------------------------------
@@ -20111,7 +20113,8 @@ void process_buttons() { // (uint8_t button_ID) {
       case BUTTON_TX_SELECT:   TX_select_key(key_ID); break;
       case BUTTON_TX_ENABLE:   TX_enable_key(key_ID); break; // TX_enable_key(key_ID); break;
       case BUTTON_TUNE:        queueflush(); queueadd(PS2_T_CTRL); break;  // Toggle TUNE
-      case BUTTON_SIDETONE_EN: queueflush(); queueadd(PS2_O_CTRL); break; //  Toggle Sidetone On/Off
+      case BUTTON_SIDETONE_EN:  if (!set_backlight(key_ID, 0)){  // if a long press will toggle the backlight
+                                    queueflush(); queueadd(PS2_O_CTRL); } break; //  Toggle Sidetone On/Off                                
       case BUTTON_POPUP_2:     generic_popup_key(key_ID, btn2_text); break;
       case BUTTON_POPUP_3:     generic_popup_key(key_ID, btn3_text); break;
 
@@ -20124,6 +20127,7 @@ void process_buttons() { // (uint8_t button_ID) {
         mem_number = 0;
         BtnX_active = 0;
         refresh_button_row(button_row);
+        backlight_toggle(1);  //turn on backlight
         queueflush(); queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer                  
         break;
     }      
@@ -24775,6 +24779,34 @@ void update_time(){
 // --------------------------------------------------------------   
 */
 
+//   Backlight Toggle
+//    Inputs: state
+//      0 = on
+//      1 = off
+//     -1 = toggle  
+void backlight_toggle(int state) {
+  static bool backlight = 1;
+  if (state == -1) backlight = !backlight;
+  else backlight = state;  // invert
+  if (backlight) {
+      digitalWrite(TFT_BL, 1);  // turn on backlight pin
+  } else {
+      digitalWrite(TFT_BL, 0);  // turn off backlight
+  }
+  //debug_serial_port->print("Backlight:"); debug_serial_port->println(backlight);
+}
+
+// check to see if he key passed in is a long press, if so then toggle the backlight
+bool set_backlight(uint8_t key_ID, int state) {
+  if (btn[key[key_ID].btn_idx].len >= 3) {  // long press
+        BtnX_active = 0;  // Do not hold state on
+        key[key_ID].hold = false;
+        backlight_toggle(state);  // -1 to toggle, 0 or 1 to set       
+        return 1;
+  }  
+  return 0;
+} 
+
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
     #ifndef USE_BT_TASK
@@ -25015,11 +25047,12 @@ void update_time(){
                                 //debug_serial_port->println(ch, HEX);
                             }
                             else if (modifier & ALT_MASK) // bt_keyboard.SHIFT_MASK) // left or right side shift key pressed
-                            {   
+                            {                                
                                 switch (ch) 
                                 {
                                     //case 0x04 : ch = 0; s_tone(sidetone_line,configuration.hz_sidetone,0); break; // Alt-b
-                                    //case 0x05 : ch = 0; noTone(sidetone_line); break;  // Alt-b                                        
+                                    //case 0x05 : ch = 0; noTone(sidetone_line); break;  // Alt-b                           
+                                    case 0x0F : ch = 0; backlight_toggle(-1); break; // Alt-L                                    
                                     case 0x3A ... 0x45: ch = PS2_F1_ALT + (ch-0x3A); break; // F1-F12 keys
                                     case 0xC6: ch = PS2_F11_ALT; break; // F1-F12 keys
                                     case 0xC7: ch = PS2_F12_ALT; break; // F1-F12 keys
