@@ -107,10 +107,10 @@
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
-    #define USE_BT_TASK // On pico this and touch interact and cause issues, panic for Ctrl-F-key combos (for now 2/2026)
+    //#define USE_BT_TASK // On pico this and touch interact and cause issues, panic for Ctrl-F-key combos (for now 2/2026)
     //#define USE_TASK
     //#define USE_GPS_TASK // !! ToDo : Not ready to use yet // run the Serial GPS in a separate task.
-    #define USE_BLE  // uncomment to usee BLE, else use BT Classic keyboard
+    #define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
