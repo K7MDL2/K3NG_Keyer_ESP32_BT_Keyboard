@@ -25,7 +25,7 @@ Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keybo
 
 To build under ESP-IDF (preferred) see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
 
-To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE.  The Pico is pretty standrd Arduino IDE procedures.  I typically post a UF2 image file for those who do not want to try to compile their own. 
+To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE.  The Pico is pretty standard Arduino IDE procedures.  I typically post a UF2 image file for those who do not want to try to compile their own.   To compile for the Pico2W change the hardware #define to ARDUINO_RASPBERRY_PI_PICO_W.  If you have a different display, or no display, update the settings in Feature and Options header file.  TFT_eSPI library is used for both ESP32 and Pico.  YOur TFT display needs to be one of the types supported in TFT_eSPI's UserSetup.h file.
 
 From the orignal K3NG site:
 
