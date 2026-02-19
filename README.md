@@ -17,7 +17,7 @@
 [Rii_mini]: https://img.shields.io/badge/Rii_i8+_mini-violet "Rii i8+"
 
 
-# K3NG CW Keyer (Modified for ESP32)
+# K3NG CW Keyer (Modified for ESP32 and Pico2-W)
 
 Based on a 2022 version modifed to run on ESP32-WROOM32 and Pico2W.  
 
