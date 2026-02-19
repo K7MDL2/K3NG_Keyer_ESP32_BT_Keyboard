@@ -1,20 +1,16 @@
-| Support Targets | ![alt text][esp32] | ![alt text][Has_Precompiled_Firmware_Images] |
+| Support Targets | ![ESP32-WROOM32][esp32] | ![Pico2W][Pico2w] | ![alt text][Has_Precompiled_Firmware_Images] |
+| --- | --- | --- | --- |
+
+| Dev Environment Used | ![alt text][ESP-IDF]| ![Arduino IDE][Arduino]|
 | --- | --- | --- |
 
-| Boards Used | ![alt text][ESP32-WROOM]| ![alt text][ESP32-WROOM_with_st7789_Color_TFT_display]| ![alt text][ESP32-WROOM_with_st7796_Color_TFT_display_with_Touch]|
+| BT Keyboards Tested | ![alt text][K380]|![alt text][K380s]|![Rii i8+ mini][Rii_mini]|
 | --- | --- | --- | --- |
 
-| Dev Environment Used | ![alt text][ESP-IDF]|
-| --- | --- |
-
-| BT Keyboards Tested | ![alt text][K380]|![alt text][K380s]|![alt text][Rii_mini]|
-| --- | --- | --- | --- |
-
-[ESP32]: https://img.shields.io/badge/ESP32-green "ESP32"
-[ESP32-WROOM]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
-[ESP32-WROOM_with_st7789_Color_TFT_display]: https://img.shields.io/badge/ESP32--WROOM--with--st7789--Color--TFT--display-orange "ESP32-WROOM-TFT"
-[ESP32-WROOM_with_st7796_Color_TFT_display_with_Touch]: https://img.shields.io/badge/ESP32--WROOM--with--st7796--Color--TFT--display--with--Touch-cyan "ESP32-WROOM-TFT"
+[Pico2W]: https://img.shields.io/badge/Pico2W-green "ESP32"
+[ESP32]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
 [ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5.1-cyan "ESP-IDF v5.5.1"
+[Arduino]: https://img.shields.io/badge/Arduino-cyan "Arduino v2.3.7"
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 [K380]: https://img.shields.io/badge/K380-violet "K380"
 [K380s]: https://img.shields.io/badge/K380s-violet "K380s"
@@ -23,11 +19,13 @@
 
 # K3NG CW Keyer (Modified for ESP32)
 
-Based on a 2022 version modifed to run on ESP32-WROOM32.  Select relevant updates form 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT and LCD displays. Compiles under ESP-IDF, or with some limitations Arduino.
+Based on a 2022 version modifed to run on ESP32-WROOM32 and Pico2W.  
+
+Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. Compiles under ESP-IDF, or Arduino.  Some limitations apply to BT keyboardds ESP32 under Arduino.
 
 To build under ESP-IDF (preferred) see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
 
-To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE
+To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE.  The Pico is pretty standrd Arduino IDE procedures.  I typically post a UF2 image file for those who do not want to try to compile their own. 
 
 From the orignal K3NG site:
 
@@ -39,7 +37,7 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 >Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 _____________________________________________
 
-This fork on a ESP32-WROOM32 adds 
+This fork on a ESP32-WROOM32 and Pico2W adds:
  - BT keyboards (Select BLE and BT Classic models)
  - A few different type TFT displays with 320x170, 320,240, and 480x320 resolutions
  - Touch buttons on touch enabled displays
@@ -48,11 +46,12 @@ This fork on a ESP32-WROOM32 adds
  - Using interrupts for all paddle and straight key IO pin, both the port expander and local GPIO pins.
  - Serial GPS can udpate time and grid square to 8 places, and populate a memory with 4 or 6 digits.
  - I2C compass heading values can display in a popup windows to help point microwave antennas.  Can configure your declination.
+ - Backlight timeout with enable/disable to save battery. Configurable tiemout. TFT displays are around 270ma, 100ma with backlight off. About 10ma less without BT keyboard feature.
 
 Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
 > [!NOTE]
-> Arduino IDE Users see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE
+> Arduino IDE Users with ESP32 see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE
 >
 
 See the Wiki Pages for more information about parts supported and configuration. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
@@ -65,7 +64,9 @@ This is a 3.2" 320x240 TFT with 4 rows of 4 keys (not counting the Fx key to cha
 
 <img width="1146" height="610" alt="image" src="https://github.com/user-attachments/assets/b4512298-544b-4bc3-94d5-6bd83fdc7d14" />
 
-Also seen in the above picture is a 16 port expander (MCP23017) on a I2C bus.  The paddles and straight key are on PA0-3.
+Also seen in the above picture is a 16 port expander (MCP23017) on a I2C bus.  The paddles and straight key are on PA0-2.
+
+The ESP and PICO look and act identical with some minor differences around BT keyboard connection behaviors.
 
 *************************************************************************
 
