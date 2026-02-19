@@ -374,6 +374,35 @@
 #define GRID_WORKING_MEMORY 11  //  Stored full 8 digit manually entered into memory 11 to override EEPROM and Config file
 #define DECLINATION_WORKING_MEMORY 12  // stores manually entered declination to override config EEPROM and config file.
 
+#define BUTTON_ASSIGNMENTS  // use configurable button assignments
+
+#ifdef BUTTON_ASSIGNMENTS
+// You can assign the 16 predefined buttons to 16 button positions. When used in combination with BUTTON_ROWS, 
+//   you assign your top priority buttons first in the list. 
+// BUTTON_ROWS will cut off the visible buttons in the list at 4, 8, 12 or show all 16 buttons
+// If you have BUTTON_ROWS == 2, only the top 8 buttons (B1-B8) will show.  The rest are unavailable on screen adn ignored.
+
+// Available button labels you can assign are in a 16-member array below
+// Arrange the 16 labels into one of the 16 array positions below as you desire.  
+// There cannot be any typos and there must be exactly 16 or you will get compile errorsNE 
+
+// Labels: BUTTON_PAUSE, BUTTON_TX_ENABLE, BUTTON_WPM_UP, BUTTON_WPM_DN, BUTTON_MEM_1, BUTTON_MEM_2, BUTTON_MEM_3, BUTTON_MEM_4,
+//         BUTTON_MEM_5, BUTTON_MEM_6, BUTTON_MEM_7, BUTTON_MEM_8, BUTTON_MEM_LIST, BUTTON_SIDETONE_EN, BUTTON_TUNE, BUTTON_TX_SELECT
+// Put them in your priority order.  Use the '\' char at the end of each of the first 3 lines to break the long line into multiple lines
+
+  #if defined (FEATURE_TFT_320x480_CAP_LCD) || defined(FEATURE_TFT_HOSYOND_320x480_LCD)
+    #define BUTTON_ASSIGNMENT_ORDER { BUTTON_MEM_1, BUTTON_MEM_2, BUTTON_MEM_3, BUTTON_MEM_4, \
+                                      BUTTON_MEM_LIST, BUTTON_TUNE, BUTTON_WPM_UP, BUTTON_WPM_DN, \
+                                      BUTTON_MEM_5, BUTTON_MEM_6, BUTTON_MEM_7, BUTTON_MEM_8, \
+                                      BUTTON_PAUSE, BUTTON_TX_ENABLE, BUTTON_TX_SELECT, BUTTON_SIDETONE_EN }
+  #else
+    #define BUTTON_ASSIGNMENT_ORDER { BUTTON_PAUSE, BUTTON_TX_ENABLE, BUTTON_WPM_UP, BUTTON_WPM_DN, \
+                                      BUTTON_MEM_1, BUTTON_MEM_2, BUTTON_MEM_3, BUTTON_MEM_4, \
+                                      BUTTON_MEM_5, BUTTON_MEM_6, BUTTON_MEM_7, BUTTON_MEM_8, \
+                                      BUTTON_MEM_LIST, BUTTON_TUNE, BUTTON_TX_SELECT, BUTTON_SIDETONE_EN }
+  #endif  // end custom button list
+#endif  // end BUTTON_ASSIGNMENTS
+
 //  These are for BT Keyboard.  THE BT keys are translated to match the PS2 key codes
 // could also include PS2_keyboard.h and still work.
 // Every call to read() returns a single byte for each

@@ -2188,6 +2188,32 @@ enum button_ID{
   // The +1 is the CW Scroll Box touch zone. More may added for Yes/No confirmation buttons. 
   // This includs the Fx kay though it might be hidden or unused in some cases
 
+  #ifdef BUTTON_ASSIGNMENTS
+  // This section collects a list of 16 buttons assigned into an array by the user in theor priority order in key_settings.h file.
+  //enum Button_assign_label{BN_PAUSE,BN_TXEN,BN_WPMUP,BN_WPMDN,BN_M1,BN_M2,BN_M3,BN_M4,BN_M5,BN_M6,BN_M7,BN_M8,BN_MEM,BN_TUNE,BN_TXSELECT,BN_TONE};
+  //enum Button_assign_label{B_PAUSE,B_TXEN,B_WPMUP,B_WPMDN,B_M1,B_M2,B_M3,B_M4,B_M5,B_M6,B_M7,B_M8,B_MEM,B_TUNE,B_TXSELECT,B_TONE};
+  const int button_array_size = 16;
+  int button_array[button_array_size] = BUTTON_ASSIGNMENT_ORDER;
+/*
+  // These defines provide the user with button labels in the keyer_settings.h file array macro positioned in their preferred order
+  #define B_PAUSE     BN_PAUSE
+  #define B_TXEN      BN_TXEN
+  #define B_WPMUP     Button_assign_label(BN_WPMUP)
+  #define B_WPMDN     Button_assign_label(BN_WPMDN)
+  #define B_M1        Button_assign_label(BN_M1)
+  #define B_M2        Button_assign_label(BN_M2)
+  #define B_M3        Button_assign_label(BN_M3)
+  #define B_M4        Button_assign_label(BN_M4)
+  #define B_M5        Button_assign_label(BN_M5)
+  #define B_M6        Button_assign_label(BN_M6)
+  #define B_M7        Button_assign_label(BN_M7)
+  #define B_M8        Button_assign_label(BN_M8)
+  #define B_MEM       Button_assign_label(BN_MEM)
+  #define B_TUNE      Button_assign_label(BN_TUNE)
+  #define B_TXSELECT  Button_assign_label(BN_TXSELECT)
+  #define B_TONE      BN_TONE      // sideone and long press backlight disable
+  */
+  #endif
   struct BTN_State {
     TFT_eSPI_Button p_btn;
     uint8_t len;
@@ -2197,14 +2223,16 @@ enum button_ID{
   // Cannot exceed value of BUTTON_last_button
   struct Keys {
     const uint8_t key_event;   // label for a key eventhandler to use
-    const uint8_t btn_idx;  // button array index - 0-5 for 6 buttons in a row
-    const uint8_t row;  // store which row this key bleongs to.
+    uint8_t btn_idx;  // button array index - 0-5 for 6 buttons in a row
+    uint8_t row;  // store which row this key bleongs to.
     bool hold;   // this is a long duration key - can be used to highlight a key when displays
     bool skip;  // Do not clear the hold state when ESC is pressed
     bool window;  // used to keep popup window up during successive key presses.
     char text_off[7]; // key text when not highlighted
     char text_on[7];  // key label text when highlighted
-  } key[NUM_KEYS] = 
+  };
+  
+  struct Keys key[NUM_KEYS] = 
   #ifdef TOUCH_BUTTON_16
   { 
     // 1st row
@@ -19923,6 +19951,35 @@ void create_buttons() {
   #endif
 }
 
+// map out the user assigned button order and rearrange the key[] table button row and row position indexes t match user desires
+// For the Touch 16 panel, this is simple as the row is always 0.
+// For rows, need to calculate the row nummber (mod 4) then assign the group of 4 values 0-3 for all 4 groups of 4
+void initialize_buttons() {
+  int i, b;
+  int r = 0;
+
+  for (b = 0; b < button_array_size; b++) {    
+    for (int i=0; i < NUM_KEYS; i++) {         
+      if (key[i].key_event == button_array[b]) {
+        //debug_serial_port->printf("function=%s", key[i].text_off);
+        #ifdef TOUCH_BUTTON_16
+          key[i].btn_idx = b;  // row is always 0 which is default          
+        #else
+          key[i].btn_idx = b%(BUTTONS_PER_ROW-1) + 1;  // assign button position 1-4 in the row 0-3.  pos 0 is always Fx row select key
+          key[i].row = r;  // assign button to a row          
+          if (key[i].btn_idx == BUTTONS_PER_ROW-1) {
+            r++;  // assign button to a row
+          }
+        #endif
+        debug_serial_port->printf("Assigning button %s to row=%d pos=%d\n", key[i].text_off, key[i].row, key[i].btn_idx);
+      }
+    }
+  }
+
+  create_buttons();
+
+}
+
 void clear_holds_key() {
   #ifdef FEATURE_TOUCH_DISPLAY
   for (int t = 0; t < NUM_KEYS; t++) {   // clear any button in hold state
@@ -26259,7 +26316,7 @@ void setup_esp()
     initialize_pins();
     initialize_gps_port();
     initialize_display();
-    create_buttons();
+    initialize_buttons();
     update_icons();
     // initialize_debug_startup();       // Goody - this is available for testing startup issues
     // debug_blink();                    // Goody - this is available for testing startup issues

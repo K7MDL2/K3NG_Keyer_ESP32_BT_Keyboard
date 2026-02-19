@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.17.2"
+#define CODE_VERSION "K7MDL-2026.2.18"
 #define eeprom_magic_number 36          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
@@ -69,8 +69,8 @@
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
 //#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
-//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
-#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
+#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+//#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 //#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
@@ -144,7 +144,7 @@
     #define FEATURE_TFT_DISPLAY
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features 
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
-    //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each
+    //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
     #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define USE_RES_TOUCH  // Enables touch with XPT2046
     ////#define USE_TASK // runs main loop in a task
