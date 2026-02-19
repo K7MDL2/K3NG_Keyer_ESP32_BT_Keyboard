@@ -1,10 +1,10 @@
-| Support Targets | ![ESP32-WROOM32][esp32] | ![Pico2W][Pico2w] | ![alt text][Has_Precompiled_Firmware_Images] |
+| Support Targets | ![ESP32-WROOM32][esp32] | ![Pico2W][Pico2W] | ![alt text][Has_Precompiled_Firmware_Images] |
 | --- | --- | --- | --- |
 
 | Dev Environment Used | ![alt text][ESP-IDF]| ![Arduino IDE][Arduino]|
 | --- | --- | --- |
 
-| BT Keyboards Tested | ![alt text][K380]|![alt text][K380s]|![Rii i8+ mini][Rii_mini]|
+| BT Keyboards Tested | ![alt text][K380]|![alt text][K380s] | ![Rii i8+ mini][Rii_mini] |
 | --- | --- | --- | --- |
 
 [Pico2W]: https://img.shields.io/badge/Pico2W-green "ESP32"
@@ -14,7 +14,7 @@
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 [K380]: https://img.shields.io/badge/K380-violet "K380"
 [K380s]: https://img.shields.io/badge/K380s-violet "K380s"
-[Rii_mini]: https://img.shields.io/badge/Rii_mini-violet "Rii i8+"
+[Rii_mini]: https://img.shields.io/badge/Rii_i8+_mini-violet "Rii i8+"
 
 
 # K3NG CW Keyer (Modified for ESP32)
