@@ -64,5 +64,7 @@
 // #define DEBUG_GPS
 // #define DEBUG_TOUCH
 // #define DEBUG_COMPASS
+// #define TASK_HIGH_WATER_MONITOR  // use to check status of runnign FreeRTOS tasks
+// #define TASK_PROCESS_STATUS     // used to check run status of all tasks on both CPUs
 
 // #define OPTION_WINKEY_IGNORE_FIRST_STATUS_REQUEST

@@ -34,8 +34,13 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 //#define M5STACK_CORE2 // provides sound and LCD touchscreen in one module
 
 #if defined (FEATURE_TFT_PICO_320x480_RES_LCD)
-    #define bt_keyboard_LED    LED_BUILTIN //64 // indicates BT keyboard connection status - GPIO17 is Blue LED
-
+    // For the BT Connected LED, when runnig in a task on Core 1, the LED_BUILTIN cannot be used
+    // Instead choose any other CPU GPIO. 
+    #ifdef USE_CORE1  
+      #define bt_keyboard_LED    0   // set ot 0 or any normal GPIO pin.
+    #else
+      #define bt_keyboard_LED    LED_BUILTIN  //64 // indicates BT keyboard connection status - GPIO17 is Blue LED
+    #endif
     #if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
       #define I2CDEV_SDA_PIN  20   // override the sdkconfig pair of 21, 22
       #define I2CDEV_SCL_PIN  21

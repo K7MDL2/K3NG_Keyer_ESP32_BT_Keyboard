@@ -5,8 +5,8 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.18"
-#define eeprom_magic_number 36          // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "K7MDL-2026.2.20"
+#define eeprom_magic_number 40          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -101,19 +101,20 @@
     #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define TFT_320_480  // sets screen layout appropriate for this resolution
     #define FEATURE_STRAIGHT_KEY
-    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling. Is ON when FEATURE_MCP23017_EXPANDER enabled
+    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define USE_RES_TOUCH // For XPT2046 resistive Touch Controller
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
-    //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
-    //#define USE_BT_TASK // On pico this and touch interact and cause issues, panic for Ctrl-F-key combos (for now 2/2026)
-    //#define USE_TASK
-    //#define USE_GPS_TASK // !! ToDo : Not ready to use yet // run the Serial GPS in a separate task.
+    #define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
+    //#define USE_TOUCH_TASK  // Run check_touch_buttons in a task - works only for GT911 i2c controller. ResTouch runs on core 0 only.
+    //#define USE_BT_TASK // Runs in a task on core 1 or 0. For Pico best to use USE_CORE1 so BT runs on Core 1 and this is ignored.
+    //#define USE_CONNECT_TASK  // Run BT ConnectOrPair in a task.  If USE_CORE1 is enabled, then it is already running in a task on Core1
+    //#define USE_MAIN_TASK  // Run the Main loop in a task on core 0
+    #define USE_GPS_TASK // Run Serial GPS in task. Can run in core 1 or 0 controlled by USE_CORE1
     #define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.

@@ -5,8 +5,8 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.18"
-#define eeprom_magic_number 36          // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "K7MDL-2026.2.20"
+#define eeprom_magic_number 40          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -111,9 +111,11 @@
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
+    #define USE_CORE1  // for Pico and ESP32, this moves some features to run in tasks on Core 1 instead of Core 0.
     #define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     //#define USE_BT_TASK 
-    //#define USE_TASK
+    #define USE_TASK
+    #define USE_GPS_TASK // run the Serial GPS in a separate task. Can run in core 1 or 0.
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     #define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
@@ -147,8 +149,10 @@
     //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
     #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define USE_RES_TOUCH  // Enables touch with XPT2046
-    ////#define USE_TASK // runs main loop in a task
-    ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - causes WDT timeouts on this display due to SPI bus conflicts
+    //#define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
+    ////#define USE_MAIN_TASK // runs main loop in a task
+    ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - Best for GT911 controllers. Causes WDT timeouts on this display due to SPI bus conflicts
+    //#define USE_GPS_TASK // Run Serial GPS in task. Can run in core 1 or 0 controlled by USE_CORE1
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus

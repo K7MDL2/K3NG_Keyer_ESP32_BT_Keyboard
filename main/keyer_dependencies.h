@@ -4,8 +4,7 @@
   || defined(FEATURE_LCD_YDv1) ||defined(FEATURE_LCD1602_N07DH) || defined(FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_M5STACK_CORE2) \
   || defined(FEATURE_LCD_FABO_PCF8574) || defined(FEATURE_LCD_MATHERTEL_PCF8574) || defined(FEATURE_LCD_HD44780) \
   || defined(FEATURE_LCD_I2C_FDEBRABANDER) || defined(FEATURE_LCD_TWILIQUIDCRYSTAL) || defined(FEATURE_OLED_SSD1306) \
-  || defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (FEATURE_TFT7789_3_2inch_240x320_LCD) \
-  || defined(FEATURE_TFT_HOSYOND_320x480_LCD) || defined(FEATURE_TFT_320x480_CAP_LCD) || defined(FEATURE_TFT_PICO_320x480_RES_LCD)
+  || defined(FEATURE_IDEASPARK_LCD) || defined(FEATURE_LCD_LIQUIDCRYSTAL_I2C) || defined (FEATURE_TFT_DISPLAY)
   #define FEATURE_DISPLAY
 #endif
 
@@ -63,11 +62,16 @@
 #endif
 
 #if defined(FEATURE_DISPLAY) && (!defined(FEATURE_TOUCH_DISPLAY) && !defined(FEATURE_TFT_DISPLAY) && !defined(FEATURE_LCD_LIQUIDCRYSTAL_I2C))
-  #error "This board type has a display. You must set one or more of these: FEATURE_LCD_LIQUIDCRYSTAL_I2C, FEATURE_TOUCH_DISPLAY, or FEATURE_TFT_DISPLAY"
+  //#error "This board type has a display. You must set one or more of these: FEATURE_LCD_LIQUIDCRYSTAL_I2C, FEATURE_TOUCH_DISPLAY, or FEATURE_TFT_DISPLAY"
 #endif
 
+#if (bt_keyboard_LED == LED_BUILTIN) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && defined(USE_CORE1)
+  #error "Cannot use LED_BUILTIN on Core 1, reassign it to a normal GPIO pin."
+#endif
+
+
 // example how to catch a #define that should not be empty.
-//#if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check val;ue exists and is not empty, must be 1-4.
+//#if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check value exists and is not empty, must be 1-4.
 //  #error "BUTTON_ROWS must be defined with a value = 1-4, or, TOUCH_BUTTON_16 must be defined in keyer_features_and_options.h. Defualting to 4 Rows."
 //#endif
 

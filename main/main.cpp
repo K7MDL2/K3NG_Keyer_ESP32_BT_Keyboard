@@ -1489,10 +1489,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
   #include "keyer_features_and_options_yaacwk.h"
 #elif defined(HARDWARE_ESP32_DEV)//sp5iou 20220123
   #include "keyer_features_and_options_esp32_dev.h"
-  #define EEPROM_size 2048
+  #define EEPROM_size 4096
 #elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
   #include "keyer_features_and_options_pico.h"
-  #define EEPROM_size 2048
+  #define EEPROM_size 4096
 #elif defined(HARDWARE_TEST)
   #include "keyer_features_and_options_test.h"
 #elif defined(HARDWARE_IZ3GME)
@@ -1638,15 +1638,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
     extern const uint8_t KeyboardLayout_en_US[128];
     BluetoothHIDMaster bt_keyboard;
-    //HIDKeyStream keystream;
-    const char *DATAHEADER = "Last BLE Address"; // exactly 16 chars + \0
-    
-    typedef struct {
-      char hdr[16];     // The header marker so we know this is our data
-      uint8_t addr[6];  // MAC of the peer we last connected to
-      uint8_t addrType; // Type of address (normal or randomized) of the last peer
-    } EEPROMDATA;
-    
+    HIDKeyStream keystream;
+ 
     //const uint8_t KEY_CAPS_LOCK = 0x39;
     enum class KeyModifier : uint8_t {
       L_CTRL  = 0x01,
@@ -2027,13 +2020,16 @@ struct config_t {  // 120 bytes total
   int sidetone_volume;
     // 2 bytes
 
+  // GPS and Compass
   uint8_t grid_digits;  // length of gridsquare to display
-  char GPS_GridSq[grid_len_max];  // store the active grid square - can come frm GPS or nto avaiable, config file
+  char GPS_GridSq[grid_len_max];  // store the last GPS soruces grid square
   char Mem_GridSq[grid_len_max];  // store the user entered grid square
   uint8_t GridSq_source;  // specify which source to use/  0 = Config File, 1 = GPS, 2 = Memory in GRID_WORKING_MEMORY #
-  bool ignore_gps;  // set to true if we shoudl not use GPS info
+  bool ignore_gps;  // set to true if we should not use GPS info
   float declination; // store the declination stored in memory 12 from config, or from a user entered overriding value in memory 12
   uint32_t gps_baud; // store the last known GPS serial baud rate
+
+  // BT connection last BT address used info
   char hdr[16];     // The header marker so we know this is our data (for BT/BLE on Pico)
   uint8_t addr[6];  // BT/BLE MAC of the peer we last connected to
   uint8_t addrType; // BLE Type of address (normal or randomized) of the last peer (ignored for BT Classic)
@@ -2115,14 +2111,16 @@ void initialize_tonsin();
 void myDelay(uint32_t _ms);
 void setup_esp();
 int print_memory(byte memory_number, char *mem_string);
-void check_gps(bool force_update, bool ignore_gps);
+void check_gps();
+void set_IgnoreGPS(bool ignore_gps);
 void check_compass(void);
 void process_compass(bool force_update, bool ignore_dec);
 void command_display_memory(byte memory_number);
 void store_Grid(char * grid);
 int validate_grid(const char * input_grid, char grid[]);
 int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]);
-void process_gps(char * memory_str, bool force_update, uint8_t source);
+//void process_gps(char * memory_str, bool force_update, uint8_t source);
+void process_gps();  // use temp_gps struct
 void memorycheck();
 void tft_backlight(int state);  // toggles the backlight GPIO pin on and off from keyboard or long touch
 
@@ -2176,7 +2174,7 @@ enum button_ID{
     const int NUM_BUTTON_ROWS = 1; // number of rows of buttons
     const int NUM_KEYS = buttonCount;  // +1 is CW Scroll Box touch zone.  Fx key counts as a regular key
   #else
-    #if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check val;ue exists and is not empty, must be 1-4.
+    #if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check value exists and is not empty, must be 1-4.
       #error "BUTTON_ROWS must be defined with a value = 1-4, or, TOUCH_BUTTON_16 must be defined in keyer_features_and_options.h"
     #endif
     const int MAX_ROWS = 4;
@@ -2407,6 +2405,7 @@ float heading; // populated by the i2c compass computation
 bool update_heading_display_flag = false;
 char popup_text[(LCD_COLUMNS*LCD_ROWS)+30] = {}; // Text to display in popup
 bool popup_active = false;
+bool start_core1 = false; // signal that init is done, used when tasks are waiting to run on Core 1
 
 #ifdef FEATURE_GPS
   #include <TimeLib.h>
@@ -2415,7 +2414,15 @@ bool popup_active = false;
 
   /* Global variables for handling GPS conversion to Maindernhead grid square  */
   #define NMEA_MAX_LENGTH  (120)
-  
+    
+  struct TempGPS {
+    volatile bool    update;    // we have a valid result to offer.  This action flag will be set false when process uses it.
+    volatile uint8_t source;    // GPS data stream is source == 1. Official source to use for display is in configuration.source
+    char * volatile  grid;      // poiner to GPS data to offer.  Actual last used value for display is in coniguration.GPS_GridSq
+    volatile bool    force;     // used to force an update, usually when a higher priorty source like user entered memory calls.
+  } temp_gps;
+  struct TempGPS *g = &temp_gps;
+
   struct position {
       double latitude;
       double longitude;
@@ -2435,6 +2442,7 @@ bool popup_active = false;
   int shift_dir;  // + or -
   char time_str[27] = {};
   bool time_disp_updated = false;
+  uint8_t gps_source = 0;  
 #endif
 volatile bool do_process = false;
 
@@ -2528,8 +2536,9 @@ byte send_buffer_array[send_buffer_size];
 byte send_buffer_bytes = 0;
 byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
 
+ byte play_memory_prempt = 0;
+
 #ifdef FEATURE_MEMORIES
-  byte play_memory_prempt = 0;
   long last_memory_button_buffer_insert = 0;
   byte repeat_memory = 255;
   unsigned long last_memory_repeat_time = 0;
@@ -2573,84 +2582,29 @@ byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
   byte bt_keyboard_command_buffer_pointer = 0;
 #endif 
 
-#if defined(FEATURE_BT_KEYBOARD)  && defined(ARDUINO_RASPBERRY_PI_PICO_W)
-const char *macToString(const uint8_t *addr, uint8_t addrType) {
-  static char mac[32];
-  sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x,%d\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addrType ? 1 : 0);
-  return mac;
+void open_eeprom() {
+#if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+  //noInterrupts();
+  EEPROM.begin(EEPROM_size);
+#endif
 }
 
-uint8_t lastAddress[6] = {};
-uint8_t lastAddressType = 0;
-
-void loadEEPROM() {
-  if (memcmp(configuration.hdr, DATAHEADER, sizeof(configuration.hdr))) {
-    // Not our data, just clear things
-    Serial.println("No previous paired device found in EEPROM");
-    bzero(lastAddress, 6);
-    lastAddressType = 0;
-  } else {
-    // Our baby, copy it to local storage
-    Serial.printf("Previously paired device found: %s\n", macToString(configuration.addr, configuration.addrType));
-    memcpy(lastAddress, configuration.addr, sizeof(lastAddress));
-    lastAddressType = configuration.addrType;
-  }
-}
-
-void saveEEPROM() {
-  //configuration data;
-  memcpy(configuration.hdr, DATAHEADER, sizeof(configuration.hdr));
-  memcpy(configuration.addr, lastAddress, sizeof(configuration.addr));
-  configuration.addrType = lastAddressType;
+void close_w_eeprom() {  // close after write
+#if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
   EEPROM.commit();
-  Serial.printf("Wrote paired device to EEPROM: %s\n", macToString(lastAddress, lastAddressType));
+  myDelay(5);
+  EEPROM.end();
+  //interrupts();
+  config_dirty = 0;
+#endif
 }
 
-// Either try continually to reconnect to the last device connected,
-// or if it's invalid or user holds BOOTSEL then we'll start a new
-// pairing process (i.e. the peripheral will need to be put into
-// pairing mode to bond)
-void connectOrPair() {
-  uint8_t x = 0;
-  for (int i = 0; i < 6; i++) {
-    x |= lastAddress[i];
-  }
-  if (x) {
-    // There's a valid address, attempt to reconnect forever until connect or BOOTSEL
-    Serial.printf("Attempting to reconnect to %s...\n", macToString(lastAddress, lastAddressType));
-    do {
-      delay(10);      
-      if (use_BLE) bt_keyboard.connectBLE(lastAddress, lastAddressType);
-      else bt_keyboard.connect(lastAddress);
-    } while (!bt_keyboard.connected() && !BOOTSEL);
-    if (bt_keyboard.connected()) {
-      Serial.println("Reconnected!\n");  
-      keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);    
-      return;
-    } else {
-      keyboard_lost_connection_handler();
-    }
-    // Fall through to pair
-  }
-  //pinMode(LED_BUILTIN, OUTPUT);
-  bool l = true;
-  Serial.println("Entering pairing mode.  Set the peripheral to pair state");
-  bt_keyboard.clearPairing();
-  do {
-    //digitalWrite(LED_BUILTIN, l);    
-    l = !l;
-    delay(10);
-    if (use_BLE) bt_keyboard.connectBLE();
-    else bt_keyboard.connectAny();
-  } while (!bt_keyboard.connected());
-  Serial.printf("Connected to device: %s\n", macToString(bt_keyboard.lastConnectedAddress(), bt_keyboard.lastConnectedAddressType()));
-  memcpy(lastAddress, bt_keyboard.lastConnectedAddress(), sizeof(lastAddress));
-  lastAddressType = bt_keyboard.lastConnectedAddressType();
-  // We've update the connection, store away
-  saveEEPROM();
-  keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);
+void close_r_eeprom() {  // close after read only
+#if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+  EEPROM.end();
+  //interrupts();
+#endif
 }
-#endif //FEATURE_BT_KEYBOARD
 
 #ifdef FEATURE_HELL
   PROGMEM const char hell_font1[] = {B00111111, B11100000, B00011001, B11000000, B01100011, B00000001, B10011100, B00111111, B11100000,    // A
@@ -3064,6 +3018,92 @@ unsigned long millis_rollover = 0;
   #endif //FEATURE_SO2R_ANTENNA
 #endif //FEATURE_SO2R_BASE
 
+// ------------------------   Pico  BT Keyboard Support Functions --------------------------------------------------
+
+#if defined(FEATURE_BT_KEYBOARD)  && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+  const char *macToString(const uint8_t *addr, uint8_t addrType) {
+    static char mac[32];
+    sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x,%d\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addrType ? 1 : 0);
+    return mac;
+  }
+  
+  void check_last_bt_addr_in_EEPROM() {
+    uint8_t x = 0;
+    for (int i = 0; i < 6; i++) {
+      x |= configuration.addr[i];
+    }
+    if (x) {
+      debug_serial_port->printf("Previously paired device found: %s\n", macToString(configuration.addr, configuration.addrType));
+    }
+  }
+
+  //---------------------  Connect  or Pair --------------------------------------------------------------
+
+  #if defined(USE_CONNECT_TASK) && !defined(USE_CORE1)  // if run in a task
+    void connectOrPair(void * pvParameters) {
+      /* The parameter value is expected to be 1 as 1 is passed in the
+      pvParameters value in the call to xTaskCreate() below. */
+
+      configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
+
+      for(;;) {
+    
+  #else   // not run in a task
+
+    void connectOrPair() {  
+
+      if(1) {
+
+  #endif
+          uint8_t x = 0;
+          for (int i = 0; i < 6; i++) {
+              x |= configuration.addr[i];
+          }
+          debug_serial_port->printf("Entering Connect or Pair\n");
+          if (x) {
+              // There's a valid address, attempt to reconnect forever until connect or BOOTSEL
+              debug_serial_port->printf("Attempting to reconnect to %s...\n", macToString(configuration.addr, configuration.addrType));
+              do {
+              //if (!bt_keyboard.connected() && !BOOTSEL) {
+                myDelay(1000);      
+                if (use_BLE) bt_keyboard.connectBLE(configuration.addr, configuration.addrType);
+                else bt_keyboard.connect(configuration.addr);
+                //Serial.println("Attempting to connect");
+              } while (!bt_keyboard.connected() && !BOOTSEL);
+              if (bt_keyboard.connected()) {
+                debug_serial_port->println("Reconnected!\n");  
+                keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);    
+                return;
+              } else {
+                keyboard_lost_connection_handler();
+              }
+              // Fall through to pair
+          }
+          //pinMode(bt_keyboard_LED, OUTPUT);
+          bool l = true;
+          debug_serial_port->println("Entering pairing mode.  Set the peripheral to pair state");
+          bt_keyboard.clearPairing();
+          bzero(configuration.addr, 6);
+          configuration.addrType = 0;
+          config_dirty = 1;
+          do {
+              myDelay(1000);
+              if (use_BLE) bt_keyboard.connectBLE();
+              else bt_keyboard.connectAny();
+              debug_serial_port->println("Waiting to connect"); 
+          } while (!bt_keyboard.connected() && !BOOTSEL);
+          if (bt_keyboard.connected()) {
+              debug_serial_port->printf("Connected to device: %s\n", macToString(bt_keyboard.lastConnectedAddress(), bt_keyboard.lastConnectedAddressType()));
+              memcpy(configuration.addr, bt_keyboard.lastConnectedAddress(), sizeof(configuration.addr));
+              configuration.addrType = bt_keyboard.lastConnectedAddressType();
+              config_dirty = 1;    // EEPROM will be udpated on a schedule.              
+              keyboard_connected_handler();
+          }
+      }
+  }
+
+#endif //FEATURE_BT_KEYBOARD
+
 byte async_eeprom_write = 0;
 
 /*---------------------------------------------------------------------------------------------------------
@@ -3114,10 +3154,7 @@ void service_sending_pins(){
 
 }
 
-
-
 //-------------------------------------------------------------------------------------------------------
-
 
 byte service_tx_inhibit_and_pause(){
 
@@ -3996,7 +4033,7 @@ void check_sleep(){
 #endif //HARDWARE_ESP32_DEV
 //-------------------------------------------------------------------------------------------------------
 
-#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+#if defined(FEATURE_LCD_BACKLIGHT_AUTO_DIM) && defined(FEATURE_DISPLAY)
 void check_backlight() {
 
   static unsigned long last_bl_check = 0 ;
@@ -4747,11 +4784,6 @@ void check_ps2_keyboard()
         //    debug_serial_port->println(a);
     #endif    
 
-    /* NOTE!!! This entire block of code is repeated again below the #else.  This was done to fix a bug with Notepad++ not
-            collapsing code correctly when while() statements are encapsulated in #ifdef/#endifs.                        */
-
-    #ifdef FEATURE_MEMORIES
-
         #if defined (FEATURE_PS2_KEYBOARD) || defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 
             #if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
@@ -5315,7 +5347,7 @@ void check_ps2_keyboard()
                                   #ifdef FEATURE_DISPLAY
                                     lcd_center_print_timed("Serial Baud " + String(next_baud), 0, default_display_msg_delay); 
                                   #endif
-                                  check_gps(true, false);
+                                  g->update = 1; // pick up the new baud rate
                                 }
                                 break;
                                 #endif
@@ -5400,16 +5432,22 @@ void check_ps2_keyboard()
                                       lcd_center_print_timed(F("GRID LENGTH = 4 "), 0, default_display_msg_delay);
                                     #endif
                                   }
-                                  do_process = true;
-                                  process_gps(grid_sq_str, true, false);  // force a memory update                  
+                                  #ifdef FEATURE_GPS
+                                  // set up for gps data crunching ad memory updates
+                                    g->update = true;
+                                    g->grid = configuration.GPS_GridSq;  // use last source
+                                    g->force = true;   // force a memory update     
+                                  #endif                               
                                 }                                
                                 break;
 
                                 case PS2_F10_CTRL :   // ignore stored GPS grid square
-                                  check_gps(true, true);  // force a memory update                                             
+                                  #ifdef FEATURE_GPS
+                                    set_IgnoreGPS(true);                                  
+                                  #endif
                                 break;
                                           
-                                #ifdef FEATURE_GPS
+                                #if defined(FEATURE_GPS) && defined(FEATURE_MEMORIES)
                                 case PS2_F11_CTRL : {   // enter new grid sqaure in memory x and store it in config structure                                 
                                   char tmp_str[LCD_COLUMNS] = {};
                                   #ifdef FEATURE_DISPLAY                              
@@ -5430,13 +5468,16 @@ void check_ps2_keyboard()
                                   strcpy(configuration.Mem_GridSq, tmp_str);
                                   config_dirty = 1;
                                   debug_serial_port->print("Read Validated Memory Grid = "); debug_serial_port->println(configuration.Mem_GridSq);
-                                  do_process = true;
-                                  process_gps(configuration.Mem_GridSq, true, 2);  // force a memory update (source = 2)                                                                   
+                                                                    
+                                  g->update = 1;
+                                  g->grid = configuration.Mem_GridSq;
+                                  g->source = 2;
+                                  //process_gps(configuration.Mem_GridSq, true, 2);  // force a memory update (source = 2)                                                                   
                                 }
                                 break;
                                 #endif  // FEATURE_GPS
                                 
-                                #ifdef FEATURE_COMPASS
+                                #if defined(FEATURE_COMPASS) && defined(FEATURE_MEMORIES)
                                 case PS2_F12_CTRL : {   // enter new declination in memory x and store it in config structure                                 
                                   char tmp_str[LCD_COLUMNS] = {};
                                   #ifdef FEATURE_DISPLAY                              
@@ -5504,7 +5545,6 @@ void check_ps2_keyboard()
                         }                        
                 }  //while ((keyboard.available()) && (play_memory_prempt == 0))
         #endif
-    #endif
 }
 
 #endif //FEATURE_PS2_KEYBOARD || defined (FEATURE_BT_KEYBOARD)
@@ -5635,6 +5675,7 @@ void ps2_keyboard_program_memory(byte memory_number)
     boop();
     #endif
   } else {
+    open_eeprom();
     for (x = 0;x < temp_memory_index;x++) {  // write to memory
       EEPROM.write((memory_start(memory_number)+x),temp_memory[x]);
       if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
@@ -5644,9 +5685,7 @@ void ps2_keyboard_program_memory(byte memory_number)
     // write terminating 255
     EEPROM.write((memory_start(memory_number)+x),255);
     debug_serial_port->print(F("\nWrote Keyboard Memory ")); debug_serial_port->println(memory_number+1);
-    #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-      EEPROM.commit();
-    #endif
+    close_w_eeprom();
     #ifdef FEATURE_DISPLAY
       lcd_center_print_timed("Done", LCD_ROWS-2, default_display_msg_delay);
     #else    
@@ -5819,6 +5858,7 @@ void debug_capture ()
   if (serial_byte_in == '~') {
     debug_capture_dump();    // go into dump mode if we get a tilde
   } else {
+    open_eeprom();
     EEPROM.write(x,serial_byte_in);
     x--;
     while ( x > 400) {
@@ -5833,13 +5873,9 @@ void debug_capture ()
         //if ((serial_byte_in > 47) or (serial_byte_in = 20)) { primary_serial_port->write(serial_byte_in); }  // echo back
       }
     }
+    close_w_eeprom();
   }
-  #if defined(HARDWARE_ESP32_DEV)  || defined(ARDUINO_RASPBERRY_PI_PICO_W) ||  defined(ARDUINO_RASPBERRY_PI_PICO)
-    EEPROM.commit();
-  #endif
-
   while (1) {myDelay(1);}
-
 }
 #endif
 
@@ -5850,6 +5886,7 @@ void debug_capture_dump()
 {
   byte eeprom_byte_in;
 
+  open_eeprom();
   for ( int x = 1022; x > (1022-100); x-- ) {
     eeprom_byte_in = EEPROM.read(x);
     if (eeprom_byte_in < 255) {
@@ -5869,6 +5906,7 @@ void debug_capture_dump()
       x = 0;
     }
   }
+  close_r_eeprom();
 
   while (1) {myDelay(1);}
 
@@ -6761,10 +6799,6 @@ void check_ptt_tail()
               }
             }
 
-
-
-
-
             #endif //OPTION_EXCLUDE_PTT_HANG_TIME_FOR_MANUAL_SENDING
           #endif //ndef OPTION_INCLUDE_PTT_TAIL_FOR_MANUAL_SENDING
         } else { // automatic sending
@@ -6794,6 +6828,7 @@ void write_settings_to_eeprom(int initialize_eeprom) {
     (defined(ARDUINO_SAM_DUE) && \
     defined(FEATURE_EEPROM_E24C1024))
 
+    open_eeprom();
     if (initialize_eeprom) {
         //configuration.magic_number = eeprom_magic_number;
         EEPROM.write(0, eeprom_magic_number);
@@ -6807,9 +6842,7 @@ void write_settings_to_eeprom(int initialize_eeprom) {
     for (i = 0; i < sizeof(configuration); i++){
       EEPROM.write(ee++, *p++);  
     }
-    #if defined(HARDWARE_ESP32_DEV)
-      EEPROM.commit();;
-    #endif       
+    close_w_eeprom();
 
     async_eeprom_write = 1;  // initiate an asynchronous eeprom write
 
@@ -6820,21 +6853,37 @@ void write_settings_to_eeprom(int initialize_eeprom) {
       if (initialize_eeprom) {
         #if defined(DEBUG_EEPROM)
           debug_serial_port->print(F(" - Initialize EEPROM Settings AND Memories"));
-        #endif
+        #endif  
+        open_eeprom();
         //configuration.magic_number = eeprom_magic_number;
         EEPROM.write(0, eeprom_magic_number);
-        EEPROM.commit();
+        close_w_eeprom();
         #ifdef FEATURE_MEMORIES
           initialize_eeprom_memories();
         #endif  //FEATURE_MEMORIES  
       }
-      #if defined(DEBUG_EEPROM)
-        debug_serial_port->println(F(" - Save EEPROM Settings"));
-      #endif
+      
+      open_eeprom();
       EEPROM.put(1, configuration);
-      EEPROM.commit();
+      
+
+      #if defined(DEBUG_EEPROM)
+        debug_serial_port->println(F(" - Saved EEPROM Settings"));
+        
+        // Read back to verify - set wpm to 20 and sidetone mode to SIDETONE_PADDLE_ONLY and see if we get these back.   
+        EEPROM.get(1, configuration);      
+
+        debug_serial_port->print(F("Verify EEPROM write by reading it back and checking some settings.\nSet Sidetone Mode=Paddles-Only and WPM=20.  Results"));
+
+        if (configuration.wpm == 20 && configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) {          
+          debug_serial_port->println(F(" - EEPROM write verified!"));
+        } else {
+          debug_serial_port->println(F(" - EEPROM write failed!"));
+        }
+        
+      #endif
+      close_w_eeprom();
   #endif
-    config_dirty = 0;
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -6851,16 +6900,13 @@ void service_async_eeprom_write(){
   if ((async_eeprom_write) && (!send_buffer_bytes) && (!ptt_line_activated) && (!dit_buffer) && (!dah_buffer) && (paddle_pin_read(paddle_left) == HIGH)  && (paddle_pin_read(paddle_right) == HIGH)) {  
     if (last_async_eeprom_write_status){ // we have an ansynchronous write to eeprom in progress
 
-
-      #if defined(_BOARD_PIC32_PINGUINO_) || defined(ARDUINO_SAMD_VARIANT_COMPLIANCE) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+      open_eeprom();
+      #if defined(_BOARD_PIC32_PINGUINO_) || defined(ARDUINO_SAMD_VARIANT_COMPLIANCE) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)                
         if (EEPROM.read(ee) != *p) {
           EEPROM.write(ee, *p);
         }
         ee++;
         p++;
-      #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-        EEPROM.commit();
-      #endif
       #else
         EEPROM.update(ee++, *p++);
       #endif
@@ -6873,15 +6919,13 @@ void service_async_eeprom_write(){
         i++;
       } else { // we're done
         async_eeprom_write = 0;
-        last_async_eeprom_write_status = 0;
-        #if defined(ARDUINO_SAMD_VARIANT_COMPLIANCE) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-          EEPROM.commit();
-        #endif       
+        last_async_eeprom_write_status = 0;           
 
         #if defined(DEBUG_ASYNC_EEPROM_WRITE)
           debug_serial_port->println(F("service_async_eeprom_write: complete"));
         #endif    
       }
+      close_w_eeprom();
 
     } else { // we don't have one in progress - initialize things
 
@@ -6912,15 +6956,25 @@ int read_settings_from_eeprom() {
     #if defined(DEBUG_EEPROM_READ_SETTINGS)
       debug_serial_port->println(F("read_settings_from_eeprom: start"));
     #endif
-
+    
+    open_eeprom();
     if (EEPROM.read(0) == eeprom_magic_number){
 
       #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 
+        EEPROM.get(1, configuration);  
+
         #if defined(DEBUG_EEPROM_READ_SETTINGS)
-          debug_serial_port->println(F("read_settings_from_eeprom: ARDUINO_RASPBERRY_PI_PICO"));
+          debug_serial_port->println(F("read_settings_from_eeprom: ARDUINO_RASPBERRY_PI_PICO"));                      
+          // Read to verify - set wpm to 20 and sidetone mode to SIDETONE_PADDLE_ONLY and see if we get these back.   
+          debug_serial_port->print(F(" - To verify EEPROM settings set WPM=20 and Sidetone Mode=Paddles-Only "));
+          if (configuration.wpm == 20 && configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) {
+            debug_serial_port->println(F(" - EEPROM write verified!"));
+          } else {
+            debug_serial_port->printf(" - EEPROM write failed!  WPM=%d, Sidetone Mode=%d", configuration.wpm, configuration.sidetone_mode);
+          } 
         #endif
-        EEPROM.get(1, configuration);
+        
       #else
         byte* p = (byte*)(void*)&configuration;
         unsigned int i;
@@ -6936,24 +6990,25 @@ int read_settings_from_eeprom() {
           *p++ = EEPROM.read(ee++);
         }
       #endif
+
+      close_r_eeprom();   
     
       #ifndef FEATURE_SO2R_BASE
         switch_to_tx_silent(configuration.current_tx);
       #endif
-
-      config_dirty = 0;
 
       #if defined(DEBUG_EEPROM_READ_SETTINGS)
         debug_serial_port->println(F("read_settings_from_eeprom: read complete"));
       #endif
       return 0;
     } else {
-      #if defined DEBUG_SETUP
+      close_r_eeprom();  
+      #if defined(DEBUG_STARTUP)
         debug_serial_port->println(F("Went here 10"));
       #endif
       #if defined(DEBUG_EEPROM_READ_SETTINGS)
         debug_serial_port->println(F("read_settings_from_eeprom: eeprom needs initialized"));
-      #endif      
+      #endif          
       return 1;
     }
   
@@ -8700,8 +8755,9 @@ int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]) {
     int y,j,k;
     int fill_char;                                  // a flag that is set if we need to fill the char array with spaces
  
+    open_eeprom();
     y = k = j = fill_char = 0;
-    for(y = (memory_start(memory_number)); y < (memory_start(memory_number)) + LCD_COLUMNS; y++) {
+    for(y = (memory_start(memory_number)); y < (memory_start(memory_number)) + LCD_COLUMNS; y++) {      
       eeprom_byte_read = EEPROM.read(y);                    // read memory characters from EEPROM
       if (eeprom_byte_read == 255) {
         fill_char = 1;           // if it is the 'end of stored memory' character set a flag
@@ -8713,6 +8769,7 @@ int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]) {
       else memory_char[j] = ' ';                               // else fill the rest of the array with spaces            
       j++;                                                  // move to the next character to be stored in the array
     }    // end for loop
+    close_r_eeprom();
     len = k; // account for increments on both number, terminator
     if (len < 0) return 0;
     else return len; // send string length back to caller to avoid the trailing spaces                   
@@ -13814,6 +13871,7 @@ void sd_card_load_eeprom_from_file(PRIMARY_SERIAL_CLS * port_to_use,String filen
     return;
   }
 
+  open_eeprom();
   for (x = 0; x < memory_area_end; x++) {
     if (sdfile.available()){
       EEPROM.write(x,sdfile.read());
@@ -13823,14 +13881,11 @@ void sd_card_load_eeprom_from_file(PRIMARY_SERIAL_CLS * port_to_use,String filen
       port_to_use->println(F("\r\nHit end of file before end of eeprom"));
     }
   }
-
+  close_w_eeprom();
   sdfile.close();
   port_to_use->println(F("\r\nReading settings from eeprom."));
   read_settings_from_eeprom();
   port_to_use->println(F("Done."));
-
-
-
 }
 
 #endif //defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS) && defined(FEATURE_SD_CARD_SUPPORT)
@@ -13855,11 +13910,13 @@ void sd_card_save_eeprom_to_file(PRIMARY_SERIAL_CLS * port_to_use,String filenam
     return;
   }
 
+  open_eeprom();
   for (x = 0; x < memory_area_end; x++) {
     eeprom_byte_in = EEPROM.read(x);
     sdfile.write(eeprom_byte_in);
     if ((x % 16) == 0){port_to_use->print(F("."));}
   }
+  close_r_eeprom();
 
   sdfile.close();
   port_to_use->println(F("Done."));
@@ -13880,6 +13937,12 @@ void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use){
   #define EEPROM_DUMP_COLUMNS 32
   #define EEPROM_DUMP_LINES 30
 
+  open_eeprom();
+
+  #ifdef DEBUG_EEPROM_READ_SETTINGS
+    debug_serial_port->println(F("cli_eeprom_dump: Start EEPROM byte dump"));
+  #endif   
+  
   for (x = 0; x < memory_area_end; x++) {
     if (y == 0){
       port_to_use->print(F("\r\n"));
@@ -13914,11 +13977,13 @@ void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use){
       }
     }
   }
+ 
   if (y > 0){
     for (int z = (EEPROM_DUMP_COLUMNS - y); z > 0; z--){
       port_to_use->write("   ");
     }
     port_to_use->print(F("\t"));
+
     for (int z = x - y; z < x; z++) {
       eeprom_byte_in = EEPROM.read(z);
       if ((eeprom_byte_in > 31) && (eeprom_byte_in < 127)){
@@ -13926,9 +13991,9 @@ void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use){
       } else {
         port_to_use->print(F("."));
       }  
-    }    
+    }
   }
-
+  close_r_eeprom();  // eeprom end for read, no commit.
 }
 #endif //defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 //---------------------------------------------------------------------
@@ -16697,9 +16762,11 @@ void memorycheck()
 #ifdef FEATURE_MEMORIES
 void initialize_eeprom_memories()
 {
+  open_eeprom();
   for (int x = 0; x < number_of_memories; x++) {
     EEPROM.write(memory_start(x),255);
   }
+  close_w_eeprom();
 }
 #endif
 
@@ -16715,6 +16782,7 @@ void serial_status_memories(PRIMARY_SERIAL_CLS * port_to_use)
     static char * prosign_temp = 0;
   #endif
 
+  open_eeprom();
   for (int x = 0; x < number_of_memories; x++) {
     last_memory_location = memory_end(x) + 1 ;
     port_to_use->write("Memory ");
@@ -16759,6 +16827,7 @@ void serial_status_memories(PRIMARY_SERIAL_CLS * port_to_use)
 
     port_to_use->println();
   }
+  close_r_eeprom();
 
   #if defined(DEBUG_MEMORY_LOCATIONS)
     port_to_use->print(F("Config Area end: "));
@@ -16772,8 +16841,6 @@ void serial_status_memories(PRIMARY_SERIAL_CLS * port_to_use)
 #if defined(FEATURE_SERIAL) && defined(FEATURE_MEMORIES) && defined(FEATURE_COMMAND_LINE_INTERFACE)
 void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
 {
-
-
   /*
 
   CLI memory programming test string
@@ -16790,11 +16857,9 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
   uint8_t memory_data_entered = 0;
   uint8_t error_flag = 0;
   uint8_t memory_1_or_1x_flag = 0;
-
   
   uint8_t incoming_serial_byte_buffer[serial_program_memory_buffer_size];
   unsigned int incoming_serial_byte_buffer_size = 0;
-
 
   while (looping){
     if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
@@ -16846,6 +16911,8 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
 
       } else {
 
+        open_eeprom();
+
         if (incoming_serial_byte == 13){  // we got a carriage return
           looping = 0;
           EEPROM.write((memory_start(memory_number-1)+memory_index),255);
@@ -16877,24 +16944,17 @@ void serial_program_memory(PRIMARY_SERIAL_CLS * port_to_use)
             port_to_use->println(F("Memory full, truncating."));
           }
         }
+        close_w_eeprom();
       } //
     }
   }
 
   if ((memory_number_entered) && (memory_data_entered) && (!error_flag)){
-    #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-      EEPROM.commit(); //SP5IOU 20220129
-    #endif
     port_to_use->print(F("\n\rWrote memory "));
     port_to_use->println(memory_number);
   } else {
     port_to_use->println(F("\n\rError"));
   }
-
-  #if defined(ARDUINO_SAMD_VARIANT_COMPLIANCE)
-    EEPROM.commit();
-  #endif
-
 }
 
 #endif
@@ -17188,11 +17248,12 @@ byte play_memory(byte memory_number) {
       check_serial();
     #endif
 
+    
     if ((play_memory_prempt == 0) && (pause_sending_buffer == 0)) {
-
+      open_eeprom();
       pause_sending_buffer_backspace = 0;
-
       eeprom_byte_read = EEPROM.read(y);
+
       if (eeprom_byte_read < 255) {
 
         #ifdef DEBUG_PLAY_MEMORY
@@ -17682,6 +17743,7 @@ byte play_memory(byte memory_number) {
          return 0;
         }
       }
+      close_r_eeprom();
     } else {
       if (pause_sending_buffer == 0) {
         y = (memory_end(memory_number)+1);   // we got a play_memory_prempt flag, exit out
@@ -17713,7 +17775,6 @@ byte play_memory(byte memory_number) {
       debug_serial_port->println(jump_back_to_memory_number); 
     #endif
     
-    
     // if we had an inserted memory, jump back to the original one
     /*
     if ((y== (memory_end(memory_number)+1)) && (jump_back_to_y < 99999) && (jump_back_to_memory_number < 255)) {
@@ -17726,7 +17787,6 @@ byte play_memory(byte memory_number) {
     }
     */
       
-
   } //for (int y = (memory_start(memory_number)); (y < (memory_end(memory_number)+1)); y++)
   return 0;
 }
@@ -17887,8 +17947,9 @@ void program_memory(int memory_number)
         debug_serial_port->print(F("   ascii to write:"));
         debug_serial_port->println(convert_cw_number_to_ascii(cwchar));
       #endif
-
+      open_eeprom();
       EEPROM.write((memory_start(memory_number)+memory_location_index),convert_cw_number_to_ascii(cwchar));
+      close_w_eeprom();
       memory_location_index++;
  
       #ifdef FEATURE_MEMORY_MACROS
@@ -17919,8 +17980,10 @@ void program_memory(int memory_number)
     debug_serial_port->println(F("program_memory: writing memory termination"));
   #endif
 
-  EEPROM.write((memory_start(memory_number) + memory_location_index),255);
+  open_eeprom();
 
+  EEPROM.write((memory_start(memory_number) + memory_location_index),255);
+  
   #ifdef OPTION_PROG_MEM_TRIM_TRAILING_SPACES
     for (int x = (memory_location_index-1); x > 0; x--) {
       if (EEPROM.read((memory_start(memory_number) + x)) == 32) {
@@ -17930,7 +17993,9 @@ void program_memory(int memory_number)
       }
     }
   #endif
-
+  
+  close_w_eeprom();
+  
   #ifdef FEATURE_DISPLAY
     lcd_center_print_timed("Done", LCD_ROWS-2, default_display_msg_delay);
   #endif
@@ -18052,17 +18117,23 @@ void initialize_i2c(void) {
       sprintf(declination_str, "%3.3f", declination);
       debug_serial_port->print(F("Declination = "));debug_serial_port->println(declination_str);
       uint8_t dec_len =  strlen(declination_str);
-      for (x = 0; x < dec_len; x++) {  // write to memory
-        EEPROM.write((memory_start(declination_memory_number)+x), (byte) uppercase(declination_str[x]));
-        if ((memory_start(declination_memory_number)+x) == memory_end(declination_memory_number)) {    // are we at last memory location?
-          x = dec_len;
+      #ifdef FEATURE_MEMORIES
+        open_eeprom();
+        for (x = 0; x < dec_len; x++) {  // write to memory
+          EEPROM.write((memory_start(declination_memory_number)+x), (byte) uppercase(declination_str[x]));
+          if ((memory_start(declination_memory_number)+x) == memory_end(declination_memory_number)) {    // are we at last memory location?
+            x = dec_len;
+          }
         }
-      }
-      EEPROM.write((memory_start(declination_memory_number)+x),255);   // write terminating 255
-      #ifdef DEBUG_COMPASS
-        debug_serial_port->print(F("\nWrote Declination to Keyboard Memory ")); debug_serial_port->println(declination_memory_number+1);
+        EEPROM.write((memory_start(declination_memory_number)+x),255);   // write terminating 255
+        #ifdef DEBUG_COMPASS
+          debug_serial_port->print(F("\nWrote Declination to Keyboard Memory ")); debug_serial_port->println(declination_memory_number+1);
+        #endif
+        close_w_eeprom();
+      #else
+        debug_serial_port->println(F("\nFailed to write Declination to Keyboard Memory, FEATURE_MEMORIES not enabled"));
       #endif
-      config_dirty = 1;
+
       last_declination = declination;
       ist8310.set_declination_offset_radians(convert_to_rad(declination));   // convert in deg min format to rad and apply offset
     }
@@ -18163,7 +18234,7 @@ void display_heading(void) {
 /*-----------------------------------------------------------*/
 
 // Non-ESP32 local pin interrupt setup
-#if defined(USE_KEY_PIN_INTERRUPTS) && !defined(FEATURE_MCP23017_EXPANDER) && !defined(HARDWARE_ESP32_DEV)
+#if defined(USE_KEY_PIN_INTERRUPTS) && !defined(FEATURE_MCP23017_EXPANDER) && (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO))
 //---------------------------------------------------------------------
 static void left_paddle_intr_handler()
 {
@@ -19023,16 +19094,32 @@ void initialize_keyer_state(){
   #else
     #if defined(HARDWARE_GENERIC_STM32F103C)
       memory_area_end = 253;
-  #else
-    #if (defined HARDWARE_ESP32_DEV)
-      memory_area_end = EEPROM_size-1;//SP5IOU 20220129
-  #else
-      memory_area_end = EEPROM_size-1; // not sure if this is a valid assumption
-  #endif
-  #endif  
+    #else
+      #if (defined HARDWARE_ESP32_DEV)
+        memory_area_end = EEPROM_size-1;//SP5IOU 20220129
+      #else
+        memory_area_end = EEPROM_size-1; // not sure if this is a valid assumption
+      #endif
+    #endif  
   #endif
 
-}  
+  #ifdef DEBUG_EEPROM
+    int16_t memory_length = 40;
+    int16_t available_memory = EEPROM_size - memory_area_start;
+    int16_t actual_memory_available_per_memory = available_memory/number_of_memories;
+    int16_t memory_needed = number_of_memories * memory_length;
+    debug_serial_port->printf(" EEPROM Memories Report:\n \\
+                                EEPROM size %d\n \\
+                                Configuration settings size %d\n \\
+                                EEPROM available for memories %d\n \\
+                                Number of memories %d\n \\
+                                Length allowed per memory %d\n \\                          
+                                If %d memories are %d bytes long, then %d bytes of EEPROM are required\n \\                             
+                                Difference is %d (positive is good)\n",                              
+                                EEPROM_size, sizeof(configuration)+5, available_memory, number_of_memories, actual_memory_available_per_memory,
+                                number_of_memories, memory_length, memory_needed, available_memory-memory_needed);
+  #endif
+} 
 
 //--------------------------------------------------------------------- 
 void initialize_potentiometer(){
@@ -19122,7 +19209,7 @@ void check_eeprom_for_initialization(){
   #endif
   
   #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO) 
-    EEPROM.begin(EEPROM_size);
+    //EEPROM.begin(EEPROM_size);  // Not starting EEPROM here any more - changed to begin and end at each write to account for multiple tasks that could try to write also.
   #endif
   
   // do an eeprom reset to defaults if paddles are squeezed
@@ -19189,7 +19276,7 @@ void check_for_debug_modes(){
 
 void initialize_gps_port(void) {
     #ifdef FEATURE_GPS
-        pinMode(GPS_RX_PIN, INPUT);
+        if (GPS_RX_PIN) pinMode(GPS_RX_PIN, INPUT);
         if (configuration.gps_baud == 0) configuration.gps_baud = GPS_BAUD_RATE;
         #if !defined(GPS_TEST)
             #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
@@ -19215,11 +19302,12 @@ void initialize_gps_port(void) {
             lcd_center_print_timed("GPS Baud = " + String(configuration.gps_baud), 1, default_display_msg_delay);
         #endif
         stop_msg = false;
-        #ifdef DEFAULT_GRID
+        #if defined(DEFAULT_GRID) //&& ((DEFAULT_GRID + 0) != 0)   //exists and not blank
             validate_grid(DEFAULT_GRID, default_grid);  // done, haved a validated grid from file, could be ""
-            strcpy(grid_sq_str, default_grid);  // stgart out with this, process_gps will look at source and adjust it.
+            strcpy(grid_sq_str, default_grid);  // start out with this, process_gps will look at source and adjust it.
+            g->grid = default_grid;
         #else
-          strcpy(grid_sq_str, "");
+          strcpy(grid_sq_str, "");  // the define was blank
         #endif
     #endif
 }
@@ -19415,9 +19503,11 @@ void keyboard_connected_handler() {
 #endif
 
 #if defined(FEATURE_BT_KEYBOARD) && (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO))
-#include "freertos/FreeRTOS.h"
+//#include "freertos/FreeRTOS.h"
+//#include <Arduino_FreeRTOS.h>  // Include FreeRTOS for Arduino
 #include "freertos/semphr.h"
 //#include "freertos/task.h"
+#include <queue.h>
 QueueHandle_t event_queue;
 
 inline bool    wait_for_low_event(KeyInfo &inf, TickType_t duration = portMAX_DELAY) {
@@ -19451,7 +19541,11 @@ void push_key(uint8_t *keys, bool state, KeyModifier modifier) {
   memcpy(&inf.keys, keys, size);
   inf.modifier = (KeyModifier) *keys;
   inf.state = state;
-
+ 
+  #ifndef DEBUG_BT_KEYBOARD      
+    debug_serial_port->printf("push_key: mod:0x%02x keys[0]:0x%02x  keys[2]:0x%02x\n", inf.modifier, inf.keys[0], inf.keys[2]);
+  #endif
+  
   xQueueSendToBack(event_queue, &inf, 0);
 }
 
@@ -19476,6 +19570,7 @@ void kb(void *cbdata, int key) {
     inf.size = 8;  // fake the size to match the ESP32 bt_keyboard class string info to pass through the key value translation code
     inf.state = state;
     last_active_time = millis();   // reset backlight tomeout timer
+
     // Any key up or Modifier key has let go. Set Modifier flag to false and exit
     if (!state || (_holding && !state && ((key == 0xe1) || (key == 0xe5) || (key == 0xe0) || (key == 0xe4) || (key == 0xe2) || (key == 0xe6) || (key == 0xe3)))) {
       _holding = false;
@@ -19483,11 +19578,17 @@ void kb(void *cbdata, int key) {
       inf.keys[2] = 0;
       inf.keys[0] = 0; // redundant but emulates the ESP32 class bt_keyboard behavior.
       #ifdef DEBUG_BT_KEYBOARD
-        debug_serial_port->println("kb: Released Modifier Key or Regular Key");
+        //debug_serial_port->println("kb: Released Modifier Key or Regular Key ");
+        debug_serial_port->printf("kb: mod:0x%02x keys[0]:0x%02x  keys[2]:0x%02x\n", inf.modifier, inf.keys[0], inf.keys[2]);
       #endif
-      push_key(inf.keys, state, inf.modifier);
+      //push_key(inf.keys, state, inf.modifier);
       return;
     }
+    //inf.keys[2] = key;
+    //push_key(inf.keys, state, inf.modifier);
+    #ifndef DEBUG_BT_KEYBOARD      
+      //debug_serial_port->printf("kb1: Regular key mod:0x%02x keys[0]:0x%02x  keys[2]:0x%02x\n", inf.modifier, inf.keys[0], inf.keys[2]);
+    #endif
     
     myDelay(10);
 
@@ -19505,10 +19606,12 @@ void kb(void *cbdata, int key) {
             case 0xe5: inf.modifier = KeyModifier::R_SHIFT; break;            
         }
         inf.keys[0] = (uint8_t) inf.modifier;  // redundant but emulates the ESP32 class bt_keyboard behavior.
-        //debug_serial_port->printf("Kbd  out: mod:0x%02x keys[0]:0x%02x\n", inf.modifier, inf.keys[0]);
+        
         #ifdef DEBUG_BT_KEYBOARD
-          debug_serial_port->print("kb: Modifier Key Pressed : "); debug_serial_port->println(inf.keys[0]);
+          debug_serial_port->printf("kb2: mod:0x%02x keys[0]:0x%02x  keys[2]:0x%02x\n", inf.modifier, inf.keys[0], inf.keys[2]);
+          //debug_serial_port->print("kb2: Modifier Key Pressed : "); debug_serial_port->println(inf.keys[0],HEX);
         #endif
+
         return;
     }
 
@@ -19526,7 +19629,7 @@ void kb(void *cbdata, int key) {
     
     //new_bt_key = true;
     
-    #ifdef DEBUG_BT_KEYBOARD
+    #ifndef DEBUG_BT_KEYBOARD
       if (state) debug_serial_port->printf("Kb (callback) out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
     #endif
 }
@@ -19563,7 +19666,7 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
       }
     #endif
 
-    #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+    #if defined(ARDUINO_RASPBERRY_PI_PICO_W) & !defined(USE_CORE1)
       event_queue = xQueueCreate(30, sizeof(KeyInfo));
       // We can use the cbData as a flag to see if we're making or breaking a key
       bt_keyboard.onKeyDown(kb, (void *)true);
@@ -19571,14 +19674,20 @@ void initialize_bt_keyboard(){  // iint the BT 4.2 stack for ESP32-WROOM-32 for 
         // Consumer keys are the special function ones like "mute" or "home"
       bt_keyboard.onConsumerKeyDown(ckb, (void *)true);
       bt_keyboard.onConsumerKeyUp(ckb, (void *)false);
-      loadEEPROM(); // See about reconnecting
+      check_last_bt_addr_in_EEPROM(); // See about reconnecting
       if (use_BLE) bt_keyboard.begin(true);   // BLE
       else bt_keyboard.begin();  // BT Classic
     #endif
 
-    pinMode(bt_keyboard_LED, OUTPUT);
-    digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
-    debug_serial_port->print(F("BT Keyboard connected LED inactive state = ")); debug_serial_port->println(bt_keyboard_LED_pin_inactive_state);
+    #if defined(USE_CORE1) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+      if (bt_keyboard_LED && (bt_keyboard_LED != LED_BUILTIN)) {  // with wireless, do not use the LED on it.
+    #else 
+      if (bt_keyboard_LED) {
+    #endif
+      pinMode(bt_keyboard_LED, OUTPUT);
+      digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
+      debug_serial_port->print(F("BT Keyboard connected LED inactive state = ")); debug_serial_port->println(bt_keyboard_LED_pin_inactive_state);
+    }
    
     debug_serial_port->println(F("BT and BLE device Scan Setup"));
 
@@ -19651,7 +19760,7 @@ void queueflush()
 void myDelay(uint32_t _ms)
 {
     //unsigned long t = millis() ;
-    #if defined(USE_TOUCH_TASK) || defined(USE_BT_TASK) || defined(USE_TASK)
+    #if defined(USE_TOUCH_TASK) || defined(USE_BT_TASK) || defined(USE_MAIN_TASK)
       vTaskDelay(portTICK_PERIOD_MS * _ms);
     #else
       delay(1);
@@ -19808,8 +19917,9 @@ void initialize_display() {
 }
 
 int print_memory(byte memory_number, char *mem_string) {
-  #ifdef FEATURE_TOUCH_DISPLAY    
+  #if defined(FEATURE_TOUCH_DISPLAY) && defined(FEATURE_MEMORIES)
     int i = 0;
+    open_eeprom();
     for (int y = (memory_start(memory_number)); (y < memory_end(memory_number)+1); y++) {
       mem_string[i] = (char) EEPROM.read(y);  // read byte    
       if (mem_string[i] == 255 || i > (sizeof(popup_text)-20)) {  // 255 is end of string in EEPROM, return to caller    
@@ -19822,6 +19932,7 @@ int print_memory(byte memory_number, char *mem_string) {
       }
       i++;
     }
+    close_r_eeprom();
   #endif
     return 0;
 }
@@ -19955,29 +20066,29 @@ void create_buttons() {
 // For the Touch 16 panel, this is simple as the row is always 0.
 // For rows, need to calculate the row nummber (mod 4) then assign the group of 4 values 0-3 for all 4 groups of 4
 void initialize_buttons() {
-  int i, b;
-  int r = 0;
+  #ifdef FEATURE_TOUCH_DISPLAY
+    int i, b;
+    int r = 0;
 
-  for (b = 0; b < button_array_size; b++) {    
-    for (int i=0; i < NUM_KEYS; i++) {         
-      if (key[i].key_event == button_array[b]) {
-        //debug_serial_port->printf("function=%s", key[i].text_off);
-        #ifdef TOUCH_BUTTON_16
-          key[i].btn_idx = b;  // row is always 0 which is default          
-        #else
-          key[i].btn_idx = b%(BUTTONS_PER_ROW-1) + 1;  // assign button position 1-4 in the row 0-3.  pos 0 is always Fx row select key
-          key[i].row = r;  // assign button to a row          
-          if (key[i].btn_idx == BUTTONS_PER_ROW-1) {
-            r++;  // assign button to a row
-          }
-        #endif
-        debug_serial_port->printf("Assigning button %s to row=%d pos=%d\n", key[i].text_off, key[i].row, key[i].btn_idx);
+    for (b = 0; b < button_array_size; b++) {    
+      for (int i=0; i < NUM_KEYS; i++) {         
+        if (key[i].key_event == button_array[b]) {
+          //debug_serial_port->printf("function=%s", key[i].text_off);
+          #ifdef TOUCH_BUTTON_16
+            key[i].btn_idx = b;  // row is always 0 which is default          
+          #else
+            key[i].btn_idx = b%(BUTTONS_PER_ROW-1) + 1;  // assign button position 1-4 in the row 0-3.  pos 0 is always Fx row select key
+            key[i].row = r;  // assign button to a row          
+            if (key[i].btn_idx == BUTTONS_PER_ROW-1) {
+              r++;  // assign button to a row
+            }
+          #endif
+          debug_serial_port->printf("Assigning button %s to row=%d pos=%d\n", key[i].text_off, key[i].row, key[i].btn_idx);
+        }
       }
     }
-  }
-
-  create_buttons();
-
+    create_buttons();
+  #endif
 }
 
 void clear_holds_key() {
@@ -20224,6 +20335,8 @@ void process_buttons() { // (uint8_t button_ID) {
 
   #ifndef USE_TOUCH_TASK
     void check_touch_buttons(void) {
+      if (1) 
+      {
   #else
     void check_touch_buttons(void * pvParameters) {
 
@@ -20232,7 +20345,7 @@ void process_buttons() { // (uint8_t button_ID) {
 
       configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
 
-      while (1)
+      for(;;)
       {
   #endif
         // Check for touch action, determine if they are for a configured button, or something else      
@@ -20339,11 +20452,9 @@ void process_buttons() { // (uint8_t button_ID) {
               }   // loop through button list and update state for each 
             }   // touched
           }   // end of scan period          
-      #ifdef USE_TOUCH_TASK
-      myDelay(10);
+          myDelay(10);
       } // end of while loop for task mode 
-      debug_serial_port->println("Error: Exited Check Buttons Task Loop");
-      #endif   
+      //debug_serial_port->println("Error: Exited Check Buttons Task Loop");
     }
 #endif
 
@@ -20484,6 +20595,7 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key)
       #ifdef DEBUG_USB_KEYBOARD 
       debug_serial_port->println(F("KbdRptParser::OnKeyDown: user_input_process_it"));
       #endif //DEBUG_USB_KEYBOARD
+      open_eeprom();
       for (x = 0;x < user_input_index;x++) {  // write to memory
         EEPROM.write((memory_start(usb_keyboard_program_memory)+x),user_input_array[x]);
         if ((memory_start(usb_keyboard_program_memory) + x) == memory_end(usb_keyboard_program_memory)) {    // are we at last memory location?
@@ -20492,6 +20604,7 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key)
       }
       // write terminating 255
       EEPROM.write((memory_start(usb_keyboard_program_memory)+x),255);
+      close_w_eeprom();
       #ifdef FEATURE_DISPLAY
         lcd_center_print_timed("Done", 0, default_display_msg_delay);
       #else    
@@ -22798,6 +22911,7 @@ void web_print_page_memories(EthernetClient client){
   
     last_memory_location = memory_end(i) + 1;
 
+    open_eeprom();
     if (EEPROM.read(memory_start(i)) == 255) {
       // web_client_print(client,F("{empty}"));
       web_client_print(client,F("       "));
@@ -22822,7 +22936,7 @@ void web_print_page_memories(EthernetClient client){
         }
       }
     }
-
+    close_r_eeprom();
 
     web_client_print(client,"</a>");
     // web_client_print(client,"<br><br><br>");
@@ -22836,9 +22950,6 @@ void web_print_page_memories(EthernetClient client){
   web_print_home_link(client);
 
   web_print_footer(client);
-
-
-  
 
 }
 #endif //FEATURE_WEB_SERVER && FEATURE_MEMORIES
@@ -24309,7 +24420,7 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
         }
     #elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
        //debug_serial_port->printf("pin:%d Freq:%d dur:%lu", sidetone_line_pin_num, frequency, duration_ms);
-       tone(sidetone_line_pin_num, frequency, duration_ms);
+       tone(sidetone_line_pin_num, frequency, duration_ms);       
     #endif
   #else
     if (sidetone_line) {
@@ -24866,34 +24977,43 @@ void update_time(){
 //   Backlight ON/OFF control
 //   If timeout is enabled in EEPROM setting then turn off the LCD at timeout (if feature enabled)
 void tft_backlight(int state) {
-  static bool state_last = 254;
+  #ifdef FEATURE_TFT_DISPLAY
+    static bool state_last = 254;
 
-  if (!configuration.backlight_timeout_disable && (state != state_last)) { // do nothing effectively disabling timeout
-    if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
-    else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
-    state_last = state;
-    #ifdef DEBUG_BACKLIGHT 
-      debug_serial_port->printf("tft_backlight: Timeout disabled=%d  state=%d\n", configuration.backlight_timeout_disable, state);
-    #endif
-  }  // else do nothing, timeout is disabled
+    if (!configuration.backlight_timeout_disable && (state != state_last)) { // do nothing effectively disabling timeout
+      if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
+      else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
+      state_last = state;
+      #ifdef DEBUG_BACKLIGHT 
+        debug_serial_port->printf("tft_backlight: Timeout disabled=%d  state=%d\n", configuration.backlight_timeout_disable, state);
+      #endif
+    }  // else do nothing, timeout is disabled
 
-  
-  static bool last_timeout_disable = 254;
-  
-  if (last_timeout_disable != configuration.backlight_timeout_disable) {
-    last_timeout_disable = configuration.backlight_timeout_disable;
-    #ifdef DEBUG_BACKLIGHT
-      debug_serial_port->printf("tft_backlight: Timeout disabled change state, now=%d\n", configuration.backlight_timeout_disable);
-    #endif
-    if (configuration.backlight_timeout_disable) lcd_center_print_timed("Bklight Timer OFF", 1, 2000);
-    else lcd_center_print_timed("Bklight Timer ON", 1, 2000);
-  }
+    
+    static bool last_timeout_disable = 254;
+    
+    if (last_timeout_disable != configuration.backlight_timeout_disable) {
+      last_timeout_disable = configuration.backlight_timeout_disable;
+      #ifdef DEBUG_BACKLIGHT
+        debug_serial_port->printf("tft_backlight: Timeout disabled change state, now=%d\n", configuration.backlight_timeout_disable);
+      #endif
+      if (configuration.backlight_timeout_disable) lcd_center_print_timed("Bklight Timer OFF", 1, 2000);
+      else lcd_center_print_timed("Bklight Timer ON", 1, 2000);
+    }
+  #endif
 }
 
 // --------------------------------------------------------------   
 #if defined(FEATURE_BT_KEYBOARD)
-    #ifndef USE_BT_TASK
+    #if !defined(USE_BT_TASK) || (!defined(HARDWARE_ESP32_DEV) && !defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(ARDUINO_RASPBERRY_PI_PICO))
      void check_bt_keyboard(void) {
+
+        #if defined(ARDUINO_RASPBERRY_PI_PICO_W_X) || defined(ARDUINO_RASPBERRY_PI_PICO)  
+            if (!bt_keyboard.connected()) {              
+              connectOrPair();
+            }
+        #endif
+
     #elif defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
      void check_bt_keyboard(void * pvParameters) {
 
@@ -24902,16 +25022,18 @@ void tft_backlight(int state) {
 
         configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
 
-        while (1)
-        {
+        for(;;) {          
+
+            #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)    
+              do {
+                connectOrPair();
+                myDelay(200);
+              } while (!bt_keyboard.connected()  && !BOOTSEL);
+              debug_serial_port->println("Keyboard is Connected");
+            #endif                     
+
     #endif    
-
-          #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)    
-            if (!bt_keyboard.connected()) {              
-              connectOrPair();
-            }
-          #endif
-
+          
           myDelay(1);
           #if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
                 uint8_t ch = bt_keyboard.wait_for_ascii_char();
@@ -24960,7 +25082,8 @@ void tft_backlight(int state) {
             #endif
 
             #ifdef USE_BT_TASK            
-                    TickType_t duration = portMAX_DELAY; // blocking - can wait forever when running inside a task
+                    //TickType_t duration = portMAX_DELAY; // blocking - can wait forever when running inside a task
+                    TickType_t duration = 10; // blocking - can wait forever when running inside a task
             #else
                     TickType_t duration = 1;  // bail so we are non-blocking when not runnign in a task
             #endif
@@ -25297,12 +25420,12 @@ void tft_backlight(int state) {
                         if (ch != 0) queueadd(ch);   // add char to the queue                          
                         #ifdef DEBUG_BT_KEYBOARD_A
                             debug_serial_port->print(F("["));
-                            if (queueempty())
-                                debug_serial_port->print(F("Q Empty\n")); 
+                            if (queuefull())
+                                debug_serial_port->print(F("Q Full")); 
                             else
-                                debug_serial_port->print(F("Q NOT Empty\n"));
+                                debug_serial_port->print(F("Q NOT Full"));
                             //debug_serial_port->print(queuepop());
-                            debug_serial_port->print(F("],"));
+                            debug_serial_port->print(F("]\n"));
                         #endif
                         ch = 0;                    
                       }  // end of valid keystroke
@@ -25841,70 +25964,70 @@ void initialize_st7789_lcd()
 #endif
 
 #ifdef FEATURE_GPS
-// Process NMEA data to extract position an time, calculates grid sqaure
-// Using TinyGPSPlus_ESP32 library to get lat, lon and time
-// Additional functions to calculate maidenhead grid square
+  // Process NMEA data to extract position an time, calculates grid sqaure
+  // Using TinyGPSPlus_ESP32 library to get lat, lon and time
+  // Additional functions to calculate maidenhead grid square
 
-// reverses a string 'str' of length 'len' 
-void reverse(char *str, int len) 
-{ 
-    int i=0, j=len-1, temp; 
-    while (i<j) 
-    { 
-        temp = str[i]; 
-        str[i] = str[j]; 
-        str[j] = temp; 
-        i++; j--; 
-    } 
-} 
+  // reverses a string 'str' of length 'len' 
+  void reverse(char *str, int len) 
+  { 
+      int i=0, j=len-1, temp; 
+      while (i<j) 
+      { 
+          temp = str[i]; 
+          str[i] = str[j]; 
+          str[j] = temp; 
+          i++; j--; 
+      } 
+  } 
 
-// Converts a given integer x to string str[].  d is the number 
-// of digits required in output. If d is more than the number 
-// of digits in x, then 0s are added at the beginning. 
-int intToStr(int x, char str[], int d) 
-{ 
-    int i = 0; 
-    while (x) 
-    { 
-        str[i++] = (x%10) + '0'; 
-        x = x/10; 
-    } 
-  
-    // If number of digits required is more, then 
-    // add 0s at the beginning 
-    while (i < d) 
-        str[i++] = '0'; 
-  
-    reverse(str, i); 
-    str[i] = '\0'; 
-    return i; 
-} 
+  // Converts a given integer x to string str[].  d is the number 
+  // of digits required in output. If d is more than the number 
+  // of digits in x, then 0s are added at the beginning. 
+  int intToStr(int x, char str[], int d) 
+  { 
+      int i = 0; 
+      while (x) 
+      { 
+          str[i++] = (x%10) + '0'; 
+          x = x/10; 
+      } 
+    
+      // If number of digits required is more, then 
+      // add 0s at the beginning 
+      while (i < d) 
+          str[i++] = '0'; 
+    
+      reverse(str, i); 
+      str[i] = '\0'; 
+      return i; 
+  } 
 
-// Converts a floating point number to string. 
-void ftoa(float n, char *res, int afterpoint) 
-{ 
-    // Extract integer part 
-    int ipart = (int)n; 
-  
-    // Extract floating part 
-    float fpart = n - (float)ipart; 
-  
-    // convert integer part to string 
-    int i = intToStr(ipart, res, 0); 
-  
-    // check for display option after point 
-    if (afterpoint != 0) 
-    { 
-        res[i] = '.';  // add dot 
-  
-        // Get the value of fraction part upto given no. 
-        // of points after dot. The third parameter is needed 
-        // to handle cases like 233.007 
-        fpart = fpart * pow(10, afterpoint); 
-  
-        intToStr((int)fpart, res + i + 1, afterpoint); 
-    } 
-}
+  // Converts a floating point number to string. 
+  void ftoa(float n, char *res, int afterpoint) 
+  { 
+      // Extract integer part 
+      int ipart = (int)n; 
+    
+      // Extract floating part 
+      float fpart = n - (float)ipart; 
+    
+      // convert integer part to string 
+      int i = intToStr(ipart, res, 0); 
+    
+      // check for display option after point 
+      if (afterpoint != 0) 
+      { 
+          res[i] = '.';  // add dot 
+    
+          // Get the value of fraction part upto given no. 
+          // of points after dot. The third parameter is needed 
+          // to handle cases like 233.007 
+          fpart = fpart * pow(10, afterpoint); 
+    
+          intToStr((int)fpart, res + i + 1, afterpoint); 
+      } 
+  }
 
 /*
 * The algorithm is fairly straightforward. The scaling array provides divisors to divide up the space into the required number of sections,
@@ -25925,7 +26048,7 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 
 //---------------------------------------------------------------------------------------------------------
 
-int positionToMaidenhead(char m[])
+  int positionToMaidenhead(char m[])
 {
 
     const int pairs=4;
@@ -25948,121 +26071,106 @@ int positionToMaidenhead(char m[])
 }
 
 //  Convert Lat and Lon to MH Grid Sqaure
-int Convert_to_MH(char gps_grid[])
-{
-    char m[9];
+  int Convert_to_MH(char gps_grid[])
+  {
+      char m[9];
 
-   // if(GPS_Status == GPS_STATUS_LOCK_INVALID || msg_Complete == 0)   
-   //     return 1;  /* if we are here with invalid data then exit.  LAt and LOnwill have text which cannot be computered of cour     */
-    /*  Get from GPS Serial input later */
-    p->latitude = gps.location.lat();
-    p->longitude = gps.location.lng();
+    // if(GPS_Status == GPS_STATUS_LOCK_INVALID || msg_Complete == 0)   
+    //     return 1;  /* if we are here with invalid data then exit.  LAt and LOnwill have text which cannot be computered of cour     */
+      /*  Get from GPS Serial input later */
+      p->latitude = gps.location.lat();
+      p->longitude = gps.location.lng();
 
-    if (positionToMaidenhead(m))
-    {   
-        strncpy(gps_grid,m,8);
-        gps_grid[8] = '\0';
-        return 1;  // Success               
+      if (positionToMaidenhead(m))
+      {   
+          strncpy(gps_grid,m,8);
+          gps_grid[8] = '\0';
+          return 1;  // Success               
+      }
+      else
+      {
+          strcpy(gps_grid,"");
+          return 0; // fail      /*  Can use later to skip displaying anything when have invalid or no GPS input   */
+      }
+  } 
+
+  #ifdef GPS_TEST
+  #include "nmea.h"  // has simulated NMEA strings for testing
+  void displayInfo()
+  {
+    debug_serial_port->print(F("Location: ")); 
+
+    //if (gps.location.isUpdated())
+    if (gps.location.isValid())
+    {
+      Convert_to_MH(grid_sq_str);
+      debug_serial_port->print(F("Grid Square = "));
+      debug_serial_port->println(grid_sq_str);
+      debug_serial_port->print(gps.location.lat(), 6);
+      debug_serial_port->print(F(","));
+      debug_serial_port->println(gps.location.lng(), 6);
+      debug_serial_port->print(F("LOCATION   Fix Age="));
+      debug_serial_port->print(gps.location.age());
+      debug_serial_port->print(F("ms Raw Lat="));
+      debug_serial_port->print(gps.location.rawLat().negative ? "-" : "+");
+      debug_serial_port->print(gps.location.rawLat().deg);
+      debug_serial_port->print("[+");
+      debug_serial_port->print(gps.location.rawLat().billionths);
+      debug_serial_port->print(F(" billionths],  Raw Long="));
+      debug_serial_port->print(gps.location.rawLng().negative ? "-" : "+");
+      debug_serial_port->print(gps.location.rawLng().deg);
+      debug_serial_port->print("[+");
+      debug_serial_port->print(gps.location.rawLng().billionths);
+      debug_serial_port->print(F(" billionths],  Lat="));
+      debug_serial_port->print(gps.location.lat(), 6);
+      debug_serial_port->print(F(" Long="));
+      debug_serial_port->println(gps.location.lng(), 6);
     }
     else
     {
-        strcpy(gps_grid,"");
-        return 0; // fail      /*  Can use later to skip displaying anything when have invalid or no GPS input   */
+      debug_serial_port->print(F("INVALID"));
     }
-}
 
-#ifdef GPS_TEST
-#include "nmea.h"  // has simulated NMEA strings for testing
-void displayInfo()
-{
-  debug_serial_port->print(F("Location: ")); 
+    debug_serial_port->print(F("  Date/Time: "));
+    //if (gps.date.isUpdated())
+    if (gps.date.isValid())
+    {
+      debug_serial_port->print(gps.date.month());
+      debug_serial_port->print(F("/"));
+      debug_serial_port->print(gps.date.day());
+      debug_serial_port->print(F("/"));
+      debug_serial_port->print(gps.date.year());
+    }
+    else
+    {
+      debug_serial_port->print(F("INVALID"));
+    }
 
-  //if (gps.location.isUpdated())
-  if (gps.location.isValid())
-  {
-    Convert_to_MH(grid_sq_str);
-    debug_serial_port->print(F("Grid Square = "));
-    debug_serial_port->println(grid_sq_str);
-    debug_serial_port->print(gps.location.lat(), 6);
-    debug_serial_port->print(F(","));
-    debug_serial_port->println(gps.location.lng(), 6);
-    debug_serial_port->print(F("LOCATION   Fix Age="));
-    debug_serial_port->print(gps.location.age());
-    debug_serial_port->print(F("ms Raw Lat="));
-    debug_serial_port->print(gps.location.rawLat().negative ? "-" : "+");
-    debug_serial_port->print(gps.location.rawLat().deg);
-    debug_serial_port->print("[+");
-    debug_serial_port->print(gps.location.rawLat().billionths);
-    debug_serial_port->print(F(" billionths],  Raw Long="));
-    debug_serial_port->print(gps.location.rawLng().negative ? "-" : "+");
-    debug_serial_port->print(gps.location.rawLng().deg);
-    debug_serial_port->print("[+");
-    debug_serial_port->print(gps.location.rawLng().billionths);
-    debug_serial_port->print(F(" billionths],  Lat="));
-    debug_serial_port->print(gps.location.lat(), 6);
-    debug_serial_port->print(F(" Long="));
-    debug_serial_port->println(gps.location.lng(), 6);
+    debug_serial_port->print(F(" "));
+    //if (gps.time.isUpdated())
+    if (gps.time.isValid())
+    {
+      if (gps.time.hour() < 10) debug_serial_port->print(F("0"));
+      debug_serial_port->print(gps.time.hour());
+      debug_serial_port->print(F(":"));
+      if (gps.time.minute() < 10) debug_serial_port->print(F("0"));
+      debug_serial_port->print(gps.time.minute());
+      debug_serial_port->print(F(":"));
+      if (gps.time.second() < 10) debug_serial_port->print(F("0"));
+      debug_serial_port->print(gps.time.second());
+      debug_serial_port->print(F("."));
+      if (gps.time.centisecond() < 10) debug_serial_port->print(F("0"));
+      debug_serial_port->print(gps.time.centisecond());
+    }
+    else
+    {
+      debug_serial_port->print(F("INVALID"));
+    }
+    debug_serial_port->println();
   }
-  else
-  {
-    debug_serial_port->print(F("INVALID"));
-  }
+  #endif
 
-  debug_serial_port->print(F("  Date/Time: "));
-  //if (gps.date.isUpdated())
-  if (gps.date.isValid())
-  {
-    debug_serial_port->print(gps.date.month());
-    debug_serial_port->print(F("/"));
-    debug_serial_port->print(gps.date.day());
-    debug_serial_port->print(F("/"));
-    debug_serial_port->print(gps.date.year());
-  }
-  else
-  {
-    debug_serial_port->print(F("INVALID"));
-  }
-
-  debug_serial_port->print(F(" "));
-  //if (gps.time.isUpdated())
-  if (gps.time.isValid())
-  {
-    if (gps.time.hour() < 10) debug_serial_port->print(F("0"));
-    debug_serial_port->print(gps.time.hour());
-    debug_serial_port->print(F(":"));
-    if (gps.time.minute() < 10) debug_serial_port->print(F("0"));
-    debug_serial_port->print(gps.time.minute());
-    debug_serial_port->print(F(":"));
-    if (gps.time.second() < 10) debug_serial_port->print(F("0"));
-    debug_serial_port->print(gps.time.second());
-    debug_serial_port->print(F("."));
-    if (gps.time.centisecond() < 10) debug_serial_port->print(F("0"));
-    debug_serial_port->print(gps.time.centisecond());
-  }
-  else
-  {
-    debug_serial_port->print(F("INVALID"));
-  }
-  debug_serial_port->println();
-}
-#endif
-
-#endif  // FEATURE_GPS
-
-//void check_gps(void * pvParameters)
-void check_gps(bool force_update, bool ignore_gps) {
-  #ifdef FEATURE_GPS
-    static uint32_t lost_gps_timer = 0;
-    bool _do_process = false;
-    char gps_grid[9];
-    struct tm timeinfo;
-
-    #ifdef DEBUG_GPS_X
-      debug_serial_port->print("Check GPS.  Ignore (0=Use, 1=ignore) : ");debug_serial_port->println(configuration.ignore_gps);
-    #endif
-
-    if (ptt_line_activated) return;  // do not interrupt CW send timing
-
+  void set_IgnoreGPS(bool ignore_gps) {
     if (ignore_gps) {
       if (!configuration.ignore_gps) {
         configuration.ignore_gps = true;   // toggle gps usage off
@@ -26079,75 +26187,104 @@ void check_gps(bool force_update, bool ignore_gps) {
       #ifdef DEBUG_GPS
         debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
       #endif
-    }   
-    uint8_t gps_hour = 0;
-    uint8_t gps_minute = 0;
-    uint8_t gps_second = 0;  
-    
-    #ifdef GPS_TEST
-      // choose one of the 2 below to simulate NMEA data from either grid square
-      //auto gpsStream = gpsStream_EM10;
-      auto gpsStream = gpsStream_CN87;
+    }
+  }
 
-      while (*gpsStream) {
-        if (gps.encode(*gpsStream++)) {
-          //displayInfo();          
-          if (gps.location.isValid()) {
-            //debug_serial_port->print(F("Grid Square = ")); debug_serial_port->println(grid_sq_str);
-            stop_msg = false;
+#ifdef USE_GPS_TASK
+  void check_gps(void * pvParameters) {
+    /* The parameter value is expected to be 1 as 1 is passed in the
+    pvParameters value in the call to xTaskCreate() below. */
+    configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
+
+    for(;;) 
+    {
+
+     #else
+
+  void check_gps() {
+    if (1) 
+    {
+      if (ptt_line_activated) return;  // do not interrupt CW send timing  
+
+      #endif
+
+      static uint32_t lost_gps_timer = 0;
+      bool _do_process = false;
+      static char gps_grid[9];
+      struct tm timeinfo;
+
+      #ifdef DEBUG_GPS_X
+        debug_serial_port->print("Check GPS.  Ignore (0=Use, 1=ignore) : ");debug_serial_port->println(configuration.ignore_gps);
+      #endif
+
+      uint8_t gps_hour = 0;
+      uint8_t gps_minute = 0;
+      uint8_t gps_second = 0;  
+      
+      #ifdef GPS_TEST
+        // choose one of the 2 below to simulate NMEA data from either grid square
+        //auto gpsStream = gpsStream_EM10;
+        auto gpsStream = gpsStream_CN87;
+
+        while (*gpsStream) {
+          if (gps.encode(*gpsStream++)) {
+            //displayInfo();          
+            if (gps.location.isValid()) {
+              //debug_serial_port->print(F("Grid Square = ")); debug_serial_port->println(grid_sq_str);
+              stop_msg = false;
+            }
           }
         }
-      }
-    #else
-      while (gps_serial_port.available() > 0) {
-        char c;
-        int d;
-        
-        #ifdef DEBUG_GPS
-          c = d = gps_serial_port.peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout  
-          debug_serial_port->print(c);
-        #endif
-
-        //if (isAlphaNumeric(c) || ispunct(c) || c == '\r' || c == '\n') {  // valid data at correct baud rate
-          gps.encode(gps_serial_port.read());
-          #ifdef DEBUG_GPS_X
-            debug_serial_port->print(".");
+      #else
+        while (gps_serial_port.available() > 0) {
+          char c;
+          int d;
+          
+          #ifdef DEBUG_GPS
+            c = d = gps_serial_port.peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout  
+            debug_serial_port->print(c);
           #endif
-          stop_msg = false;
-          lost_gps_timer = millis();
-        //} else {
-        //  gps_serial_port.read();
-        //}
-      }
-    #endif
+
+          //if (isAlphaNumeric(c) || ispunct(c) || c == '\r' || c == '\n') {  // valid data at correct baud rate
+            gps.encode(gps_serial_port.read());
+            #ifdef DEBUG_GPS_X
+              debug_serial_port->print(".");
+            #endif
+            stop_msg = false;
+            lost_gps_timer = millis();
+          //} else {
+          //  gps_serial_port.read();
+          //}
+        }
+      #endif
 
       if (gps.time.isValid() && gps.time.isUpdated())
       {
-          if (gps.date.isUpdated()){              // set system time for log output
-            timeinfo.tm_year = gps.date.year() - 1900;
-            timeinfo.tm_mon  = gps.date.month() - 1;
-            timeinfo.tm_mday = gps.date.day();
-            timeinfo.tm_hour = gps.time.hour();
-            timeinfo.tm_min  = gps.time.minute();
-            timeinfo.tm_sec  = gps.time.second();
-            time_t t = mktime(&timeinfo);
-            struct timeval now = { .tv_sec = t };
-            settimeofday(&now, NULL); // Set ESP32 system time
-            #ifdef DEBUG_GPS
-              debug_serial_port->printf("Setting time (UTC): %s", asctime(&timeinfo));
-            #endif
-          }
-
-          gps_hour = gps.time.hour();
-          gps_minute = gps.time.minute();
-          gps_second = gps.time.second();
-          sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
-          stop_msg = false;
+        if (gps.date.isUpdated()){              // set system time for log output
+          timeinfo.tm_year = gps.date.year() - 1900;
+          timeinfo.tm_mon  = gps.date.month() - 1;
+          timeinfo.tm_mday = gps.date.day();
+          timeinfo.tm_hour = gps.time.hour();
+          timeinfo.tm_min  = gps.time.minute();
+          timeinfo.tm_sec  = gps.time.second();
+          time_t t = mktime(&timeinfo);
+          struct timeval now = { .tv_sec = t };
+          settimeofday(&now, NULL); // Set ESP32 system time
           #ifdef DEBUG_GPS
-            debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
+            debug_serial_port->printf("Setting time (UTC): %s", asctime(&timeinfo));
           #endif
+        }
+
+        gps_hour = gps.time.hour();
+        gps_minute = gps.time.minute();
+        gps_second = gps.time.second();
+        sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
+        stop_msg = false;
+        #ifdef DEBUG_GPS
+          debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
+        #endif
       } else {
-        if (!gps.time.isValid()) stop_msg = true;
+          if (!gps.time.isValid()) stop_msg = true;
       }
 
       if (gps.location.isValid() && gps.location.isUpdated()) {
@@ -26165,142 +26302,161 @@ void check_gps(bool force_update, bool ignore_gps) {
         if (!gps.location.isValid()) stop_msg = true;
       }
 
-    #ifndef GPS_TEST
-      if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
-      {        
-        debug_serial_port->println(F("No GPS detected: Check wiring."));
-        if (!stop_msg) _do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid  
-        strcpy(gps_grid, "");
-        stop_msg = true;
-        lost_gps_timer = millis();      
+      #ifndef GPS_TEST
+        if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
+        {        
+          debug_serial_port->println(F("No GPS detected: Check wiring."));
+          if (!stop_msg) _do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid  
+          strcpy(gps_grid, "");
+          stop_msg = true;
+          lost_gps_timer = millis();      
+        } 
+      #endif
+
+      if (_do_process) {
+        #ifdef DEBUG_GPS
+          debug_serial_port->print(F("check_gps: Continue on to Process Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq); 
+        #endif
+        
+        // set up gps details in gps struct.  Main loop will process results as outside callers have different sources and overrides we won't know about here
+        g->update = true;     // we have a valid result to offer.  This wil be set false when process uses it.
+        g->source = 1;        // GPS data stream is source == 1
+        g->grid = gps_grid;   // ou grid square, or "".
+        g->force = 0;         // we dont use this so sdet to false.
+        // process_gps(gps_grid, 1);   // 1 = GPS source
+      }
+    }
+  }
+
+  // validate 0, or 4-8 character grid square from multiple sources.
+  // input *grid
+  // returns value in grid[], possibly fizxed up or null if invalid
+  int validate_grid(const char * input_grid, char grid[]) {
+    int i;
+    int len = strlen(input_grid);
+    if (len > 0) {    // minimum grid is 4 places, max is 8 places.
+      for (i=0; i < len; i++) {
+        if (isAlphaNumeric(input_grid[i])) {
+          grid[i] = input_grid[i];
+        } else {
+          grid[i] = '\0';  // replace bad data with null
+        }
+        if (i >= 8) {       
+          break;
+        }         
       } 
+      
+      grid[i] = '\0'; // terminate the string at max 8 places and exit.
+
+      len = strlen(grid);
+      if (len < 4 || len > 8) { // detect bad digits in middle (will have '\0').  Should have digits == len 
+        strcpy(grid, "");
+        len = 0;
+        //debug_serial_port->println(F("Empty or Invalid entry. Grid is set to empty"));
+      } 
+      
+      //debug_serial_port->print(F("Validate_grid: Grid = ")); debug_serial_port->println(grid);
+    }   // done, have a validated grid, could be ""
+    return len;
+  }
+
+  //void process_gps(char * memory_str, bool force_update, uint8_t source) {
+  void process_gps() {  // use temp_gps structure 
+    char * memory_str = g->grid;
+    uint8_t source = g->source;
+    static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
+    static uint8_t last_source = 0;
+    bool update_flag;
+    //char * grid_ptr;
+    
+    if (!g->update) return;
+    
+    g->update = 0;
+
+    #ifdef DEBUG_GPS
+      debug_serial_port->print(F("\nProcess_gps: Function Input    = ")); debug_serial_port->print(memory_str); 
+      debug_serial_port->print(F("  Source = ")); debug_serial_port->println(source); 
+      debug_serial_port->print(F("Process_gps: Grid (current)    = ")); debug_serial_port->println(grid_sq_str);
+      debug_serial_port->print(F("Process_gps: Grid FILE value   = ")); debug_serial_port->println(default_grid);
+      debug_serial_port->print(F("Process_gps: Grid GPS value    = ")); debug_serial_port->println(configuration.GPS_GridSq);
+      debug_serial_port->print(F("Process_gps: Grid Memory value = ")); debug_serial_port->println(configuration.Mem_GridSq);
+      debug_serial_port->print(F("Process_gps: Current Source (0 file, 1 EEPROM, 3 memory) = ")); debug_serial_port->println(configuration.GridSq_source);
     #endif
 
-    if (_do_process) {
-      #ifdef DEBUG_GPS
-        debug_serial_port->print(F("check_gps: Continue on to Process Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq); 
-      #endif
-      do_process = true;
-      process_gps(gps_grid, force_update, 1);   // 1 = GPS source
-    }
+    // Source Priority Ladder.  Favor memory over GPS over config file
+    update_flag = 0;
+    if (configuration.GridSq_source < 2 && source == 2 && strlen(memory_str) >=4) {configuration.GridSq_source = 2; update_flag = 1;}
+    else if (configuration.GridSq_source < 1 && source == 1 && strlen(memory_str) >=4) {configuration.GridSq_source = 1; update_flag = 1;}
     
-  #endif
-}
+    if (update_flag) {
+      config_dirty = 1;
+      debug_serial_port->print(F("*Process_gps: New Source (0 file, 1 EEPROM, 2 memory) = ")); debug_serial_port->println(configuration.GridSq_source);
+    }
 
-// validate 0, or 4-8 character grid square from multiple sources.
-// input *grid
-// returns value in grid[], possibly fizxed up or null if invalid
-int validate_grid(const char * input_grid, char grid[]) {
-  int i;
-  int len = strlen(input_grid);
-  if (len > 0) {    // minimum grid is 4 places, max is 8 places.
-    for (i=0; i < len; i++) {
-      if (isAlphaNumeric(input_grid[i])) {
-        grid[i] = input_grid[i];
-      } else {
-        grid[i] = '\0';  // replace bad data with null
+    // use the current source to update the global grid value
+    // if the new grid is empty, use the next lowest source
+    last_source = configuration.GridSq_source;
+    switch (configuration.GridSq_source) {
+      case 2 :  if (strlen(memory_str) >= 4) {
+                    strcpy(grid_sq_str, configuration.Mem_GridSq);
+                    break;
+                } 
+                __attribute__((fallthrough)); // No warning // fall through if grid is empty
+      case 1 :  if (strlen(memory_str) >= 4) {
+                    strcpy(grid_sq_str, configuration.GPS_GridSq);
+                    configuration.GridSq_source = 1;  // update new source
+                    break;
+                }
+                __attribute__((fallthrough)); // No warning // fall through if grid is empty
+      case 0 : strcpy(grid_sq_str, default_grid); 
+              configuration.GridSq_source = 0;  // update new source
+              break;
+    }
+    if (last_source != configuration.GridSq_source) config_dirty = 1;  // update EEPROM with change
+
+    //if (configuration.ignore_gps) return;  // nothing more to do, bail and save CPU time
+    if (configuration.grid_digits == 0) configuration.grid_digits = 4;
+      
+    // Store grid square into the designated memory location
+    //if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || force_update) {  // grid or digits changed, store new value
+    if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || g->force) {  // grid or digits changed, store new value
+      debug_serial_port->print(F("*Process_gps: Updated Grid = ")); debug_serial_port->println(grid_sq_str);
+      store_Grid(grid_sq_str);
+      strcpy(last_grid_sq_str, grid_sq_str);
+    }
+    g->force = 0;
+    g->update = 0;
+    g->source = 0;
+    g->grid = nullptr;
+  }
+
+  //  Store a Grid Square into a Memory position
+  void store_Grid(char * grid) {
+    int memory_number = GRID_MEMORY-1;
+    int x;
+
+    #if defined (FEATURE_MEMORIES)
+    //strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
+    debug_serial_port->print("Storing Grid "); debug_serial_port->print(grid);
+    debug_serial_port->print(" into Memory "); debug_serial_port->println(GRID_MEMORY);
+    open_eeprom();
+    for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
+      EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(grid[x]));
+      if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
+        x = configuration.grid_digits;
       }
-      if (i >= 8) {       
-        break;
-      }         
-    } 
-    
-    grid[i] = '\0'; // terminate the string at max 8 places and exit.
-
-    len = strlen(grid);
-    if (len < 4 || len > 8) { // detect bad digits in middle (will have '\0').  Should have digits == len 
-      strcpy(grid, "");
-      len = 0;
-      //debug_serial_port->println(F("Empty or Invalid entry. Grid is set to empty"));
-    } 
-    
-    //debug_serial_port->print(F("Validate_grid: Grid = ")); debug_serial_port->println(grid);
-  }   // done, have a validated grid, could be ""
-  return len;
-}
-
-void process_gps(char * memory_str, bool force_update, uint8_t source) {
-  static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
-  static uint8_t last_source = 0;
-  bool update_flag;
-  //char * grid_ptr;
-  
-  if (!do_process) return;
-  do_process = false;
-
-  #ifdef DEBUG_GPS
-    debug_serial_port->print(F("\nProcess_gps: Function Input    = ")); debug_serial_port->print(memory_str); 
-    debug_serial_port->print(F("  Source = ")); debug_serial_port->println(source); 
-    debug_serial_port->print(F("Process_gps: Grid (current)    = ")); debug_serial_port->println(grid_sq_str);
-    debug_serial_port->print(F("Process_gps: Grid FILE value   = ")); debug_serial_port->println(default_grid);
-    debug_serial_port->print(F("Process_gps: Grid GPS value    = ")); debug_serial_port->println(configuration.GPS_GridSq);
-    debug_serial_port->print(F("Process_gps: Grid Memory value = ")); debug_serial_port->println(configuration.Mem_GridSq);
-    debug_serial_port->print(F("Process_gps: Current Source (0 file, 1 EEPROM, 3 memory) = ")); debug_serial_port->println(configuration.GridSq_source);
-  #endif
-
-  // Source Priority Ladder.  Favor memory over GPS over config file
-  update_flag = 0;
-  if (configuration.GridSq_source < 2 && source == 2 && strlen(memory_str) >=4) {configuration.GridSq_source = 2; update_flag = 1;}
-  else if (configuration.GridSq_source < 1 && source == 1 && strlen(memory_str) >=4) {configuration.GridSq_source = 1; update_flag = 1;}
-  
-  if (update_flag) {
-    config_dirty = 1;
-    debug_serial_port->print(F("*Process_gps: New Source (0 file, 1 EEPROM, 2 memory) = ")); debug_serial_port->println(configuration.GridSq_source);
-  }
-
-  // use the current source to update the global grid value
-  // if the new grid is empty, use the next lowest source
-  last_source = configuration.GridSq_source;
-  switch (configuration.GridSq_source) {
-    case 2 :  if (strlen(memory_str) >= 4) {
-                  strcpy(grid_sq_str, configuration.Mem_GridSq);
-                  break;
-              } 
-              __attribute__((fallthrough)); // No warning // fall through if grid is empty
-    case 1 :  if (strlen(memory_str) >= 4) {
-                  strcpy(grid_sq_str, configuration.GPS_GridSq);
-                  configuration.GridSq_source = 1;  // update new source
-                  break;
-              }
-              __attribute__((fallthrough)); // No warning // fall through if grid is empty
-    case 0 : strcpy(grid_sq_str, default_grid); 
-             configuration.GridSq_source = 0;  // update new source
-             break;
-  }
-  if (last_source != configuration.GridSq_source) config_dirty = 1;  // update EEPROM with change
-
-  //if (configuration.ignore_gps) return;  // nothing more to do, bail and save CPU time
-  if (configuration.grid_digits == 0) configuration.grid_digits = 4;
-    
-  // Store grid square into the designated memory location
-  if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || force_update) {  // grid or digits changed, store new value
-    debug_serial_port->print(F("*Process_gps: Updated Grid = ")); debug_serial_port->println(grid_sq_str);
-    store_Grid(grid_sq_str);
-    strcpy(last_grid_sq_str, grid_sq_str);
-  }
-}
-
-//  Store a Grid Square into a Memory position
-void store_Grid(char * grid) {
-  int memory_number = GRID_MEMORY-1;
-  int x;
-
-  //strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
-  debug_serial_port->print("Storing Grid "); debug_serial_port->print(grid);
-  debug_serial_port->print(" into Memory "); debug_serial_port->println(GRID_MEMORY);
-
-  for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
-    EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(grid[x]));
-    if ((memory_start(memory_number)+x) == memory_end(memory_number)) {    // are we at last memory location?
-      x = configuration.grid_digits;
     }
-  }
-  EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
-  debug_serial_port->print(F("Wrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
-  config_dirty = 1;
-  update_icons();
-  beep(); myDelay(300); beep();
-}  // end store_Grid
+    EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
+    debug_serial_port->print(F("Wrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+    close_w_eeprom();
+    update_icons();
+    beep(); myDelay(300); beep();
+    #else
+      debug_serial_port->println(F("GPS Location not written because the Memories feature is disabled"));
+    #endif
+  }  // end store_Grid
+
+#endif  // FEATURE_GPS
 
 void setup_esp()
 {
@@ -26325,7 +26481,7 @@ void setup_esp()
     initialize_rotary_encoder();
     initialize_default_modes();
     initialize_watchdog();
-    initialize_ethernet_variables();
+    initialize_ethernet_variables();  
     #if defined(DEBUG_EEPROM_READ_SETTINGS)
         initialize_serial_ports();
     #endif
@@ -26351,11 +26507,12 @@ void setup_esp()
     #ifdef FEATURE_COMPASS
       initialize_compass();  //  ist8310 compass
     #endif
+    start_core1 = 1;  // let fly core 1 tasks.  GPS is usually one of them
 }
 
-//#define USE_TASK     // for main program in a task
+//#define USE_MAIN_TASK     // for main program in a task
 
-#ifdef USE_TASK
+#ifdef USE_MAIN_TASK
 void main_loop(void * pvParameters )
 {
   /* The parameter value is expected to be 1 as 1 is passed in the
@@ -26435,21 +26592,21 @@ void main_loop(void)
             check_rotary_encoder();
         #endif
 
-        #ifdef M5STACK_CORE2a
+        #ifdef M5STACK_CORE2
               M5.update();
         #endif
 
         #if defined(FEATURE_TOUCH_DISPLAY)
-          #ifndef USE_TOUCH_TASK
-            check_touch_buttons();
-          #endif
-            if (button_active) process_buttons();  //button_ID);  // process any touch item  
+            #ifndef USE_TOUCH_TASK
+                check_touch_buttons();
+            #endif
+                if (button_active) process_buttons();  //button_ID);  // process any touch item  
         #endif
 
         #ifdef FEATURE_BT_KEYBOARD
             BT_Keyboard_Status();
             #ifndef USE_BT_TASK
-              check_bt_keyboard();// check for BT events before PS2 events
+               check_bt_keyboard();// check for BT events before PS2 events
             #endif
         #endif
 
@@ -26458,11 +26615,15 @@ void main_loop(void)
         #endif
         
         #ifdef FEATURE_GPS
-            check_gps(false, false);            
+            #ifndef USE_GPS_TASK
+                check_gps();        
+            #endif    
+            //if (g->update) process_gps(g->grid, g.force, g->source);   // 1 = GPS source
+            if (g->update) process_gps();  //use temp_gs struct 
         #endif
 
         #ifdef FEATURE_COMPASS
-          check_compass();
+            check_compass();
         #endif
         
         #if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
@@ -26497,7 +26658,7 @@ void main_loop(void)
             check_sleep();
         #endif
 
-        #ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+        #if defined(FEATURE_LCD_BACKLIGHT_AUTO_DIM) && defined(FEATURE_DISPLAY)
             check_backlight();
         #endif
 
@@ -26567,8 +26728,171 @@ void main_loop(void)
 //void timer_1s_callback(TimerHandle_t xTimer) {
 //  ESP_LOGI("TIMER", "1 Second Timer Triggered");
 //}
+ 
+#if defined(FEATURE_GPS) && defined(USE_GPS_TASK)    
+  TaskHandle_t xHandle_GPS = NULL;
+#endif
+#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
+  TaskHandle_t xHandle_TOUCH = NULL;
+#endif
+#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
+  TaskHandle_t xHandle_BT = NULL;
+#endif
+#if defined(FEATURE_BT_KEYBOARD) && defined(USE_CONNECT_TASK)
+  TaskHandle_t xHandle_connectOrPair = NULL;
+#endif
+#if defined(USE_MAIN_TASK)
+  TaskHandle_t xHandle_MAIN = NULL;
+#endif
+
+#ifdef TASK_HIGH_WATER_MONITOR
+// Task 2: Monitor stack usage
+void TaskMonitor(void *pvParameters) {
+  for (;;) {
+    #if defined(FEATURE_GPS) && defined(USE_GPS_TASK)    
+      UBaseType_t mark1 = uxTaskGetStackHighWaterMark(xHandle_GPS);
+      Serial.print("GPS Task High Water Mark: "); Serial.print(mark1); Serial.print(" words ("); Serial.print(mark1 * sizeof(StackType_t)); Serial.println(" bytes)");
+    #endif
+    #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
+      UBaseType_t mark2 = uxTaskGetStackHighWaterMark(xHandle_TOUCH);
+      Serial.print("Touch Task High Water Mark: "); Serial.print(mark2); Serial.print(" words ("); Serial.print(mark2 * sizeof(StackType_t)); Serial.println(" bytes)");
+    #endif
+    #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
+      UBaseType_t mark3 = uxTaskGetStackHighWaterMark(xHandle_BT);
+      Serial.print("BT Keyboard Task High Water Mark: "); Serial.print(mark3); Serial.print(" words ("); Serial.print(mark3 * sizeof(StackType_t)); Serial.println(" bytes)");
+    #endif
+    #if defined(FEATURE_BT_KEYBOARD) && defined(USE_CONNECT_TASK) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+      UBaseType_t mark4 = uxTaskGetStackHighWaterMark(xHandle_BT);
+      Serial.print("BT Connect Task High Water Mark: "); Serial.print(mark4); Serial.print(" words ("); Serial.print(mark3 * sizeof(StackType_t)); Serial.println(" bytes)");
+    #endif
+    #if defined(USE_MAIN_TASK)
+      UBaseType_t mark5 = uxTaskGetStackHighWaterMark(xHandle_MAIN);
+      Serial.print("Main Task High Water Mark: "); Serial.print(mark5); Serial.print(" words ("); Serial.print(mark4 * sizeof(StackType_t)); Serial.println(" bytes)");
+    #endif
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  }
+}
+#endif // TASK_HIGH_WATER_MONITOR
+
+#ifdef TASK_PROCESS_STATUS
+#include <map>
+std::map<eTaskState, const char *> eTaskStateName { {eReady, "Ready"}, { eRunning, "Running" }, {eBlocked, "Blocked"}, {eSuspended, "Suspended"}, {eDeleted, "Deleted"} };
+void ps() {
+  int tasks = uxTaskGetNumberOfTasks();
+  TaskStatus_t *pxTaskStatusArray = new TaskStatus_t[tasks];
+  unsigned long runtime;
+  tasks = uxTaskGetSystemState(pxTaskStatusArray, tasks, &runtime);
+  Serial.printf("# Tasks: %d\n", tasks);
+  Serial.println("ID, NAME, STATE, PRIO, CYCLES");
+  for (int i = 0; i < tasks; i++) {
+    Serial.printf("%d: %-16s %-10s %d %lu\n", i, pxTaskStatusArray[i].pcTaskName, eTaskStateName[pxTaskStatusArray[i].eCurrentState], (int)pxTaskStatusArray[i].uxCurrentPriority, pxTaskStatusArray[i].ulRunTimeCounter);
+  }
+  delete[] pxTaskStatusArray;
+}
+#endif
+
+#if (defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO_W)) && defined(USE_CORE1)
+  void setup1() {
+    BaseType_t xReturned;
+
+      while (!start_core1) {}   // wait until config settings are read into memory
+
+      #if defined(FEATURE_BT_KEYBOARD)        
+        event_queue = xQueueCreate(30, sizeof(KeyInfo));
+        // We can use the cbData as a flag to see if we're making or breaking a key
+        bt_keyboard.onKeyDown(kb, (void *)true);
+        bt_keyboard.onKeyUp(kb, (void *)false);
+        // Consumer keys are the special function ones like "mute" or "home"
+        bt_keyboard.onConsumerKeyDown(ckb, (void *)true);
+        bt_keyboard.onConsumerKeyUp(ckb, (void *)false);
+        check_last_bt_addr_in_EEPROM(); // See about reconnecting
+        if (use_BLE) bt_keyboard.begin(true);   // BLE
+        else bt_keyboard.begin();  // BT Classic
+      #endif
+      
+      // --------------------- GPS TASK -----------------------------------------------------------------------
+      
+      #if defined(FEATURE_GPS) && defined(USE_GPS_TASK)
+          Serial.println("Starting GPS Task on Core 1");
+          xReturned = xTaskCreate(
+                  check_gps,      /* Function that implements the task. */
+                  "Chk_GPS",          /* Text name for the task. */
+                  2048,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  2, /* Priority at which the task is created. */
+                  &xHandle_GPS);
+      #endif
+
+      // ------------------------ TOUCH TASK --------------------------------------------------------------------
+      
+      #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
+          Serial.println("Starting TOUCH Task on Core 1");
+          xReturned = xTaskCreate(
+                  check_touch_buttons,      /* Function that implements the task. */
+                  "Chk_Touch",          /* Text name for the task. */
+                  2048,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  5, /* Priority at which the task is created. */
+                  &xHandle_TOUCH);
+      #endif
   
+      // ------------------------ BT TASK --------------------------------------------------------------------
+
+      #if defined(ARDUINO_RASPBERRY_PI_PICO) && defined(USE_BT_TASK)
+          #error "BT Keyboard only runs on W models.  Disable FEATURE_BT_KEYBOARD"
+      #endif
+
+      #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK) && defined(NOTHING)
+          Serial.println("Starting BT Task on Core 1");
+          xReturned = xTaskCreate(
+                check_bt_keyboard,       /* Function that implements the task. */
+                "Chk_BT_Keys",          /* Text name for the task. */
+                16000,      /* Stack size in words, not bytes. */
+                ( void * ) 1,    /* Parameter passed into the task. */
+                1,/* Priority at which the task is created. */
+                &xHandle_BT);
+            //#if defined(PICO_CYW43_SUPPORTED) && (bt_keyboard_LED != LED_BUILTIN)
+            #if defined(ARDUINO_RASPBERRY_PI_PICO_W) && (bt_keyboard_LED == LED_BUILTIN)
+              #error "Cannot use LED_BUILTIN on Core 1, reassign it to a normal GPIO pin."
+              // The PicoW WiFi chip controls the LED, and only core 0 can make calls to it safely
+              //vTaskCoreAffinitySet(xHandle_BT, 1 << 0);  // BT LED status on Pico2W is on the CY43
+            #endif
+      #endif
+
+      // ---------------BT Connect or Pair Loop ----------------------------------------------------
+
+      #if defined(FEATURE_BT_KEYBOARD) && defined(USE_CONNECT_TASK_X)  // Run on Core 0
+          Serial.println("Starting BT Connect Task on Core 1");
+          xReturned = xTaskCreate(
+                      connectOrPair,       /* Function that implements the task. */
+                      "BT_Conn_Loop",     /* Text name for the task. */
+                      4000,           /* Stack size in words, not bytes. */
+                      ( void * ) 1,    /* Parameter passed into the task. */
+                      3,/* Priority at which the task is created. */
+                      &xHandle_connectOrPair);
+      #endif
+  }
+
+  void loop1() {
+    //Serial.printf("C1: Stay on target...\n");
+    //myDelay(10000);
+    //check_gps();
+    #ifdef TASK_PROCESS_STATUS
+      ps();
+    #endif
+   
+    #if defined(FEATURE_BT_KEYBOARD) && !defined(USE_CONNECT_TASK) && defined(USE_CORE1)
+      if (!bt_keyboard.connected() && ! BOOTSEL) {
+        connectOrPair();
+      }
+      check_bt_keyboard();
+    #endif
+
+  }
+#endif
+
 // --------------------------------------------------------------------------------------------
+
 //void loop()
 
 #if defined(PROJECT_ESP32_COMPILER)
@@ -26578,7 +26902,7 @@ void app_main(void)
 #endif
 {
   
-  #if defined(USE_TOUCH_TASK) || defined(USE_BT_TASK) || defined(USE_TASK)
+  #if defined(USE_TOUCH_TASK) || defined(USE_BT_TASK) || defined(USE_MAIN_TASK) || defined(USE_GPS_TASK) 
     BaseType_t xReturned;
   #endif
 
@@ -26587,68 +26911,179 @@ void app_main(void)
     setup_esp(); // call actual setup
   #endif
 
+  #if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+    bool core1_separate_stack = true;  // for FreeRTOS multicore - create 8K stack on both cores.
+  #endif
+
   //TimerHandle_t my_timer = xTimerCreate(
   //                "timer_1s",
   //                pdMS_TO_TICKS(1000),
   //                pdTRUE, NULL,
   //                timer_1s_callback);
 
+  // --------------- GPS -----------------------------------------------------------------------------------
 
   #if defined(FEATURE_GPS) && defined(USE_GPS_TASK)
-    TaskHandle_t xHandle_GPS = NULL;
-    xReturned = xTaskCreate(
-                check_gps,      /* Function that implements the task. */
-                "Chk_GPS",          /* Text name for the task. */
-                2048,      /* Stack size in words, not bytes. */
-                ( void * ) 1,    /* Parameter passed into the task. */
-                5, /* Priority at which the task is created. */
-                &xHandle_GPS);
+      #if defined(HARDWARE_ESP32_DEV) && !defined(USE_CORE1)
+        xReturned = xTaskCreate(
+                  check_gps,      /* Function that implements the task. */
+                  "Chk_GPS",          /* Text name for the task. */
+                  2048,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  5, /* Priority at which the task is created. */
+                  &xHandle_GPS);                
+      #endif
+      #if defined(HARDWARE_ESP32_DEV) && defined(USE_CORE1)
+        xReturned = xTaskCreatePinnedToCore(
+                  check_gps,      /* Function that implements the task. */
+                  "Chk_GPS",          /* Text name for the task. */
+                  2048,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  5, /* Priority at which the task is created. */
+                  &xHandle_GPS,
+                  1); // core 1
+      #endif
+      #if (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)) && !defined(USE_CORE1)
+        xReturned = xTaskCreate(
+                  check_gps,      /* Function that implements the task. */
+                  "Chk_GPS",          /* Text name for the task. */
+                  2048,      /* Stack size in words, not bytes. */
+                  ( void * ) 1,    /* Parameter passed into the task. */
+                  5, /* Priority at which the task is created. */
+                  &xHandle_GPS);
+      #endif
   #endif
+
+// ------------------ TOUCH --------------------------------------------------------------------------------
 
   #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
-    TaskHandle_t xHandle_TOUCH = NULL;
-    xReturned = xTaskCreate(
-                check_touch_buttons,      /* Function that implements the task. */
-                "Chk_Touch",          /* Text name for the task. */
-                2048,      /* Stack size in words, not bytes. */
-                ( void * ) 1,    /* Parameter passed into the task. */
-                5, /* Priority at which the task is created. */
-                &xHandle_TOUCH);
+      #if defined(HARDWARE_ESP32_DEV) && !defined(USE_CORE1)
+          xReturned = xTaskCreate(
+                    check_touch_buttons,      /* Function that implements the task. */
+                    "Chk_Touch",          /* Text name for the task. */
+                    2048,      /* Stack size in words, not bytes. */
+                    ( void * ) 1,    /* Parameter passed into the task. */
+                    2, /* Priority at which the task is created. */
+                    &xHandle_TOUCH);
+      #endif
+      #if defined(HARDWARE_ESP32_DEV) && defined(USE_CORE1)
+          xReturned = xTaskCreatePinnedToCore(
+                    check_touch_buttons,      /* Function that implements the task. */
+                    "Chk_Touch",          /* Text name for the task. */
+                    2048,      /* Stack size in words, not bytes. */
+                    ( void * ) 1,    /* Parameter passed into the task. */
+                    2, /* Priority at which the task is created. */
+                    &xHandle_TOUCH,
+                    1);
+      #endif
+      #if (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)) && !defined(USE_CORE1)
+          xReturned = xTaskCreate(
+                    check_touch_buttons,      /* Function that implements the task. */
+                    "Chk_Touch",          /* Text name for the task. */
+                    2048,      /* Stack size in words, not bytes. */
+                    ( void * ) 1,    /* Parameter passed into the task. */
+                    2, /* Priority at which the task is created. */
+                    &xHandle_TOUCH);
+      #endif
   #endif
 
+  // ---------------- BT Keyboard ----------------------------------------------------------------------------------
 
   #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
-    TaskHandle_t xHandle_BT = NULL;
-    xReturned = xTaskCreate(
+      
+      #if defined(ARDUINO_RASPBERRY_PI_PICO) && defined(USE_BT_TASK)
+          #error "BT Keyboard only runs on W models.  Disable FEATURE_BT_KEYBOARD"
+      #endif
+
+      #if defined(HARDWARE_ESP32_DEV) && !defined(USE_CORE1)
+          xReturned = xTaskCreate(
                 check_bt_keyboard,       /* Function that implements the task. */
                 "Chk_BT_Keys",          /* Text name for the task. */
-                12000,      /* Stack size in words, not bytes. */
+                16000,      /* Stack size in words, not bytes. */
                 ( void * ) 1,    /* Parameter passed into the task. */
-                7,/* Priority at which the task is created. */
-                NULL); //&xHandle_BT );
+                1,/* Priority at which the task is created. */
+                &xHandle_BT); use core 0
+      #endif
+      #if defined(HARDWARE_ESP32_DEV) && defined(USE_CORE1)
+          xReturned = xTaskCreatePinnedToCore(
+                check_bt_keyboard,       /* Function that implements the task. */
+                "Chk_BT_Keys",          /* Text name for the task. */
+                16000,      /* Stack size in words, not bytes. */
+                ( void * ) 1,    /* Parameter passed into the task. */
+                1,/* Priority at which the task is created. */
+                &xHandle_BT,
+                1);  // use core 1
+      #endif
+      #if defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(USE_CORE1)
+          xReturned = xTaskCreate(
+                check_bt_keyboard,       /* Function that implements the task. */
+                "Chk_BT_Keys",          /* Text name for the task. */
+                16000,      /* Stack size in words, not bytes. */
+                ( void * ) 1,    /* Parameter passed into the task. */
+                1,/* Priority at which the task is created. */
+                &xHandle_BT);      
+          #if defined(PICO_CYW43_SUPPORTED_z)
+            // The PicoW WiFi chip controls the LED, and only core 0 can make calls to it safely
+            //vTaskCoreAffinitySet(check_bt_keyboard, 1 << 0);  // BT LED status on Pico2W is on the CY43
+          #endif
+      #endif
   #endif
   
-  #if defined(USE_TASK)
-    TaskHandle_t xHandle_MAIN = NULL;
-    xReturned = xTaskCreatePinnedToCore(
+  // ---------------Main Loop -----------------------------------------------------------------------------------
+
+  #if defined(USE_MAIN_TASK)  // Run on Core 0
+    xReturned = xTaskCreate(
                 main_loop,       /* Function that implements the task. */
-                "Main_Loop",          /* Text name for the task. */
-                12000,      /* Stack size in words, not bytes. */
+                "Main_Loop",     /* Text name for the task. */
+                24000,           /* Stack size in words, not bytes. */
                 ( void * ) 1,    /* Parameter passed into the task. */
                 4,/* Priority at which the task is created. */
-                &xHandle_MAIN,
-                1);  // core 0
+                &xHandle_MAIN);
   #endif
+  
+  // ---------------BT Connect or Pair Loop  (Pico Only) ------------------------------------------------------
 
+  #if defined(FEATURE_BT_KEYBOARD) && defined(USE_CONNECT_TASK) && !defined(USE_CORE1) // Run on Core 0
+      //#if defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(USE_CORE1)
+        Serial.println("Starting BT Connect Task on Core 0");
+        xReturned = xTaskCreate(
+                    connectOrPair,       /* Function that implements the task. */
+                    "BT_Conn_Loop",     /* Text name for the task. */
+                    4000,           /* Stack size in words, not bytes. */
+                    ( void * ) 1,    /* Parameter passed into the task. */
+                    3,/* Priority at which the task is created. */
+                    &xHandle_connectOrPair);
+      //#endif
+  #endif
+  
+  // ------------------ TASK_MONITOR ----------------------------------------------------------------------------
+
+  #ifdef TASK_HIGH_WATER_MONITOR
+    TaskHandle_t xHandle_Monitor = NULL;
+    xTaskCreate(TaskMonitor, "Main_Loop Monitor", 256, NULL, 1, &xHandle_Monitor);
+  #endif
+  
+  // ------------------------------------------------------------------------------------------------------------
+    
   while (1)
   {
-    #ifdef USE_TASK
-      myDelay(5000);
-    #else
+    #ifdef TASK_PROCESS_STATUS_x
+      ps();
+      myDelay(10000);
+    #endif
+
+    #ifndef USE_MAIN_TASK
       main_loop();
     #endif        
     
-    #if defined(FEATURE_BT_KEYBOARD) 
+    #if defined(FEATURE_BT_KEYBOARD) && !defined(USE_CONNECT_TASK) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(USE_CORE1)
+      if (!bt_keyboard.connected() && ! BOOTSEL) {
+        connectOrPair();
+      }
+    #endif
+    #if defined(FEATURE_BT_KEYBOARD)
+      //Serial.print(".");
+      //myDelay(1000);
       #ifdef USE_BT_TASK
         //check_bt_keyboard((void*)1);
       #endif
