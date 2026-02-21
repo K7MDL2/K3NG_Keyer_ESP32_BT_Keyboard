@@ -21,7 +21,7 @@
 
 Based on a 2022 version modifed to run on ESP32-WROOM32 and Pico2W.  
 
-Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. Compiles under ESP-IDF, or Arduino.  Some limitations apply to BT keyboardds ESP32 under Arduino.
+Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. Compiles under ESP-IDF, or Arduino.  Some limitations apply to BT keyboards ESP32 under Arduino.
 
 To build under ESP-IDF (preferred) see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
 
