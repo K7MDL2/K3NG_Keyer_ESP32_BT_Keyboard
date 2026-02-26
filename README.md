@@ -48,6 +48,7 @@ This fork on a ESP32-WROOM32 and Pico2W adds:
  - I2C compass heading values can display in a popup windows to help point microwave antennas.  Can configure your declination.
  - Backlight timeout with enable/disable to save battery. Configurable tiemout. TFT displays are around 270ma, 100ma with backlight off. About 10ma less without BT keyboard feature.
  - User assignable buttons and number of button rows.
+ - Optionally run GPS, BT, Touch, and Main loop in task, all but Main Loop on either Core 0 or Core 1 (as a group move).  Lets BT connections and GPS time to run uninterrupted, even during 13WPM and 50WPM keying rates.
 
 Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
