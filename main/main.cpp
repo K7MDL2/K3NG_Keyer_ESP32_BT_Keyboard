@@ -19566,7 +19566,7 @@ void pairing_handler(uint32_t pid) {
 		char pass[28];
 		clear_display_row(1);
 		sprintf(pass, "Pairing Code %lu", pid);
-		lcd_center_print_timed(pass, 2, 15000);
+		lcd_center_print_timed(pass, 1, 15000);
 }
 
 #endif
