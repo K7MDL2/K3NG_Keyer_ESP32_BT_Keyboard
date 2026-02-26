@@ -28,9 +28,19 @@
 // #define HARDWARE_OPENCWKEYER_MK2 // https://github.com/ok1cdj/OpenCWKeyerMK2  edit these files: keyer_features_and_options_opencwkeyer_mk2.h keyer_pin_settings_opencwkeyer_mk2.h keyer_settings_opencwkeyer_mk2.h
 // #define HARDWARE_IZ3GME // https://github.com/iz3gme/k3ng_cw_keyer  edit these files: keyer_features_and_options_iz3gme.h keyer_pin_settings_iz3gme.h keyer_settings.h
 // #define HARDWARE_YCCC_SO2R_MINI // edit these files: keyer_pin_settings_yccc_so2r_mini.h, keyer_settings_yccc_so2r_mini.h, keyer_features_and_options_yccc_so2r_mini.h
-#define HARDWARE_ESP32_DEV //works well with IDK ESP32 2.0.1 on 2.0.2 Sidetone doesn't work. //SP5IOU 20220129
-//#define ARDUINO_RASPBERRY_PI_PICO_W // used for Pico2W also - has BT and WiFi
-//#define ARDUINO_RASPBERRY_PI_PICO // used for Pic2 also
+
+// Auto select platform for Pico
+#if defined(PICO_PLATFORM)
+  #if defined(PICO_CYW43_SUPPORTED)
+    #define ARDUINO_RASPBERRY_PI_PICO_W // used for Pico2W also - has BT and WiFi
+  #else
+    #define ARDUINO_RASPBERRY_PI_PICO // used for Pic2 also
+  #endif
+#endif
+
+#if defined(PROJECT_ESP32_COMPILER)
+  #define HARDWARE_ESP32_DEV
+#endif
 
 // #define HARDWARE_TEST_EVERYTHING
 // #define HARDWARE_TEST
@@ -103,5 +113,20 @@
 #else
   #define PRIMARY_SERIAL_CLS HardwareSerial
   #define SECONDARY_SERIAL_CLS HardwareSerial
+#endif
+
+// RP2350: last sector in Flash get overwritten by the Errata-E10 fix for RP235x CPUs  Causes corrupt btstack key db in TLV
+// https://forums.raspberrypi.com/viewtopic.php?t=384264
+// https://forums.raspberrypi.com/viewtopic.php?p=2244485#p2244485
+#if defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO_W)
+  // PICO_CONFIG: PICO_FLASH_BANK_TOTAL_SIZE, Total size of the Bluetooth flash storage. Must be an even multiple of FLASH_SECTOR_SIZE, type=int, default=FLASH_SECTOR_SIZE * 2, group=pico_btstack
+  #ifndef PICO_FLASH_BANK_TOTAL_SIZE
+    #define PICO_FLASH_BANK_TOTAL_SIZE (FLASH_SECTOR_SIZE * 2u)
+  #endif
+
+  // PICO_CONFIG: PICO_FLASH_BANK_STORAGE_OFFSET, Offset in flash of the Bluetooth flash storage, type=int, default=PICO_FLASH_SIZE_BYTES - PICO_FLASH_BANK_TOTAL_SIZE, group=pico_btstack
+  #ifndef PICO_FLASH_BANK_STORAGE_OFFSET
+    #define PICO_FLASH_BANK_STORAGE_OFFSET (PICO_FLASH_SIZE_BYTES - PICO_FLASH_BANK_TOTAL_SIZE)
+  #endif
 #endif
   

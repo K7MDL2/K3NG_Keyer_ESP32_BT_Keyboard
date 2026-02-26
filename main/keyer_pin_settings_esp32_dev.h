@@ -168,7 +168,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #endif //FEATURE_STRAIGHT_KEY          
     #endif
     #define GPS_RX_PIN      19      // GPS hardware serial RX 
-    #define GPS_TX_PIN      -1      // -1 to disable usage, TX not required for GPS
+    //#define GPS_TX_PIN      0      // TX not required for GPS
     #define TOUCH_X         300     // x  300 default
     #define TOUCH_X1        3598    // x1 3600 default
     #define TOUCH_Y         345     // y  300 default

@@ -412,7 +412,7 @@ dependencies:
       type: service
     version: 1.2.0
   espressif/esp_secure_cert_mgr:
-    component_hash: 29248e402b2014394228b289a3c02fdb1dc43168ef18fc83449a868dfbc2341f
+    component_hash: 336df2f2321981f31e2078b38997a7bba3ed8f427849f13ecf771e03ff5ce1e7
     dependencies:
     - name: idf
       require: private
@@ -420,7 +420,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 2.8.0
+    version: 2.8.1
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
@@ -539,9 +539,9 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.5.2
+    version: 5.5.3
   joltwallet/littlefs:
-    component_hash: 1808d73e99168f6f3c26dd31799a248484762b3a320ec4962dec11a145f4277f
+    component_hash: dcea25bcef2de023f089f5f01e8d8c46ad1b8ffef75861ad5ffb4098555839df
     dependencies:
     - name: idf
       require: private
@@ -549,7 +549,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.20.3
+    version: 1.20.4
   panigrah/esp32-idf-hd44780:
     component_hash: f5e8c25c335cd362d1ac9613138cdea7d98a4a6e272a1365b6f1117a27bfbefd
     dependencies:
@@ -570,6 +570,6 @@ direct_dependencies:
 - espressif/spi_bus
 - idf
 - panigrah/esp32-idf-hd44780
-manifest_hash: b785c7b2a2aa7bab8ea193e87a12b2b210bcee1841b4a73eacfc853b7fb79a56
+manifest_hash: 5d053b6223a55a228a6616528751817fa32f618dcee49b60ba2bcf29d487dcbf
 target: esp32
 version: 2.0.0

@@ -5,8 +5,8 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.20"
-#define eeprom_magic_number 40          // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "K7MDL-2026.2.24"
+#define eeprom_magic_number 42          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -67,9 +67,9 @@
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
+#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
-#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 //#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
@@ -112,15 +112,16 @@
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define USE_CORE1  // for Pico and ESP32, this moves some features to run in tasks on Core 1 instead of Core 0.
-    #define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
-    //#define USE_BT_TASK 
-    #define USE_TASK
+    #define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task on Core 0 or 1
+    #define USE_BT_TASK  // runs BT keyboard on Core 0 or 1.
+    #define USE_MAIN_TASK // runs Main loog on Core 0 (only)
     #define USE_GPS_TASK // run the Serial GPS in a separate task. Can run in core 1 or 0.
+    #define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scannning (K380, Rii)
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     #define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
     #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
-    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
@@ -151,6 +152,7 @@
     #define USE_RES_TOUCH  // Enables touch with XPT2046
     //#define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
     ////#define USE_MAIN_TASK // runs main loop in a task
+    //#define USE_BT_TASK 
     ////#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task - Best for GT911 controllers. Causes WDT timeouts on this display due to SPI bus conflicts
     //#define USE_GPS_TASK // Run Serial GPS in task. Can run in core 1 or 0 controlled by USE_CORE1
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
@@ -200,7 +202,7 @@
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     //#define USE_BT_TASK 
-    //#define USE_TASK
+    //#define USE_MAIN_TASK
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     //#define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.

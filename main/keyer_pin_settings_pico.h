@@ -37,9 +37,9 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     // For the BT Connected LED, when runnig in a task on Core 1, the LED_BUILTIN cannot be used
     // Instead choose any other CPU GPIO. 
     #ifdef USE_CORE1  
-      #define bt_keyboard_LED    0   // set ot 0 or any normal GPIO pin.
+      #define bt_keyboard_LED    0   // set to 0 or any normal GPIO pin.
     #else
-      #define bt_keyboard_LED    LED_BUILTIN  //64 // indicates BT keyboard connection status - GPIO17 is Blue LED
+      #define bt_keyboard_LED    0 //LED_BUILTIN   //LED_BUILTIN  //64 // indicates BT keyboard connection status - GPIO17 is Blue LED
     #endif
     #if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
       #define I2CDEV_SDA_PIN  20   // override the sdkconfig pair of 21, 22
@@ -61,8 +61,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  22
       #endif //FEATURE_STRAIGHT_KEY          
     #endif
-    #define GPS_RX_PIN      5   // UART1 TX = 4   UART1 RX = 5
-    #define GPS_TX_PIN      4
+    #define GPS_RX_PIN       5   // UART1 TX = 4   UART1 RX = 5
+    #define GPS_TX_PIN       4   // 4
     #define TOUCH_X         4400     // x  300 default
     #define TOUCH_X1        3550    // x1 3600 default
     #define TOUCH_Y         4300     // y  300 default
