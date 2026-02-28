@@ -41,12 +41,12 @@ This fork on a ESP32-WROOM32 and Pico2W adds:
  - BT keyboards (Select BLE and BT Classic models)
  - A few different type TFT displays with 320x170, 320,240, and 480x320 resolutions
  - Touch buttons on touch enabled displays
- - Status Bar with (future) Grid, call, WPM rate, and sevceral satus icons including T/R status.
- - MCP23017 I2C port expander to add IO to the IO starved TFT display boards.  The Paddles and Straight key are on PA0-2 pins.
+ - Status Bar with Grid, call, WPM rate, and several status icons including T/R status.
+ - MCP23017 I2C port expander to add IO to the IO-starved TFT display boards.  The Paddles and Straight key are on PA0-2 pins.
  - Using interrupts for all paddle and straight key IO pin, both the port expander and local GPIO pins.
  - Serial GPS can udpate time and grid square to 8 places, and populate a memory with 4 or 6 digits.
- - I2C compass heading values can display in a popup windows to help point microwave antennas.  Can configure your declination.
- - Backlight timeout with enable/disable to save battery. Configurable tiemout. TFT displays are around 270ma, 100ma with backlight off. About 10ma less without BT keyboard feature.
+ - I2C compass heading values can display in a popup window to help point microwave antennas.  Can configure your declination.
+ - Backlight timeout with enable/disable to save battery. Configurable timeout. TFT displays are around 270ma, 100ma with backlight off. About 10ma less without BT keyboard feature.
  - User assignable buttons and number of button rows.
  - Optionally run GPS, BT, Touch, and Main loop in task, all but Main Loop on either Core 0 or Core 1 (as a group move).  Lets BT connections and GPS time to run uninterrupted, even during 13WPM and 50WPM keying rates.
 
