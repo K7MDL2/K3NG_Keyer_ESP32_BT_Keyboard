@@ -3,6 +3,6 @@
 nvs,data,nvs,,28K,
 phy_init,data,phy,,4K,
 factory,app,factory,,1700K,
-#storage1,data,spiffs,,64K,
+storage1,data,spiffs,,64K,
 #storage2,data,spiffs,,64K,
-coredump, data, coredump,,128K
+coredump, data, coredump,,64K

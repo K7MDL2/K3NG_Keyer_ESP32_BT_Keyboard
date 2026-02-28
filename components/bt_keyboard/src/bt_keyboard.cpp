@@ -344,7 +344,7 @@ bool BTKeyboard::setup(PairingHandler        *pairing_handler,
   got_connection_handler_  = got_connection_handler;
   lost_connection_handler_ = lost_connection_handler;
 
-  event_queue_             = xQueueCreate(10, sizeof(KeyInfo));
+  event_queue_             = xQueueCreate(30, sizeof(KeyInfo));
 
   if (HID_HOST_MODE == HIDH_IDLE_MODE) {
     ESP_LOGE(TAG, "Please turn on BT HID host or BLE!");
@@ -398,7 +398,8 @@ bool BTKeyboard::setup(PairingHandler        *pairing_handler,
   // Classic Bluetooth GAP
 
   esp_bt_sp_param_t param_type = ESP_BT_SP_IOCAP_MODE;
-  esp_bt_io_cap_t   iocap      = ESP_BT_IO_CAP_IO;
+  //esp_bt_io_cap_t   iocap      = ESP_BT_IO_CAP_IO;
+  esp_bt_io_cap_t   iocap      = ESP_IO_CAP_NONE;
   esp_bt_gap_set_security_param(param_type, &iocap, sizeof(uint8_t));
 
   // Set default parameters for Legacy Pairing
@@ -406,7 +407,81 @@ bool BTKeyboard::setup(PairingHandler        *pairing_handler,
   esp_bt_pin_type_t pin_type = ESP_BT_PIN_TYPE_FIXED;
   esp_bt_pin_code_t pin_code = {'1','2','3','4'};
   esp_bt_gap_set_pin(pin_type, 4, pin_code);
+
+  // BLE 
+
+  esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND; // Secure Connections + Bonding
+  iocap = ESP_IO_CAP_NONE; // Adjust based on device I/O capability
+  uint8_t key_size = 16; // Max key size
+  uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+  uint8_t rsp_key  = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+
+  // Set authentication requirement
+  if (esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t)) != ESP_OK) {
+      ESP_LOGE("BLE_SEC", "Failed to set auth requirement");
+  }
+
+  // Set I/O capability
+  if (esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t)) != ESP_OK) {
+      ESP_LOGE("BLE_SEC", "Failed to set IO capability");
+  }
+
+  // Set key size
+  if (esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t)) != ESP_OK) {
+      ESP_LOGE("BLE_SEC", "Failed to set key size");
+  }
+
+  // Set keys to be exchanged
+  if (esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t)) != ESP_OK) {
+      ESP_LOGE("BLE_SEC", "Failed to set init key");
+  }
+  if (esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t)) != ESP_OK) {
+      ESP_LOGE("BLE_SEC", "Failed to set response key");
+  }
+
+  ESP_LOGI("BLE_SEC", "BLE security configured: SC + Bonding + No PIN");
   
+  /*
+  // Set BLE to No PIN, Not worried about security issues with a keyer
+  uint32_t BLE_passkey = 123456;
+  uint8_t key_size = 16;      //the key size should be 7~16 bytes
+  esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;   // ESP_LE_AUTH_BOND ////bonding with peer device after authentication
+  esp_ble_auth_req_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
+  uint8_t oob_support = ESP_BLE_OOB_DISABLE;
+  uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+  uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+  //iocap = ESP_IO_CAP_OUT;     // ask keyboard to enter a pin
+  iocap = ESP_IO_CAP_NONE;     //set the IO capability to No output No input
+  //esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &BLE_passkey, sizeof(uint32_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
+
+  //esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t));
+  //esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t));
+  //esp_ble_gap_set_security_param(ESP_BLE_SM_OOB_SUPPORT, &oob_support, sizeof(uint8_t));
+
+   Sequence for secure PIN code pairing
+esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_MITM_BOND;
+esp_ble_io_cap_t iocap = ESP_IO_CAP_OUT;
+uint8_t key_size = 16; //the key size should be 7~16 bytes
+uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+uint32_t passkey = 123456; //Number that has to be input when the user tries to pair their phone
+uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
+uint8_t oob_support = ESP_BLE_OOB_DISABLE;
+esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &passkey, sizeof(uint32_t));
+esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t));
+esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t));
+esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t));
+esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t));
+esp_ble_gap_set_security_param(ESP_BLE_SM_OOB_SUPPORT, &oob_support, sizeof(uint8_t));
+esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
+esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t)); 
+*/
+
   if ((ret = esp_bt_gap_register_callback(bt_gap_event_handler))) {
     ESP_LOGE(TAG, "esp_bt_gap_register_callback failed: %d", ret);
     return false;
@@ -604,6 +679,7 @@ void BTKeyboard::handle_bt_device_result(esp_bt_gap_cb_param_t *param) {
   uuid.len         = ESP_UUID_LEN_16;
   uuid.uuid.uuid16 = 0;
 
+  // Look ahead for BT keyboard only and filter out the other stuff.  Do same for BLE.
   for (int i = 0; i < param->disc_res.num_prop; i++) {
     esp_bt_gap_dev_prop_t *prop = &param->disc_res.prop[i];
     if (prop->type != ESP_BT_GAP_DEV_PROP_EIR) {
@@ -723,8 +799,7 @@ void BTKeyboard::bt_gap_event_handler(esp_bt_gap_cb_event_t event, esp_bt_gap_cb
   switch (event) {
     case ESP_BT_GAP_DISC_STATE_CHANGED_EVT:
       {
-        ESP_LOGD(TAG, "BT GAP DISC_STATE %s",
-                 (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STARTED) ? "START" : "STOP");
+        ESP_LOGD(TAG, "BT GAP DISC_STATE %s", (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STARTED) ? "START" : "STOP");
         if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
           SEND_BT_CB();
         }
@@ -741,8 +816,7 @@ void BTKeyboard::bt_gap_event_handler(esp_bt_gap_cb_event_t event, esp_bt_gap_cb
       break;
     case ESP_BT_GAP_CFM_REQ_EVT:
       {
-        ESP_LOGD(TAG, "BT GAP CFM_REQ_EVT Please compare the numeric value: %" PRIu32,
-                 param->cfm_req.num_val);
+        ESP_LOGD(TAG, "BT GAP CFM_REQ_EVT Please compare the numeric value: %" PRIu32, param->cfm_req.num_val);
         esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda, true);
         break;
       }
@@ -826,8 +900,7 @@ void BTKeyboard::handle_ble_device_result(esp_ble_gap_cb_param_t *param) {
     std::cout << ", NAME: '" << name << "'\n";
   }
   if (appearance == ESP_BLE_APPEARANCE_HID_KEYBOARD) { // && (uuid == ESP_GATT_UUID_HID_SVC || uuid == 0)) {
-        add_ble_scan_result(scan_rst.bda, scan_rst.ble_addr_type, appearance, adv_name, adv_name_len,
-                        scan_rst.rssi);
+      add_ble_scan_result(scan_rst.bda, scan_rst.ble_addr_type, appearance, adv_name, adv_name_len, scan_rst.rssi);
   }
   std::cout << std::dec << std::endl;
 
@@ -946,6 +1019,7 @@ void BTKeyboard::ble_gap_event_handler(esp_gap_ble_cb_event_t  event,
       // request. If not accept the security request, should send the security response with
       // negative(false) accept value.
       esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
+      std::cout << "BLE GAP SEC_REQ: Bond with Peer device " << std::endl;
       break;
 
     default:
@@ -979,7 +1053,7 @@ static esp_ble_scan_params_t hid_scan_params = {
     .own_addr_type      = BLE_ADDR_TYPE_PUBLIC,
     .scan_filter_policy = BLE_SCAN_FILTER_ALLOW_ALL,
     .scan_interval      = 0x50,
-    .scan_window        = 0x30,
+    .scan_window        = 0x40,
     .scan_duplicate     = BLE_SCAN_DUPLICATE_ENABLE,
 };
 
@@ -1181,9 +1255,7 @@ void BTKeyboard::devices_scan(int seconds_wait_time) {
       std::cout << ", BT keyboard Found " << std::endl;
       // open the selected entry
       if (esp_hidh_dev_open(cr->bda, cr->transport, cr->ble.addr_type) == ESP_OK)
-        std::cout << "Open BLE/BT Entry for this Keyboard" << std::endl;
-      else 
-        std::cout << "FAILED to Open BLE/BT Entry for this Keyboard" << std::endl;
+        std::cout << "Open BLE/BT Entry for this Keyboard" << std::endl;      
     }
     else  {
       std::cout << "No Valid BLE/BT Keyboard Entry Found" << std::endl;
@@ -1222,8 +1294,7 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
           const uint8_t *bda = esp_hidh_dev_bda_get(param->open.dev);
           if (bda) {
             std::cout << "OPEN Device\n";
-            ESP_LOGD(TAG, ESP_BD_ADDR_STR " OPEN: %s", ESP_BD_ADDR_HEX(bda),
-                     esp_hidh_dev_name_get(param->open.dev));
+            ESP_LOGD(TAG, ESP_BD_ADDR_STR " OPEN: %s", ESP_BD_ADDR_HEX(bda), esp_hidh_dev_name_get(param->open.dev));
             esp_hidh_dev_dump(param->open.dev, stdout);
             bt_keyboard_->set_connected(true);
             memcpy(last_device_addr, bda, sizeof(esp_bd_addr_t));
@@ -1282,10 +1353,13 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
                 reconnecting = true;                
                 esp_hidh_dev_open(last_device_addr, ESP_HID_TRANSPORT_BLE, 1);
                 ESP_LOGI(TAG, ESP_BD_ADDR_STR "Set Flag to Reconnect...%s", ESP_BD_ADDR_HEX(bda));
+                uint8_t btaddr[14] = {bda[0],':',bda[1],':',bda[2],':',bda[3],':',bda[4],':',bda[5],':',bda[6],'\0'};
+                std::cout << "Set Flag to Reconnect..." << std::hex << btaddr << std::endl;
           } else {
                 //bt_keyboard_->devices_scan(5);  // anydevice
-                //bt_keyboard_->retrieve_bonded_devices(); // last device                
+                bt_keyboard_->retrieve_bonded_devices(); // last device                
                 ESP_LOGI(TAG, "Maybe Choose to Restart Scanning on CLOSE? ...");
+                std::cout << "Maybe Choose to Restart Scanning on CLOSE? ..." << std::endl;
                 bt_keyboard_->set_connected(false);
           }
         }
@@ -1322,7 +1396,8 @@ void BTKeyboard::push_key(uint8_t *keys, uint8_t size) {
   memcpy(&inf.keys, keys, size);
   inf.modifier = (KeyModifier) *keys;
 
-  xQueueSendToBack(event_queue_, &inf, 0);
+  if (!xQueueIsQueueFullFromISR(event_queue_))  // prevent overflow
+    xQueueSendToBack(event_queue_, &inf, 0);
 }
 
 /**

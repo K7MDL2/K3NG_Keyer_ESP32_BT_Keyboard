@@ -235,4 +235,9 @@ private:
   }
 
   void push_key(uint8_t *keys, uint8_t size);
+
+  #define BT_COD_MAJOR_PERIPHERAL 0x0500
+  #define BT_COD_MINOR_KEYBOARD   0x0040
+  #define BT_COD_KEYBOARD         (BT_COD_MAJOR_PERIPHERAL | BT_COD_MINOR_KEYBOARD)
+
 };

@@ -2433,6 +2433,7 @@ char popup_text[(LCD_COLUMNS*LCD_ROWS)+30] = {}; // Text to display in popup
 bool popup_active = false;
 volatile uint8_t start_core1 = 0; // signal that init is done, used when tasks are waiting to run on Core 1
 volatile uint8_t start_task = 0; // Tasks start when this number matches their priority number.  Incremented in app_main
+uint8_t in_pairing_mode = 0;
 
 #ifdef FEATURE_GPS
 	#include <TimeLib.h>
@@ -3047,7 +3048,7 @@ unsigned long millis_rollover = 0;
 
 // ------------------------   Pico  BT Keyboard Support Functions --------------------------------------------------
 
-#if defined(FEATURE_BT_KEYBOARD)  && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
 	const char *macToString(const uint8_t *addr, uint8_t addrType) {
 		static char mac[32];
 		sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x,%d\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addrType ? 1 : 0);
@@ -3097,9 +3098,10 @@ unsigned long millis_rollover = 0;
 					for (int i = 0; i < 6; i++) {
 							x |= configuration.addr[i];
 					}
-					BT_Keyboard_Status();
+					
 					debug_serial_port->printf("Entering Connect or Pair\n");
 					if (x) {
+						keyboard_lost_connection_handler();
 						// There's a valid address, attempt to reconnect forever until connect or BOOTSEL
 						debug_serial_port->printf("Attempting to reconnect to %s...\n", macToString(configuration.addr, configuration.addrType));
 
@@ -3113,7 +3115,7 @@ unsigned long millis_rollover = 0;
 						} while (!bt_keyboard.connected() && !BOOTSEL);
 						debug_serial_port->println(F("Keyboard is Reconnected, Update system status"));
 
-						if (bt_keyboard.connected()) {
+						if (bt_keyboard.connected()) {							
 						//if (bt_keyboard.connected() && BT_Keyboard_Lost) {  // Transistion to connected state again
 							debug_serial_port->println(F("Reconnected!\n"));						
 							keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);
@@ -3123,8 +3125,7 @@ unsigned long millis_rollover = 0;
 								goto StartOfLoop;
 							#endif
 						} else {
-							BT_Keyboard_Lost = true;	
-							BT_Keyboard_Status();						
+							keyboard_lost_connection_handler();													
 						}
 						// Fall through to pair
 					}
@@ -3136,10 +3137,11 @@ unsigned long millis_rollover = 0;
 					config_dirty = 1;
 
 					do {
-						myDelay(100);
+						myDelay(10);
+						debug_serial_port->println("Scanning for New BT Keyboard Connection");
 						if (use_BLE) bt_keyboard.connectBLE();
 						else bt_keyboard.connectAny();
-						//debug_serial_port->println("Waiting to connect");
+						debug_serial_port->println("Waiting to connect");
 						debug_serial_port->println("^");
 					} while (!bt_keyboard.connected() && !BOOTSEL);
 
@@ -4681,6 +4683,8 @@ void clear_display_row(byte row_number)
 #ifdef FEATURE_DISPLAY
 void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration)
 {
+	if (in_pairing_mode == 2) return;  // block other tasks from updating the screen during pairing code display
+	if (in_pairing_mode == 1) in_pairing_mode = 2;   // close the gate to block others. This is reset to 0 by pairing mode handler.
 	if (row_number >= LCD_ROWS)
 		row_number = LCD_ROWS-1;
 	//debug_serial_port->printf("Start lcd_center_print_timed(): Row:%d  Duration:%d  Incoming string is:", row_number, duration);
@@ -6933,12 +6937,12 @@ void write_settings_to_eeprom(int initialize_eeprom) {
 				// Read back to verify - set wpm to 20 and sidetone mode to SIDETONE_PADDLE_ONLY and see if we get these back.
 				EEPROM.get(1, configuration);
 
-				debug_serial_port->print(F("Verify EEPROM write by reading it back and checking some settings.\nSet Sidetone Mode=Paddles-Only and WPM=20.  Results"));
+				debug_serial_port->print(F("Verify EEPROM write by reading it back and checking some settings.\nTo do this, set Sidetone Mode=Paddles-Only and WPM=20.  Results"));
 
 				if (configuration.wpm == 20 && configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) {
 					debug_serial_port->println(F(" - EEPROM write verified!"));
 				} else {
-					debug_serial_port->println(F(" - EEPROM write failed!"));
+					debug_serial_port->println(F(" - EEPROM write failed?"));
 				}
 
 			#endif
@@ -19565,6 +19569,8 @@ void pairing_handler(uint32_t pid) {
 		myDelay(5);
 		char pass[28];
 		clear_display_row(1);
+		debug_serial_port->println(F("Print pairing Code to the screen"));
+		in_pairing_mode = 1;
 		sprintf(pass, "Pairing Code %lu", pid);
 		lcd_center_print_timed(pass, 1, 15000);
 }
@@ -19584,6 +19590,7 @@ void keyboard_connected_handler() {
 		BT_Keyboard_Lost = false;
 		if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_active_state);
 		Keyboard_Connected_signal = true;
+		in_pairing_mode = 0;
 }
 #endif
 
@@ -25107,7 +25114,7 @@ void tft_backlight(int state) {
 	#endif
 
 				myDelay(20);
-				debug_serial_port->println("check_bt_keyboard: Start");
+				//debug_serial_port->println("check_bt_keyboard: Start");
 				#if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
 							uint8_t ch = bt_keyboard.wait_for_ascii_char();
 							//uint8_t ch = bt_keyboard.get_ascii_char(); // Without waiting
@@ -25142,8 +25149,7 @@ void tft_backlight(int state) {
 					bool ret = 0;
 					bool keyDN = false;
 					bool keyUP = false;
-					bool scanned = 0; 
-					bool scan_once = 1;
+					static bool scanned = 0; 
 					static bool CMD_KEY = false;
 					static bool last_key = true;
 					uint8_t modifier = 0;
@@ -25153,9 +25159,7 @@ void tft_backlight(int state) {
 					#else
 						uint32_t repeat_period_;
 					#endif
-					#ifdef SCAN_ONCE
-						scan_once = 1;
-					#endif
+
 					#ifdef USE_BT_TASK
 						duration = portMAX_DELAY; // blocking - can wait forever when running inside a task
 						//duration = 1; // blocking - can wait forever when running inside a task
@@ -25172,12 +25176,17 @@ void tft_backlight(int state) {
 								do {									
 									myDelay(100);
 									if (!bt_keyboard.is_connected() || BT_Keyboard_Lost) {
-										if ((scan_once && !scanned) || (!scan_once)) bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds									
-										BT_Keyboard_Status();
+										#ifdef SCAN_ONCE
+											if (!scanned) bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds										
+											scanned = 1;
+										#else
+											bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds										
+										#endif
+										if (!scanned) debug_serial_port->println(F(" *** BT Device Scan Complete ***"));
 									}
+									BT_Keyboard_Lost = false;
 									ret = bt_keyboard.wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.																			
-								} while (!ret);
-								scanned = 1;
+								} while (!ret);								
 							#else								
 							ret = bt_keyboard.wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.								
 							#endif
@@ -25233,7 +25242,7 @@ void tft_backlight(int state) {
 									ch = inf.keys[1];  // capture normal keys
 								}
 
-								if (ch == 0) return;
+								//if (ch == 0) return;
 
 								if (ch != 0 && !keyDN) {
 									keyDN = true;  // this is a valid alphanumeric key
@@ -26975,7 +26984,7 @@ void setup_esp()
 			xReturned = xTaskCreate(
 				check_bt_keyboard,       /* Function that implements the task. */
 				"ChkBTKeys",          /* Text name for the task. */
-				4096,      /* Stack size in words, not bytes. */
+				8000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
 				4,/* Priority at which the task is created. */
 				&xHandle_BT); //use core 0
@@ -26985,11 +26994,11 @@ void setup_esp()
 			xReturned = xTaskCreatePinnedToCore(
 				check_bt_keyboard,       /* Function that implements the task. */
 				"ChkBTKeys",          /* Text name for the task. */
-				4096,      /* Stack size in words, not bytes. */
+				8000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
 				4,/* Priority at which the task is created. */
 				&xHandle_BT,
-				0);  // use core 1
+				1);  // use core 1
 		#endif
 	#endif
 
@@ -27021,7 +27030,7 @@ void setup_esp()
 		xReturned = xTaskCreate(
 			mainloop,       /* Function that implements the task. */			
 			"MainLoop",     /* Text name for the task. */
-			4000,           /* Stack size in words, not bytes. */
+			8000,           /* Stack size in words, not bytes. */
 			NULL, //( void * ) 1,    /* Parameter passed into the task. */
 			5,/* Priority at which the task is created. */
 			&xHandle_MAIN);
@@ -27100,7 +27109,7 @@ void setup_1() {
 			xReturned = xTaskCreate(
 				check_bt_keyboard,       /* Function that implements the task. */
 				"ChkBTKeys",          /* Text name for the task. */
-				4096,      /* Stack size in words, not bytes. */
+				8000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
 				4,/* Priority at which the task is created. */
 				&xHandle_BT);
