@@ -21,11 +21,13 @@
 
 Based on a 2022 version modifed to run on ESP32-WROOM32 and Pico2W.  
 
-Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. Compiles under ESP-IDF, or Arduino.  Some limitations apply to BT keyboards ESP32 under Arduino.
+Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. Compiles under ESP-IDF for ESP32, or Arduino for either ESP32 or Pico2W.  Some limitations apply to BT keyboards on ESP32 under Arduino.
 
 To build under ESP-IDF (preferred) see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
 
-To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE.  The Pico is pretty standard Arduino IDE procedures.  I typically post a UF2 image file for those who do not want to try to compile their own.   To compile for the Pico2W change the hardware #define to ARDUINO_RASPBERRY_PI_PICO_W.  If you have a different display, or no display, update the settings in Feature and Options header file.  TFT_eSPI library is used for both ESP32 and Pico.  Your TFT display needs to be one of the types supported in TFT_eSPI's UserSetup.h file.  For touch controller, I have only tested the XPT2046 using the TFT_eSPI libary.  I suspect a GT911 controller would work since it does on 2 of the ESP32 displays.
+To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE.  For the Pico I post a UF2 image file, and image files for the ESP32 for each model display for those who do not want to try to compile their own.   
+
+Under Arduino, for ESP32 and Pico only,  I automatically detect the board type and set the proper #define for that board, no need to edit the keyere-hardware.h file.  If you have a different display, or no display, update the settings in Feature and Options header file.  TFT_eSPI library is used for both ESP32 and Pico.  Your TFT display needs to be one of the types supported in TFT_eSPI's UserSetup.h file.  I have tested displays with both the GT911 and XPT2046 touch controllers.  The XPT2046 has built in support in the TFT_eSPI libary.  GT911 is an i2c controller and uses a separate library.  It should be easy to substitute other touch controllers, just need a 'pressed' event (polled) with x and y values.
 
 From the original K3NG site:
 
