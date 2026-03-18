@@ -61,11 +61,12 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  22
       #endif //FEATURE_STRAIGHT_KEY          
     #endif
+    
     #define GPS_RX_PIN       5   // UART1 TX = 4   UART1 RX = 5
     #define GPS_TX_PIN       4   // 4
-    #define TOUCH_X         4400     // x  300 default
+    #define TOUCH_X         304 //4400     // x  300 default
     #define TOUCH_X1        3550    // x1 3600 default
-    #define TOUCH_Y         4300     // y  300 default
+    #define TOUCH_Y         204 //4300     // y  300 default
     #define TOUCH_Y1        3550    // y1 3600 default
     #define TOUCH_BITS      (0x05) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
     #define potentiometer   26 // ADC0 = Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k

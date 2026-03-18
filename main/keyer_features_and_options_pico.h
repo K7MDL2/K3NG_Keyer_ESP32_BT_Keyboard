@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.2.27"
+#define CODE_VERSION "K7MDL-2026.3.18"
 #define eeprom_magic_number 40          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
@@ -106,13 +106,9 @@
     #define USE_RES_TOUCH // For XPT2046 resistive Touch Controller
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
-    #define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
-    //#define USE_TOUCH_TASK  // Run check_touch_buttons in a task - works only for GT911 i2c controller. ResTouch runs on core 0 only.
-    #define USE_BT_TASK // Runs in a task on core 0 or 1. For Pico, do not use this and instead use USE_CORE1 so BT runs on Core 1.
-    #define USE_CONNECT_TASK  // Run BT ConnectOrPair in a task.  If USE_CORE1 is enabled, then it is already running in a task on Core1
-    //#define USE_MAIN_TASK  // Run the Main loop in a task on core 0 (only 0). Recommend leaving this off.
-    #define USE_GPS_TASK // Run Serial GPS in task. Can run in core 1 or 0 controlled by USE_CORE1
-    #define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard
+    #define USE_CORE1  // for Pico this moves some features like GPS to run on Core 1 instead of Core 0.
+    //#define USE_TOUCH_TASK  // Not ready for Pico yet! - Runs check_touch_buttons in a task - works only for GT911 i2c controller. ResTouch runs on core 0 only.
+    #define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard  This is a Pico only setting.  ESP32 handles both.
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3

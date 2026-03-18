@@ -1454,7 +1454,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		#define PICO_FLASH_BANK_STORAGE_OFFSET (PICO_FLASH_SIZE_BYTES - PICO_FLASH_BANK_TOTAL_SIZE)
 	#endif
 	#include "EEPROM.h"
-	#include <PWMAudio.h>
+	//#include <PWMAudio.h>
 	#include "keyer.h"
 	//PWMAudio pwm;  // for sinewave audio 
 #else
@@ -1676,12 +1676,12 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		const uint8_t META_MASK  = ((uint8_t)KeyModifier::L_META) | ((uint8_t)KeyModifier::R_META);
 
 		const uint8_t MAX_KEY_DATA_SIZE = 20;
-		typedef struct {
+		struct KeyInfo {
 			uint8_t     size;
 			uint8_t     keys[MAX_KEY_DATA_SIZE];
 			uint8_t     state;
 			KeyModifier modifier;
-		} KeyInfo;
+		};
 
 		KeyInfo inf;
 		//bool new_bt_key = false;
@@ -1906,9 +1906,13 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#else
 		MCP23017 mcp23017 = MCP23017(MCP23X17_ADDR, Wire);
 	#endif
+	volatile bool paddle_irq = 0;
+	#ifndef HARDWARE_ESP32_DEV
+		void read_io_handler();
+	#endif
 #endif
 
-#if defined(HARDWARE_ESP32_DEV) || defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
+#if (defined(HARDWARE_ESP32_DEV) || defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)) && (!defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(ARDUINO_RASPBERRY_PI_PICO))
 	#include <freertos/event_groups.h>
 	//#include "freertos/semphr.h"
 	#include <freertos/task.h>
@@ -2330,7 +2334,8 @@ int32_t w = 240;
 #endif
 // ________________________________
 //
-//#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+
+// Queue for passing processed keystroke to ps2_keyboard()
 // QUEUESIZE must be a power of two
 #define QUEUESIZE       (128)
 #define QUEUEMASK       (QUEUESIZE-1)
@@ -2346,7 +2351,20 @@ int queueempty();
 int queue_available();
 void queueflush();
 int queuefull();
-//#endif  //FEATURE_BT_KEYBOARD
+
+#if defined(ARDUINO_RASPBERRY_PI_PICO_W ) && defined(FEATURE_BT_KEYBOARD)
+// queue for passing BT callback info to keystroke processing
+volatile int bt_aborted = 0;
+volatile int bt_qhead = 0;
+volatile int bt_qtail = 0;
+KeyInfo bt_queue[QUEUESIZE];
+KeyInfo bt_queuepop();
+void bt_queueadd(KeyInfo ch);
+int bt_queueempty();
+int bt_queue_available();
+void bt_queueflush();
+int bt_queuefull();
+#endif 
 
 void boop_beep();
 void check_paddles();
@@ -3069,96 +3087,79 @@ unsigned long millis_rollover = 0;
 
 	//---------------------  Connect  or Pair --------------------------------------------------------------
 
-	#if defined(USE_CONNECT_TASK) && !defined(USE_CORE1)  // if run in a task
-		void connectOrPair(void * pvParameters) {
-			/* The parameter value is expected to be 1 as 1 is passed in the
-			pvParameters value in the call to xTaskCreate() below. */
+	void connectOrPair() {
 
-			configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
-
-			debug_serial_port->println(F("\nconnectOrPair: Starting Waiting-for-Init Loop"));
-			while (start_task < 9) {
-				myDelay(200);
-				debug_serial_port->println(F("connectOrPair: Waiting-for-Init to finish"));   // wait until config settings are read into memory
-			}			
-			debug_serial_port->println(F("connectOrPair: Proceeeding with Task"));
-
-			for(;;) {
-	
-	#else   // not run in a task
-
-		void connectOrPair() {
-
-			if(1) {
-
-	#endif
-				StartOfLoop:
-				if (!bt_keyboard.connected()) {
-					uint8_t x = 0;
-					for (int i = 0; i < 6; i++) {
-							x |= configuration.addr[i];
-					}
-					
-					debug_serial_port->printf("Entering Connect or Pair\n");
-					if (x) {
-						keyboard_lost_connection_handler();
-						// There's a valid address, attempt to reconnect forever until connect or BOOTSEL
-						debug_serial_port->printf("Attempting to reconnect to %s...\n", macToString(configuration.addr, configuration.addrType));
-
-						do {
-						//if (!bt_keyboard.connected() && !BOOTSEL) {	
-							myDelay(100);
-							if (use_BLE) bt_keyboard.connectBLE(configuration.addr, configuration.addrType);
-							else bt_keyboard.connect(configuration.addr);
-							//debug_serial_port->println("Attempting to connect");
-							debug_serial_port->print("*");
-						} while (!bt_keyboard.connected() && !BOOTSEL);
-						debug_serial_port->println(F("Keyboard is Reconnected, Update system status"));
-
-						if (bt_keyboard.connected()) {							
-						//if (bt_keyboard.connected() && BT_Keyboard_Lost) {  // Transistion to connected state again
-							debug_serial_port->println(F("Reconnected!\n"));						
-							keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);
-							#if !defined(USE_CONNECT_TASK) && !defined(USE_CORE1)
-								return;
-							#else
-								goto StartOfLoop;
-							#endif
-						} else {
-							keyboard_lost_connection_handler();													
-						}
-						// Fall through to pair
-					}
-					//pinMode(bt_keyboard_LED, OUTPUT);
-					debug_serial_port->println("Entering pairing mode.  Set the peripheral to pair state");
-					bt_keyboard.clearPairing();
-					bzero(configuration.addr, 6);
-					configuration.addrType = 0;
-					config_dirty = 1;
-
-					do {
-						myDelay(10);
-						debug_serial_port->println("Scanning for New BT Keyboard Connection");
-						if (use_BLE) bt_keyboard.connectBLE();
-						else bt_keyboard.connectAny();
-						debug_serial_port->println("Waiting to connect");
-						debug_serial_port->println("^");
-					} while (!bt_keyboard.connected() && !BOOTSEL);
-
-					if (bt_keyboard.connected()) {
-						debug_serial_port->printf("Connected to device: %s\n", macToString(bt_keyboard.lastConnectedAddress(), bt_keyboard.lastConnectedAddressType()));
-						memcpy(configuration.addr, bt_keyboard.lastConnectedAddress(), sizeof(configuration.addr));
-						configuration.addrType = bt_keyboard.lastConnectedAddressType();
-						config_dirty = 1;    // EEPROM will be udpated on a schedule.
-						keyboard_connected_handler();
-					}
-					if (config_dirty) {
-						check_for_dirty_configuration();					
-					}
+		if(1) {
+			StartOfLoop:
+			if (!bt_keyboard.connected()) {
+				uint8_t x = 0;
+				for (int i = 0; i < 6; i++) {
+						x |= configuration.addr[i];
 				}
-				myDelay(50);
+				
+				debug_serial_port->printf("Entering Connect or Pair\n");
+				
+				if (x) {
+					//keyboard_lost_connection_handler();
+					// There's a valid address, attempt to reconnect forever until connect or BOOTSEL
+					debug_serial_port->printf("Attempting to reconnect to %s...\n", macToString(configuration.addr, configuration.addrType));
+
+					while (!bt_keyboard.connected() && !BOOTSEL) {
+					//if (!bt_keyboard.connected() && !BOOTSEL) {			
+						myDelay(10);					
+						if (use_BLE) bt_keyboard.connectBLE(configuration.addr, configuration.addrType);
+						else {
+							bt_keyboard.connect(configuration.addr);
+						}
+						myDelay(1000);
+						//debug_serial_port->println("Attempting to connect");
+						debug_serial_port->print("*");
+					}
+					debug_serial_port->println(F("Keyboard is Reconnected, Update system status"));
+					//myDelay(3000);	
+
+					if (bt_keyboard.connected()) {							
+					//if (bt_keyboard.connected() && BT_Keyboard_Lost) {  // Transistion to connected state again
+						debug_serial_port->println(F("Reconnected!\n"));						
+						keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);
+							return;
+
+					} else {
+						keyboard_lost_connection_handler();													
+					}
+					// Fall through to pair
+				}
+				//pinMode(bt_keyboard_LED, OUTPUT);
+				debug_serial_port->println("Entering pairing mode.  Set the peripheral to pair state");
+				bt_keyboard.clearPairing();
+				bzero(configuration.addr, 6);
+				configuration.addrType = 0;
+				config_dirty = 1;
+
+				do {
+					myDelay(10);
+					debug_serial_port->println("Scanning for New BT Keyboard Connection");
+					if (use_BLE) bt_keyboard.connectBLE();
+					else bt_keyboard.connectKeyboard();
+					myDelay(2000);
+					debug_serial_port->println("Waiting to connect");
+				} while (!bt_keyboard.connected());
+
+				if (bt_keyboard.connected()) {
+					debug_serial_port->printf("Connected to device: %s\n", macToString(bt_keyboard.lastConnectedAddress(), bt_keyboard.lastConnectedAddressType()));
+					memcpy(configuration.addr, bt_keyboard.lastConnectedAddress(), sizeof(configuration.addr));
+					configuration.addrType = bt_keyboard.lastConnectedAddressType();
+					config_dirty = 1;    // EEPROM will be udpated on a schedule.
+					keyboard_connected_handler();
+				}
+
+				if (config_dirty) {
+					check_for_dirty_configuration();					
+				}
 			}
+			//myDelay(50);
 		}
+	}
 
 #endif //FEATURE_BT_KEYBOARD
 
@@ -5667,7 +5668,7 @@ void ps2_keyboard_program_memory(byte memory_number)
 		#endif
 		#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 		while (bt_keyboard_available() == 0) {
-			myDelay(5);
+			myDelay(1);
 		#endif
 			if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
 				check_paddles();
@@ -18382,73 +18383,47 @@ void init_ESP32_GPIO_key_pins(void) {
 
 //---------------------------------------------------------------------
 #if defined(FEATURE_MCP23017_EXPANDER)
-	#define BIT_PADDLE_LEFT	  ( 1 << 0)
-	#define BIT_PADDLE_RIGHT	( 1 << 1)
-	#define BIT_STRAIGHT_KEY	( 1 << 2)
-	#include "freertos/FreeRTOS.h"
-	#include <freertos/event_groups.h>
-
 //------ For Port Expander Only ---------------------------------------------------------------
 	#ifdef HARDWARE_ESP32_DEV
-		static void IRAM_ATTR paddle_intr_handler(void *arg)
-		{
-				// On interrupt set bit in event group
-				BaseType_t hp_task, xResult;
-				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-				if (xEventGroupSetBitsFromISR(Key_Events,  BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {
-					#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-						portYIELD_FROM_ISR(hp_task);
-					#else
-						portYIELD_FROM_ISR();
-					#endif
-				}
+		static void IRAM_ATTR paddle_intr_handler(void *arg) {
+			paddle_irq = 1;
+			portYIELD_FROM_ISR();
 		}
 	#else
-		static void paddle_intr_handler(void)
-		{
-			// On interrupt set bit in event group
-			BaseType_t hp_task, xResult;
-			BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-			if (xEventGroupSetBitsFromISR(Key_Events,  BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, &hp_task) != pdFAIL) {
-					//debug_serial_port->println("paddle_intr_handler event");
-					portYIELD_FROM_ISR(hp_task);
-			}
+		static void paddle_intr_handler(void) {
+			paddle_irq = 1;
+			read_io_handler();
 		}
 	#endif
-
+		
 //-------------------------------------------------------------------
 	#ifdef HARDWARE_ESP32_DEV
-	IRAM_ATTR void read_io_handler(void *pvParameters)
-	#else
-	void read_io_handler(void *pvParameters)
-	#endif
-	{
-		//EventBits_t e_bits;
-		uint8_t bits = 0;
-		myDelay(100);
-
-		while (1)
-		{
-			if (xEventGroupWaitBits(Key_Events, BIT_PADDLE_LEFT | BIT_PADDLE_RIGHT | BIT_STRAIGHT_KEY, pdTRUE, pdFALSE, portMAX_DELAY)) {
+		IRAM_ATTR void read_io_handler(void *pvParameters) {
+			while (1) {
+				myDelay(1);
+	 #else
+		void read_io_handler(void) {
+	 #endif	
+				uint8_t bits = 0;
+				if (paddle_irq) {
+					paddle_irq = 0;
 					bits = mcp23017.readPort(MCP23017Port::A);
 					paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
 					paddle_right_state = bits & (1 << paddle_right);  // mask right paddle
 					#ifdef FEATURE_STRAIGHT_KEY
 							straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle
 					#endif
+					//debug_serial_port->print("read_io_handler event = 0x"); debug_serial_port->println(bits, HEX);
 					bits = 0x00;
-					//debug_serial_port->println("read_io_handler event");
+				}
+		#ifdef HARDWARE_ESP32_DEV
 			}
-			myDelay(1);
-		}
+		#endif		
 	}
 
 //-------------------------------------------------------------------
 
-	void init_MCP23017(void) {
-		BaseType_t xReturned;
-
-		Key_Events = xEventGroupCreate();
+	void init_MCP23017(void) {	
 		// Set the expander port A pins for the paddles to input with pullup
 		// could be bus 1 if board has a touch controller. else normally bus 0
 		//debug_serial_port->println("MCP23107: Start setup");
@@ -18462,7 +18437,7 @@ void init_ESP32_GPIO_key_pins(void) {
 		#endif
 		mcp23017.clearInterrupts();
 		
-		#if defined(HARDWARE_ESP32_DEV)
+		#if defined(HARDWARE_ESP32_DEV)			
 			// Setup CPU side GPIO interrupt for IntA
 			gpio_set_direction((gpio_num_t) MCP23017_INTA_GPIO, GPIO_MODE_INPUT);
 			//gpio_set_pull_mode((gpio_num_t) MCP23017_INTA_GPIO, GPIO_PULLUP_ONLY);  // no pullup on pin 35
@@ -18485,14 +18460,17 @@ void init_ESP32_GPIO_key_pins(void) {
 		//debug_serial_port->print(F("MCP23107: Port A read:")); debug_serial_port->println(val, HEX);
 		mcp23017.clearInterrupts();
 
-		//debug_serial_port->println(F("MCP23107: Setup read_io_handler"));
-		// create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.		
-		xReturned = xTaskCreate(read_io_handler, "read_io_handler", 1024, NULL, 6, NULL);
-		if (xReturned)
-			debug_serial_port->println(F("MCP23107: read_io_handler Setup Complete"));
-		else
-			debug_serial_port->println(F("MCP23107: read_io_handler Setup Failed"));
-		// Now any pin state change will call the handler.
+		#ifdef HARDWARE_ESP32_DEV
+			BaseType_t xReturned;
+			//debug_serial_port->println(F("MCP23107: Setup read_io_handler"));
+			// create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.		
+			xReturned = xTaskCreate(read_io_handler, "read_io_handler", 1024, NULL, 6, NULL);
+			if (xReturned)
+				debug_serial_port->println(F("MCP23107: read_io_handler Setup Complete"));
+			else
+				debug_serial_port->println(F("MCP23107: read_io_handler Setup Failed"));
+			// Now any pin state change will call the handler.
+		#endif
 	}
 #endif
 //---------------------------------------------------------------------
@@ -19600,11 +19578,6 @@ void keyboard_connected_handler() {
 #include "freertos/semphr.h"
 //#include "freertos/task.h"
 #include <queue.h>
-QueueHandle_t event_queue;
-
-inline bool    wait_for_low_event(KeyInfo &inf, TickType_t duration = portMAX_DELAY) {
-		myDelay(10);
-		return xQueueReceive(event_queue, &inf, duration); }
 
 // Consumer keys are the special media keys on most modern keyboards (mute/etc.)
 void ckb(void *cbdata, int key) {
@@ -19615,11 +19588,11 @@ void ckb(void *cbdata, int key) {
 		if (state) inf.keys[2] = key;
 		else inf.keys[2] = 0;
 		//new_bt_key = true;
-		myDelay(10);
 		last_active_time = millis();  // reset backlight timeout timer
 }
 
-// We get make/break for every key which lets us hold notes while a key is depressed
+// We get make/break for every key which lets us hold modifier keys while a regular key is depressed
+// The modifier and key values are put into a structure for compatibility with the existing ESP32 solution.
 void kb(void *cbdata, int key) {
 		static bool _holding = false;
 		static uint8_t _heldKey = 0;
@@ -19628,8 +19601,6 @@ void kb(void *cbdata, int key) {
 		inf.state = state;
 		last_active_time = millis();   // reset backlight tomeout timer
 		static KeyModifier mod_key; 
-
-		myDelay(10);
 
 		// Modifier key has been pressed.  Set hold key flag and bit mask and exit, then only process regular keys until modifier key is let up
 				switch (key) {
@@ -19695,12 +19666,13 @@ void kb(void *cbdata, int key) {
 				#ifdef DEBUG_BT_KEYBOARD
 					debug_serial_port->printf("kb2: state:%d  mod:0x%02x  keys[0]:0x%02x  keys[2]:0x%02x\n", state, inf.modifier, inf.keys[0], inf.keys[2]);					
 				#endif
-		
-		if (state) xQueueSendToBack(event_queue, &inf, 0);
+				
+		if (state) bt_queueadd(inf);
 
 		#ifdef DEBUG_BT_KEYBOARD
 			if (state) debug_serial_port->printf("Kb (callback) out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
 		#endif
+
 		end:
 }
 #endif
@@ -19744,8 +19716,7 @@ void initialize_bt_keyboard(){  // init the BT 4.2 stack for ESP32-WROOM-32 for 
 			}
 		#endif
 
-		#if defined(ARDUINO_RASPBERRY_PI_PICO_W) & !defined(USE_CORE1)
-			event_queue = xQueueCreate(10, sizeof(KeyInfo));
+		#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
 			// We can use the cbData as a flag to see if we're making or breaking a key
 			bt_keyboard.onKeyDown(kb, (void *)true);
 			bt_keyboard.onKeyUp(kb, (void *)false);
@@ -19769,10 +19740,58 @@ void initialize_bt_keyboard(){  // init the BT 4.2 stack for ESP32-WROOM-32 for 
 	#endif
 }
 
-//#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+
+#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+////////////////////////////////////////////////////////////////////////
+//  For ARDUINO_RASPBERRY_PI_PICO_W BT keyboard
+// Here is a queue to store the characters form the BT callback (kb() to the bt key processing function
+// To simplify the code, it can store a maximum of QUEUESIZE-1 characters
+// before it fills up.  What is a byte wasted between friends?
+//
+//  This is a queue of type struct inf rather then simple char values
+//
+////////////////////////////////////////////////////////////////////////
+
+void bt_queueadd(KeyInfo ch)
+{
+	bt_queue[bt_qtail++] = ch;
+	bt_qtail &= QUEUEMASK;
+	//debug_serial_port->printf("bt_queueadd: Adding to queue: modifier 0x%02x and keystroke 0x%02x\n", ch.keys[0], ch.keys[2]);
+}
+
+KeyInfo bt_queuepop()
+{
+	KeyInfo ch;
+	ch = (bt_queue[bt_qhead++]);
+	bt_qhead &= QUEUEMASK;
+	//debug_serial_port->printf("bt_QueuePop: Removing from queue: modifier 0x%02x and keystroke 0x%02x\n", ch.keys[0], ch.keys[2]);
+	return ch;
+}
+
+int bt_queuefull()
+{
+	return (((bt_qtail+1)%QUEUEMASK) == bt_qhead);
+}
+
+int bt_queueempty()
+{
+	return (bt_qhead == bt_qtail);
+}
+
+int bt_queue_available()
+{
+	return (bt_qhead - bt_qtail);
+}
+
+void bt_queueflush()
+{
+	bt_qhead = bt_qtail;
+}
+#endif
+
 ////////////////////////////////////////////////////////////////////////
 //
-// Here is a queue to store the characters that I've typed.
+// Here is a queue to store the characters from the touch and BT key processing outputs
 // To simplify the code, it can store a maximum of QUEUESIZE-1 characters
 // before it fills up.  What is a byte wasted between friends?
 //
@@ -19830,7 +19849,11 @@ volatile void myDelay(uint32_t _ms)
 	//if (_ms > t_ms) {
 	//	_ms = t_ms;
 	//}
-	vTaskDelay(portTICK_PERIOD_MS * _ms);
+	#ifdef PROJECT_ESP32_COMPILER
+		vTaskDelay(portTICK_PERIOD_MS * _ms);
+	#else
+		delay(_ms);
+	#endif
 	//vTaskDelay(portTICK_PERIOD_MS * 2);
 }
 
@@ -20414,6 +20437,7 @@ void process_buttons() { // (uint8_t button_ID) {
 			for(;;)
 			{
 	#endif
+				
 				// Check for touch action, determine if they are for a configured button, or something else
 				static uint32_t scanTime = millis();
 				static uint32_t tpTime = millis();
@@ -20432,11 +20456,11 @@ void process_buttons() { // (uint8_t button_ID) {
 								t_x = tp.points[0].x;
 								t_y = tp.points[0].y;
 							}
-							//if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);
+							if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);
 						#endif
 
 						#ifdef USE_RES_TOUCH
-							//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
+							//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex							
 							uint16_t threshold = 20;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also
 							#ifdef DEBUG_TOUCH
 								debug_serial_port->print(F("GetTouch1: Check for pressed - "));
@@ -25110,10 +25134,10 @@ void tft_backlight(int state) {
 					} while (!bt_keyboard.connected()  && !BOOTSEL);
 					debug_serial_port->println("Keyboard is Connected");
 				#endif
+				myDelay(20);
 
 	#endif
-
-				myDelay(20);
+				
 				//debug_serial_port->println("check_bt_keyboard: Start");
 				#if 0 // 0 = scan codes retrieval, 1 = augmented ASCII retrieval  - Not working right Oct 2025
 							uint8_t ch = bt_keyboard.wait_for_ascii_char();
@@ -25153,10 +25177,12 @@ void tft_backlight(int state) {
 					static bool CMD_KEY = false;
 					static bool last_key = true;
 					uint8_t modifier = 0;
-					TickType_t duration = 1;  // do not block when not in a task
+					
 					#ifdef HARDWARE_ESP32_DEV
+						TickType_t duration = 1;  // do not block when not in a task
 						TickType_t repeat_period_;
 					#else
+						uint32_t duration = 1;  // do not block when not in a task
 						uint32_t repeat_period_;
 					#endif
 
@@ -25168,7 +25194,8 @@ void tft_backlight(int state) {
 					do {
 						#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
 							//duration = portMAX_DELAY; // blocking - can wait forever when running inside a task
-							ret = wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+							//ret = wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+							ret = bt_queue_available();						
 						#else
 							#if defined(HARDWARE_ESP32_DEV) && defined(USE_BT_TASK)  // rescan on loss of connection unless SCAN_ONCE is set
 								duration = 1;
@@ -25195,6 +25222,7 @@ void tft_backlight(int state) {
 						
 						#ifndef USE_BT_TASK
 							if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much
+							else inf = bt_queuepop();
 						#endif
 						myDelay(10);
 
@@ -25533,7 +25561,7 @@ void tft_backlight(int state) {
 						last_key = keyDN;
 						keyDN = false;
 						ch = 0;
-						myDelay(5);
+						//myDelay(5);
 					} while (ret);
 				#endif
 				#ifdef USE_BT_TASK
@@ -25991,7 +26019,7 @@ void initialize_st7789_lcd()
 							touchCalibration_invert_x = parameters[4] & 0x02;
 							touchCalibration_invert_y = parameters[4] & 0x04;
 							*/
-					uint16_t calibrationData[5] = {TOUCH_X, TOUCH_X1, TOUCH_Y, TOUCH_Y1, TOUCH_BITS};  // My own results are pretty good.
+					uint16_t calibrationData[5] = {TOUCH_X, TOUCH_X1, TOUCH_Y, TOUCH_Y1, TOUCH_BITS};  // My own results are pretty good.					
 					// can run this to cal at startup.
 					#ifdef CAL_TOUCH
 						lcd.calibrateTouch(calibrationData, TFT_WHITE, TFT_RED, 15);
@@ -26660,7 +26688,7 @@ void mainloop(void)
 
 				#if defined(FEATURE_TOUCH_DISPLAY)
 					#ifndef USE_TOUCH_TASK
-							check_touch_buttons();
+						check_touch_buttons();
 					#endif
 					if (button_active) process_buttons();  //button_ID);  // process any touch item
 				#endif
@@ -26679,8 +26707,7 @@ void mainloop(void)
 				#ifdef FEATURE_GPS
 					#if !defined(USE_GPS_TASK) && !defined(USE_CORE1)
 						check_gps();
-					#endif
-					//if (g->update) process_gps(g->grid, g.force, g->source);   // 1 = GPS source
+					#endif					
 					if (g->update) process_gps();  //use temp_gs struct
 				#endif
 
@@ -26800,9 +26827,6 @@ void mainloop(void)
 #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
 	TaskHandle_t xHandle_BT = NULL;
 #endif
-#if defined(FEATURE_BT_KEYBOARD) && defined(USE_CONNECT_TASK)
-	TaskHandle_t xHandle_connectOrPair = NULL;
-#endif
 #if defined(USE_MAIN_TASK)
 	TaskHandle_t xHandle_MAIN = NULL;
 #endif
@@ -26822,10 +26846,6 @@ void TaskMonitor(void *pvParameters) {
 		#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
 			UBaseType_t mark3 = uxTaskGetStackHighWaterMark(xHandle_BT);
 			Serial.print("BT Keyboard Task High Water Mark: "); Serial.print(mark3); Serial.print(" words ("); Serial.print(mark3 * sizeof(StackType_t)); Serial.println(" bytes)");
-		#endif
-		#if defined(FEATURE_BT_KEYBOARD) && defined(USE_CONNECT_TASK) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
-			UBaseType_t mark4 = uxTaskGetStackHighWaterMark(xHandle_connectOrPair);
-			Serial.print("BT Connect Task High Water Mark: "); Serial.print(mark4); Serial.print(" words ("); Serial.print(mark3 * sizeof(StackType_t)); Serial.println(" bytes)");
 		#endif
 		#if defined(USE_MAIN_TASK)
 			UBaseType_t mark5 = uxTaskGetStackHighWaterMark(xHandle_MAIN);
@@ -26921,7 +26941,7 @@ void setup_esp()
 
 	// --------------- GPS -----------------------------------------------------------------------------------
 
-	#if defined(FEATURE_GPS) && defined(USE_GPS_TASK)
+	#if defined(FEATURE_GPS) && defined(USE_GPS_TASK) && defined(HARDWARE_ESP32_DEV)
 		#if !defined(USE_CORE1)
 			Serial.println("Starting GPS Task on Core 0");
 			xReturned = xTaskCreate(
@@ -26932,7 +26952,7 @@ void setup_esp()
 				2, /* Priority at which the task is created. */
 				&xHandle_GPS);
 		#endif
-		#if defined(HARDWARE_ESP32_DEV) && defined(USE_CORE1)
+		#if defined(USE_CORE1)
 			Serial.println("Starting GPS Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
 				check_gps,      /* Function that implements the task. */
@@ -26947,7 +26967,7 @@ void setup_esp()
 
 	// ------------------ TOUCH --------------------------------------------------------------------------------
 
-	#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
+	#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK) && defined(HARDWARE_ESP32_DEV)
 		#if !defined(USE_CORE1)
 			Serial.println("Starting Touch Task on Core 0");
 			xReturned = xTaskCreate(
@@ -26958,7 +26978,7 @@ void setup_esp()
 				3, /* Priority at which the task is created. */
 				&xHandle_TOUCH);
 		#endif
-		#if defined(HARDWARE_ESP32_DEV) && defined(USE_CORE1)
+		#if defined(USE_CORE1)
 			Serial.println("Starting Touch Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
 				check_touch_buttons,      /* Function that implements the task. */
@@ -26973,12 +26993,11 @@ void setup_esp()
 
 	// ---------------- BT Keyboard ----------------------------------------------------------------------------------
 
-	#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
-
-		#if defined(ARDUINO_RASPBERRY_PI_PICO)
-				#error "BT Keyboard only runs on W models.  Disable FEATURE_BT_KEYBOARD"
-		#endif
-
+	#if defined(ARDUINO_RASPBERRY_PI_PICO)
+			#error "BT Keyboard only runs on W models.  Disable FEATURE_BT_KEYBOARD"
+	#endif
+	
+	#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK) && defined(HARDWARE_ESP32_DEV)
 		#if !defined(USE_CORE1)
 			Serial.println("Starting Check BT Keyboard Task on Core 0");
 			xReturned = xTaskCreate(
@@ -26989,7 +27008,7 @@ void setup_esp()
 				4,/* Priority at which the task is created. */
 				&xHandle_BT); //use core 0
 		#endif
-		#if defined(HARDWARE_ESP32_DEV) && defined(USE_CORE1)  // keep bt on core 0, too many interactions with TFT_eSPI and such
+		#if defined(USE_CORE1)  // keep bt on core 0, too many interactions with TFT_eSPI and such
 			Serial.println("Starting Check BT Keyboard Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
 				check_bt_keyboard,       /* Function that implements the task. */
@@ -27002,20 +27021,6 @@ void setup_esp()
 		#endif
 	#endif
 
-	// ---------------BT Connect or Pair Loop  (Pico Only) ------------------------------------------------------
-
-	#if defined(FEATURE_BT_KEYBOARD) && defined(USE_CONNECT_TASK) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(USE_CORE1) // Run on Core 0
-		Serial.println("Starting BT Connect Task on Core 0");
-		xReturned = xTaskCreate(
-			connectOrPair,       /* Function that implements the task. */
-			"BT_Conn",     /* Text name for the task. */
-			2000,           /* Stack size in words, not bytes. */
-			( void * ) 1,    /* Parameter passed into the task. */
-			5,/* Priority at which the task is created. */
-			&xHandle_connectOrPair);
-
-	#endif
-
 	// ------------------ TASK_MONITOR ----------------------------------------------------------------------------
 
 	#ifdef TASK_HIGH_WATER_MONITOR
@@ -27025,7 +27030,7 @@ void setup_esp()
 
 	// ---------------Main Loop -----------------------------------------------------------------------------------
 
-	#if defined(USE_MAIN_TASK)  // Run on Core 0
+	#if defined(USE_MAIN_TASK)  && defined(HARDWARE_ESP32_DEV) // Run on Core 0
 		Serial.println("Starting Main Loop Task on Core 0");
 		xReturned = xTaskCreate(
 			mainloop,       /* Function that implements the task. */			
@@ -27038,9 +27043,7 @@ void setup_esp()
 }
 
 void setup_1() {
-	#if (defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO_W)) && defined(USE_CORE1)
-		BaseType_t xReturned;
-		
+	#if (defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO_W)) && defined(USE_CORE1)		
 		debug_serial_port->println(F("Starting Setup on Core 1"));
 		while (!start_core1) {
 			myDelay(10);
@@ -27048,104 +27051,8 @@ void setup_1() {
 		}			
 		debug_serial_port->println(F("Proceeeding with Setup on Core 1"));
 
-		#if defined(FEATURE_BT_KEYBOARD) && !defined(ARDUINO_RASPBERRY_PI_PICO) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
-			debug_serial_port->println("Start BT Setup");
-			event_queue = xQueueCreate(10, sizeof(KeyInfo));
-			// We can use the cbData as a flag to see if we're making or breaking a key
-			bt_keyboard.onKeyDown(kb, (void *)true);
-			bt_keyboard.onKeyUp(kb, (void *)false);
-			// Consumer keys are the special function ones like "mute" or "home"
-			bt_keyboard.onConsumerKeyDown(ckb, (void *)true);
-			bt_keyboard.onConsumerKeyUp(ckb, (void *)false);
-			check_last_bt_addr_in_EEPROM(); // See about reconnecting
+		// ------------------------ TOUCH  --------------------------------------------------------------------
 
-			if (use_BLE) bt_keyboard.begin(true);   // BLE
-			else bt_keyboard.begin();  // BT Classic
-
-			if (bt_keyboard_LED && (bt_keyboard_LED != LED_BUILTIN)) {  // with wireless, do not use the Cypress module LED on it. Use PIN_LED for RP2350
-				pinMode(bt_keyboard_LED, OUTPUT);
-				digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
-				debug_serial_port->print(F("BT Keyboard connected LED inactive state = ")); debug_serial_port->println(bt_keyboard_LED_pin_inactive_state);
-			}
-
-			debug_serial_port->println(F("BT Setup Complete on Core 1"));
-			queueflush();
-		#endif
-
-		// --------------------- GPS TASK -----------------------------------------------------------------------
-
-		#if defined(FEATURE_GPS) && defined(USE_GPS_TASK)
-			Serial.println("Starting GPS Task on Core 1");
-			xReturned = xTaskCreate(
-				check_gps,      /* Function that implements the task. */
-				"Chk_GPS",          /* Text name for the task. */
-				2000,      /* Stack size in words, not bytes. */
-				( void * ) 1,    /* Parameter passed into the task. */
-				2, /* Priority at which the task is created. */
-				&xHandle_GPS);
-		#endif
-
-		// ------------------------ TOUCH TASK --------------------------------------------------------------------
-
-		#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
-			Serial.println("Starting TOUCH Task on Core 1");
-			xReturned = xTaskCreate(
-				check_touch_buttons,      /* Function that implements the task. */
-				"Chk_Touch",          /* Text name for the task. */
-				2000,      /* Stack size in words, not bytes. */
-				( void * ) 1,    /* Parameter passed into the task. */
-				3, /* Priority at which the task is created. */
-				&xHandle_TOUCH);
-		#endif
-
-		// ------------------------ BT TASK --------------------------------------------------------------------
-
-		#if defined(ARDUINO_RASPBERRY_PI_PICO) && defined(USE_BT_TASK)
-				#error "BT Keyboard only runs on W models.  Disable FEATURE_BT_KEYBOARD"
-		#endif
-
-		#if defined(FEATURE_BT_KEYBOARD) && !defined(ARDUINO_RASPBERRY_PI_PICO) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && defined(USE_BT_TASK)
-			Serial.println("Starting BT Task on Core 1");
-			xReturned = xTaskCreate(
-				check_bt_keyboard,       /* Function that implements the task. */
-				"ChkBTKeys",          /* Text name for the task. */
-				8000,      /* Stack size in words, not bytes. */
-				( void * ) 1,    /* Parameter passed into the task. */
-				4,/* Priority at which the task is created. */
-				&xHandle_BT);
-			//#if defined(PICO_CYW43_SUPPORTED) && (bt_keyboard_LED != LED_BUILTIN)
-			#if defined(ARDUINO_RASPBERRY_PI_PICO_W) && (bt_keyboard_LED == LED_BUILTIN)
-				#error "Cannot use LED_BUILTIN on Core 1, reassign it to a normal GPIO pin."
-				// The PicoW WiFi chip controls the LED, and only core 0 can make calls to it safely
-				//vTaskCoreAffinitySet(xHandle_BT, 1 << 0);  // BT LED status on Pico2W is on the CY43
-			#endif
-		#endif
-
-		// ---------------BT Connect or Pair Loop ----------------------------------------------------
-
-		// Run on Core 0
-		#if defined(FEATURE_BT_KEYBOARD) && !defined(ARDUINO_RASPBERRY_PI_PICO) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && defined(USE_CONNECT_TASK_X)
-			Serial.println("Starting BT Connect Task on Core 1");
-			xReturned = xTaskCreate(
-				connectOrPair,       /* Function that implements the task. */
-				"BT_Conn",     /* Text name for the task. */
-				2000,           /* Stack size in words, not bytes. */
-				( void * ) 1,    /* Parameter passed into the task. */
-				5,/* Priority at which the task is created. */
-				&xHandle_connectOrPair);
-		#endif
-	#else
-		#if defined(USE_MAIN_TASK_)  // Run on Core 0
-		Serial.println("Starting Main Loop Task on Core 0");
-		BaseType_t xReturned = xTaskCreate(
-			mainloop,       /* Function that implements the task. */
-			"MainLoop",     /* Text name for the task. */
-			4000,           /* Stack size in words, not bytes. */
-			NULL, //( void * ) 1,    /* Parameter passed into the task. */
-			5,/* Priority at which the task is created. */
-			&xHandle_MAIN);
-		#endif
-		debug_serial_port->println("Setup disabled on Core 1");
 	#endif
 }
 
@@ -27155,37 +27062,15 @@ void loop_1() {
 		Serial.println("Starting Core 1 loop1()");
 					
 		for (;;) {
-			#ifdef TASK_PROCESS_STATUS_X
-				ps();
-			#endif
 
-			#if defined(FEATURE_BT_KEYBOARD) && !defined(ARDUINO_RASPBERRY_PI_PICO) && defined(ARDUINO_RASPBERRY_PI_PICO_W)// !defined(USE_CONNECT_TASK)
-				if (!bt_keyboard.connected() && ! BOOTSEL) {
-					connectOrPair();
-				}
-				if (!bt_keyboard.connected()) {
-					debug_serial_port->println(F("No BT Keyboards found"));
-					#ifdef FEATURE_DISPLAY
-						lcd_center_print_timed("No BT Keyboards", 1, 2000);
-					#endif
-				}
-				#if !defined(USE_BT_TASK)
-					check_bt_keyboard();
-				#endif
-				myDelay(10);
-			#endif
-			
-			#if defined(FEATURE_GPS) && !defined(USE_GPS_TASK) // call here if not run in a task.
+			#if defined(FEATURE_GPS) // call here if not run in a task.
 				check_gps();
 			#endif
+			myDelay(100);
 
-			#if !defined(FEATURE_GPS) && !defined(USE_CONNECT_TASK) && !defined(USE_BT_TASK)
-				myDelay(1000);
-			#endif
-		}		
-
-		int getFreeHeap = rp2040.getFreeHeap();
-		debug_serial_port->print(F("Loop 1 Free Heap:")); debug_serial_port->println(getFreeHeap);
+			//int getFreeHeap = rp2040.getFreeHeap();
+			//debug_serial_port->print(F("Loop 1 Free Heap:")); debug_serial_port->println(getFreeHeap);
+		}
 	#else
 		//debug_serial_port->print(",");
 		//int getFreeHeap = rp2040.getFreeHeap();
@@ -27283,11 +27168,12 @@ void app_main(void)
 			mainloop();
 		#endif
 
-		#if defined(FEATURE_BT_KEYBOARD) && !defined(USE_CONNECT_TASK) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(USE_CORE1)
+		#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
 			if (!bt_keyboard.connected() && ! BOOTSEL) {
 				connectOrPair();
 			}
 		#endif
+		
 		#if defined(FEATURE_BT_KEYBOARD)
 			//Serial.print(".");
 			//myDelay(1000);
