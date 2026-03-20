@@ -2146,6 +2146,7 @@ void memorycheck();
 void tft_backlight(int state);  // toggles the backlight GPIO pin on and off from keyboard or long touch
 void setup_1();
 void loop_1();
+void core1_run();
 #ifdef USE_MAIN_TASK
 	void mainloop(void * pvParameters);
 #else
@@ -2380,9 +2381,9 @@ void check_ptt_tail();
 int uppercase (int charbytein);
 void service_send_buffer(byte no_print);
 int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit);
-bool BT_Keyboard_Lost = false;
-bool Keyboard_Disconnected_signal = false;
-bool Keyboard_Connected_signal = false;
+volatile bool BT_Keyboard_Lost = false;
+volatile bool Keyboard_Disconnected_signal = false;
+volatile bool Keyboard_Connected_signal = false;
 void BT_Keyboard_Status(void);
 void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration_ms = 0UL);
 void s_noTone(uint8_t sidetone_line_pin_num);
@@ -3085,50 +3086,73 @@ unsigned long millis_rollover = 0;
 		}
 	}
 
-	//---------------------  Connect  or Pair --------------------------------------------------------------
+	//---------------------  Connect or Pair --------------------------------------------------------------
 
-	void connectOrPair() {
+	void connectOrPair() {		
+		static bool scan_once= 0;  // set to 1 after initial connection
+		static bool last_scan_once = 0;
 
-		if(1) {
+		if (1) {
 			StartOfLoop:
 			if (!bt_keyboard.connected()) {
+				if (scan_once) {
+					if (!last_scan_once) {	// limit to one message 				
+						last_scan_once = 1;	
+						BT_Keyboard_Lost = 1;
+						Keyboard_Disconnected_signal = 1;
+						Keyboard_Connected_signal = 0;				
+					}
+					#ifdef SCAN_ONCE
+						if(scan_once) return;   // do not reconnect						
+					#endif			
+				}
 				uint8_t x = 0;
 				for (int i = 0; i < 6; i++) {
 						x |= configuration.addr[i];
-				}
-				
-				debug_serial_port->printf("Entering Connect or Pair\n");
-				
+				}				
+				//debug_serial_port->printf("Entering Connect or Pair\n");				
 				if (x) {
-					//keyboard_lost_connection_handler();
 					// There's a valid address, attempt to reconnect forever until connect or BOOTSEL
-					debug_serial_port->printf("Attempting to reconnect to %s...\n", macToString(configuration.addr, configuration.addrType));
-
-					while (!bt_keyboard.connected() && !BOOTSEL) {
-					//if (!bt_keyboard.connected() && !BOOTSEL) {			
+					#ifdef USE_BLE
+						debug_serial_port->printf("\nAttempting to reconnect to BLE keyboard at address %s", macToString(configuration.addr, configuration.addrType));														
+					#else
+						debug_serial_port->printf("\nAttempting to reconnect to BT Classic keyboard at address %s", macToString(configuration.addr, configuration.addrType));														
+					#endif
+					
+					while (!bt_keyboard.connected() && !BOOTSEL) {     // reconnect after loss					
+					//if (!bt_keyboard.connected() && !BOOTSEL) {     // reconnect after loss					
 						myDelay(10);					
 						if (use_BLE) bt_keyboard.connectBLE(configuration.addr, configuration.addrType);
-						else {
-							bt_keyboard.connect(configuration.addr);
-						}
+						else bt_keyboard.connect(configuration.addr);
+						#if defined(USE_CORE1) && defined(USE_CONNECT_ON_CORE1)
+							core1_run();	// give some core 1 workloads run time between scans				
+						#endif
 						myDelay(1000);
 						//debug_serial_port->println("Attempting to connect");
 						debug_serial_port->print("*");
 					}
-					debug_serial_port->println(F("Keyboard is Reconnected, Update system status"));
-					//myDelay(3000);	
+					
+					if (bt_keyboard.connected()) {											
+						debug_serial_port->println(F("\nKeyboard is Reconnected, Update system status"));
+						scan_once = 1;
+						BT_Keyboard_Lost = 0;
+						Keyboard_Disconnected_signal = 0;
+						Keyboard_Connected_signal = 1;
 
-					if (bt_keyboard.connected()) {							
-					//if (bt_keyboard.connected() && BT_Keyboard_Lost) {  // Transistion to connected state again
-						debug_serial_port->println(F("Reconnected!\n"));						
-						keyboard_connected_handler();  //digitalWrite(LED_BUILTIN, l);
-							return;
-
+						return;
 					} else {
-						keyboard_lost_connection_handler();													
-					}
+						debug_serial_port->println(F("Keyboard disconnected!\n"));
+						BT_Keyboard_Lost = 1;
+						Keyboard_Disconnected_signal = 1;
+						Keyboard_Connected_signal = 0;				
+					}					
 					// Fall through to pair
 				}
+				
+				if (!BOOTSEL) {
+					if (last_scan_once) return;
+				}
+
 				//pinMode(bt_keyboard_LED, OUTPUT);
 				debug_serial_port->println("Entering pairing mode.  Set the peripheral to pair state");
 				bt_keyboard.clearPairing();
@@ -3151,6 +3175,7 @@ unsigned long millis_rollover = 0;
 					configuration.addrType = bt_keyboard.lastConnectedAddressType();
 					config_dirty = 1;    // EEPROM will be udpated on a schedule.
 					keyboard_connected_handler();
+					scan_once = 1;
 				}
 
 				if (config_dirty) {
@@ -19555,9 +19580,9 @@ void pairing_handler(uint32_t pid) {
 
 #endif
 
-#ifdef FEATURE_BT_KEYBOARD
+#ifdef FEATURE_BT_KEYBOARD  // these are used by both ESP32 and Pico
 void keyboard_lost_connection_handler() {
-		debug_serial_port->println(F("====> Lost connection with keyboard <===="));
+		debug_serial_port->println(F("\n====> Lost connection with keyboard <===="));
 		BT_Keyboard_Lost = true;
 		if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
 		Keyboard_Disconnected_signal = true;
@@ -25095,10 +25120,10 @@ void tft_backlight(int state) {
 
 // --------------------------------------------------------------
 #if defined(FEATURE_BT_KEYBOARD)
-	#if !defined(USE_BT_TASK) || (!defined(HARDWARE_ESP32_DEV) && !defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(ARDUINO_RASPBERRY_PI_PICO))
+	#if !defined(USE_BT_TASK)
 		void check_bt_keyboard(void) {
 
-			#if defined(ARDUINO_RASPBERRY_PI_PICO_W_X) || defined(ARDUINO_RASPBERRY_PI_PICO)
+			#if defined(ARDUINO_RASPBERRY_PI_PICO_W_X)
 					if (!bt_keyboard.connected()) {
 						connectOrPair();
 					}
@@ -25110,7 +25135,7 @@ void tft_backlight(int state) {
 				done = 1;
 			}
 			
-	#elif defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+	#else
 		void check_bt_keyboard(void * pvParameters) {
 
 			/* The parameter value is expected to be 1 as 1 is passed in the
@@ -25126,14 +25151,6 @@ void tft_backlight(int state) {
 			debug_serial_port->println(F("check_bt_keyboard: Proceeeding with Task"));
 
 			for(;;) {
-
-				#if (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)) && !defined(USE_CONNECT_TASK)
-					do {
-						connectOrPair();
-						myDelay(20);
-					} while (!bt_keyboard.connected()  && !BOOTSEL);
-					debug_serial_port->println("Keyboard is Connected");
-				#endif
 				myDelay(20);
 
 	#endif
@@ -26068,7 +26085,6 @@ void initialize_st7789_lcd()
 			if (Keyboard_Disconnected_signal) {
 				debug_serial_port->println(F("Lost BT Keyboard Connection"));
 				#ifdef FEATURE_DISPLAY
-					//clear_display_row(1);
 					lcd_center_print_timed("Lost Connection", 1, 3000);
 				#endif
 				Keyboard_Disconnected_signal = false;
@@ -26077,10 +26093,9 @@ void initialize_st7789_lcd()
 		else{
 			if (Keyboard_Connected_signal) {
 				#ifdef FEATURE_DISPLAY
-					lcd_center_print_timed("Keyboard Connected", 1, 3000);
-					//clear_display_row(1);
+					lcd_center_print_timed("Keyboard Connected", 1, 3000);					
 				#endif
-				debug_serial_port->println(F("BT Keyboard Connected"));
+				//debug_serial_port->println(F("BT Keyboard Connected"));
 				Keyboard_Connected_signal = false;
 			}
 		}
@@ -26335,7 +26350,9 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 	void check_gps() {
 		if (1)
 		{
-			if (ptt_line_activated) return;  // do not interrupt CW send timing
+			#ifndef USE_CORE1
+				if (ptt_line_activated) return;  // do not interrupt CW send timing
+			#endif
 
 #endif
 
@@ -27056,26 +27073,41 @@ void setup_1() {
 	#endif
 }
 
+// called mainly by loop1()
+// Also called in ConnectOrPair between BT scans if both USE_CORE1 and USE_CONNECT_ON_CORE1 enabled
+void core1_run() {	
+	#if defined(FEATURE_GPS) && defined(USE_CORE1) 
+		check_gps();
+	#endif
+}
+
 void loop_1() {
-	#if (defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO_W)) && defined(USE_CORE1)
+	static uint32_t last_free_check = 0;
+
+	#if (defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO_W))
 		
 		Serial.println("Starting Core 1 loop1()");
 					
 		for (;;) {
 
-			#if defined(FEATURE_GPS) // call here if not run in a task.
-				check_gps();
+			#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && defined(USE_CONNECT_ON_CORE1)
+				if (!bt_keyboard.connected() && ! BOOTSEL) {
+					connectOrPair();
+				}
 			#endif
-			myDelay(100);
-
-			//int getFreeHeap = rp2040.getFreeHeap();
-			//debug_serial_port->print(F("Loop 1 Free Heap:")); debug_serial_port->println(getFreeHeap);
+			
+			core1_run();  // run other core 1 workloads. This is also called between ConnectoOrPair BT scans.
+			
+			if (millis() > last_free_check + 300000) {
+				last_free_check = millis();
+				int getFreeHeap = rp2040.getFreeHeap();
+				debug_serial_port->print(F("Loop 1 Free Heap check every 5 minutes:")); debug_serial_port->println(getFreeHeap);
+			}
 		}
 	#else
 		//debug_serial_port->print(",");
 		//int getFreeHeap = rp2040.getFreeHeap();
 		//debug_serial_port->print(F("Loop 1 Free Heap:")); debug_serial_port->println(getFreeHeap);
-		//if (start_task > 20) mainloop(); 
 		myDelay(10000);
 	#endif
 }
@@ -27168,19 +27200,12 @@ void app_main(void)
 			mainloop();
 		#endif
 
-		#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+		#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(USE_CONNECT_ON_CORE1)
 			if (!bt_keyboard.connected() && ! BOOTSEL) {
 				connectOrPair();
 			}
 		#endif
 		
-		#if defined(FEATURE_BT_KEYBOARD)
-			//Serial.print(".");
-			//myDelay(1000);
-			#ifdef USE_BT_TASK
-				//check_bt_keyboard((void*)1);
-			#endif
-		#endif
 	} // end loop
 
 	//if( xReturned == pdPASS )

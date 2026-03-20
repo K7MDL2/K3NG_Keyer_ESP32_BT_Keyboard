@@ -106,11 +106,11 @@
     #define USE_RES_TOUCH // For XPT2046 resistive Touch Controller
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
-    #define USE_CORE1  // for Pico this moves some features like GPS to run on Core 1 instead of Core 0.
+    #define USE_CORE1  // for Pico this moves GPS to run on Core 1 instead of Core 0.  IF USE_CONNECT_ON_CORE1 enabled, then shares idle time between BT scans
     //#define USE_TOUCH_TASK  // Not ready for Pico yet! - Runs check_touch_buttons in a task - works only for GT911 i2c controller. ResTouch runs on core 0 only.
+    //#define SCAN_ONCE  // Only look for keyboard at startup, do to try to do a blocking reconnect.  Undefine to always requires a keyboard to be connected.
+    #define USE_CONNECT_ON_CORE1  // run ConnectOrPair on core 1 - allows connect and reconnect in the background
     #define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard  This is a Pico only setting.  ESP32 handles both.
-    //#define FEATURE_SINEWAVE_SIDETONE
-    //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
