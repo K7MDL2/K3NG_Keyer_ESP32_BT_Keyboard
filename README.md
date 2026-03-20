@@ -64,7 +64,11 @@ This is a 3.5" 480x320 TFT with a single panel of 16 keys.  If you press the Mem
 
 <img width="627" height="385" alt="image" src="https://github.com/user-attachments/assets/da19e558-d734-4327-8b30-68130b4608d2" />
 
-This is a 3.2" 320x240 TFT with 4 rows of 4 keys (not counting the Fx key to change rows).  Has the identical 16 key assignments.
+This is a 3.5" 320x480 TFT (Pioc2W) with 4 rows of 4 keys (not counting the Fx key to change rows).  Has the identical 16 key assignments.
+
+![320x480-K7MDL-Feb-17-2026](https://github.com/user-attachments/assets/cdd84d6c-8700-46c9-adaf-570311156e7a)
+
+This is a 3.2" 320x240 TFT (ESP32) with 4 rows of 4 keys (not counting the Fx key to change rows).  Has the identical 16 key assignments.
 
 <img width="1146" height="610" alt="image" src="https://github.com/user-attachments/assets/b4512298-544b-4bc3-94d5-6bd83fdc7d14" />
 
