@@ -27073,6 +27073,14 @@ void setup_1() {
 	#endif
 }
 
+#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+extern "C" char *sbrk(int i);
+void printFreeMemory() {
+    char stack_dummy = 0;
+    Serial.printf("Approx free memory: %d bytes\n", &stack_dummy - sbrk(0));
+}
+#endif
+
 // called mainly by loop1()
 // Also called in ConnectOrPair between BT scans if both USE_CORE1 and USE_CONNECT_ON_CORE1 enabled
 void core1_run() {	
@@ -27102,6 +27110,7 @@ void loop_1() {
 				last_free_check = millis();
 				int getFreeHeap = rp2040.getFreeHeap();
 				debug_serial_port->print(F("Loop 1 Free Heap check every 5 minutes:")); debug_serial_port->println(getFreeHeap);
+				printFreeMemory();
 			}
 		}
 	#else
@@ -27127,14 +27136,6 @@ Each task will loop around waiting for its flag to start in the correct order
 
 */
 // --------------------------------------------------------------------------------------------
-
-#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-extern "C" char *sbrk(int i);
-void printFreeMemory() {
-    char stack_dummy = 0;
-    Serial.printf("Approx free memory: %d bytes\n", &stack_dummy - sbrk(0));
-}
-#endif
 
 //void loop()  // This replaces arduino loop which is located in main.ino.  For ESP32 app_main is called instead.
 

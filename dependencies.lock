@@ -570,6 +570,6 @@ direct_dependencies:
 - espressif/spi_bus
 - idf
 - panigrah/esp32-idf-hd44780
-manifest_hash: 281694cc1ef192c868e134fa1e0c198ceece312413d571b231c6a13b655a3f20
+manifest_hash: ce02a4dbae1dfc85e0b7e8ac54bd9db55409c61dfe975ce74a4328c6f2786208
 target: esp32
 version: 2.0.0

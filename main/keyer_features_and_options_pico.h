@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.3.18"
+#define CODE_VERSION "K7MDL-2026.3.19"
 #define eeprom_magic_number 40          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
