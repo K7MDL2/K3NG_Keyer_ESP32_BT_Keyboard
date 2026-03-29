@@ -58,6 +58,8 @@
 
 #define BACKLIGHT_TIMEOUT 360  // Display backlight timeout in seconds. 
 
+#define DECLINATION  (0.0)  // decimal degrees.minutes  Ex: 14.83 is East +14 degrees 58 minutes converted to decimal
+
 #if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
   #define PS2_KEYBOARD_NORMAL 0
 #endif //FEATURE_PS2_KEYBOARD

@@ -14,7 +14,6 @@
 //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
 //#define FEATURE_BUTTONS
 //#define FEATURE_COMMAND_MODE
-#define DECLINATION  (0.0)  // decimal degrees.minutes  Ex: 14.83 is East +14 degrees 58 minutes converted to decimal
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
 #define FEATURE_MEMORIES             // on the Arduino Due, you must have FEATURE_EEPROM_E24C1024 and E24C1024 EEPROM hardware in order to compile this
 #define FEATURE_MEMORY_MACROS
@@ -66,10 +65,10 @@
 // Otherwise this value is passed to the project level CMakeLists.txt which in turns tells the library files which config to use, and for the main file.
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
-//#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
+#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
 //#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
-#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 //#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
@@ -92,7 +91,11 @@
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_STRAIGHT_KEY
     #define FEATURE_TFT_DISPLAY    
-    //#define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scannning (K380, Rii)
+    //#define SCAN_ONCE   // limits scan cycle to startup only, best for keyboards that reconnect with scannning (K380, Rii)
+    #define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
+    #define USE_MAIN_TASK // runs main loop in a task
+    #define USE_BT_TASK     
+    //#define USE_GPS_TASK
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used. Valid values are 4800, 9600, 38400, 57600, 115200

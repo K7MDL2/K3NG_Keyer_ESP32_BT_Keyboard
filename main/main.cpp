@@ -2340,7 +2340,7 @@ int32_t w = 240;
 // QUEUESIZE must be a power of two
 #define QUEUESIZE       (128)
 #define QUEUEMASK       (QUEUESIZE-1)
-#define DEBUG false
+
 volatile int aborted = 0;
 volatile int qhead = 0;
 volatile int qtail = 0;
@@ -2871,9 +2871,6 @@ PRIMARY_SERIAL_CLS * primary_serial_port;
 PRIMARY_SERIAL_CLS * debug_serial_port;
 
 #if defined(FEATURE_GPS) && !defined(GPS_TEST)
-	//#include <SerialPIO.h>
-	//SerialPIO GPS_SERIAL_PORT(NOPIN, GPS_RX_PIN, 32);
-	//GPS_SERIAL_CLS * gps_serial_port;
 	#define gps_serial_port Serial2
 #endif
 
@@ -3110,7 +3107,7 @@ unsigned long millis_rollover = 0;
 				for (int i = 0; i < 6; i++) {
 						x |= configuration.addr[i];
 				}				
-				//debug_serial_port->printf("Entering Connect or Pair\n");				
+				
 				if (x) {
 					// There's a valid address, attempt to reconnect forever until connect or BOOTSEL
 					#ifdef USE_BLE
@@ -3119,8 +3116,7 @@ unsigned long millis_rollover = 0;
 						debug_serial_port->printf("\nAttempting to reconnect to BT Classic keyboard at address %s", macToString(configuration.addr, configuration.addrType));														
 					#endif
 					
-					while (!bt_keyboard.connected() && !BOOTSEL) {     // reconnect after loss					
-					//if (!bt_keyboard.connected() && !BOOTSEL) {     // reconnect after loss					
+					while (!bt_keyboard.connected() && !BOOTSEL) {     // reconnect after loss										
 						myDelay(10);					
 						if (use_BLE) bt_keyboard.connectBLE(configuration.addr, configuration.addrType);
 						else bt_keyboard.connect(configuration.addr);
@@ -3129,7 +3125,7 @@ unsigned long millis_rollover = 0;
 						#endif
 						myDelay(1000);
 						//debug_serial_port->println("Attempting to connect");
-						debug_serial_port->print("*");
+						//debug_serial_port->print("*");
 					}
 					
 					if (bt_keyboard.connected()) {											
@@ -3181,8 +3177,7 @@ unsigned long millis_rollover = 0;
 				if (config_dirty) {
 					check_for_dirty_configuration();					
 				}
-			}
-			//myDelay(50);
+			}			
 		}
 	}
 
@@ -25238,8 +25233,12 @@ void tft_backlight(int state) {
 						//bt_keyboard.get_ascii_char();
 						
 						#ifndef USE_BT_TASK
-							if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much
-							else inf = bt_queuepop();
+							#ifdef ARDUINO_RASPBERRY_PI_PICO_W
+								if (!ret) return  // there seems to be a lot of junk in the buffer so this is not all used that much
+								else inf = bt_queuepop();
+							#else
+								if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much
+							#endif
 						#endif
 						myDelay(10);
 
