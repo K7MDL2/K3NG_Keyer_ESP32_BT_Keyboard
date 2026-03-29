@@ -3124,8 +3124,8 @@ unsigned long millis_rollover = 0;
 							core1_run();	// give some core 1 workloads run time between scans				
 						#endif
 						myDelay(1000);
-						//debug_serial_port->println("Attempting to connect");
-						//debug_serial_port->print("*");
+						//debug_serial_port->println(F("Attempting to connect"));
+						//debug_serial_port->print(F("*"));
 					}
 					
 					if (bt_keyboard.connected()) {											
@@ -4744,7 +4744,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 			case 4: y1 = SCROLL_BOX_ROW5; break;
 			default: break;
 		}
-		//debug_serial_port->print("lcd_center_print_timed(): string = "); debug_serial_port->println(lcd_print_string);
+		//debug_serial_port->print(F("lcd_center_print_timed(): string = ")); debug_serial_port->println(lcd_print_string);
 		lcd.setTextPadding(2);
 		lcd.fillRect(SCROLL_BOX_LEFT_SIDE, y1-FONT_HEIGHT, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
 		lcd.setTextColor(TFT_WHITE);
@@ -5412,7 +5412,7 @@ void check_ps2_keyboard()
 																		default: next_baud = 4800; break;
 																	}
 
-																	debug_serial_port->print("New Serial Port Baud Rate is "); debug_serial_port->println(next_baud);
+																	debug_serial_port->print(F("New Serial Port Baud Rate is ")); debug_serial_port->println(next_baud);
 																	configuration.gps_baud = next_baud;
 
 																	#if !defined(GPS_TEST)
@@ -5543,12 +5543,12 @@ void check_ps2_keyboard()
 																	int len = read_memory(GRID_WORKING_MEMORY-1, memory_str);
 																	if (len >=8) len = 8;
 																	memory_str[len] = '\0';  // replace the 255 with null
-																	//debug_serial_port->print("Read memory str = "); debug_serial_port->println(memory_str);
-																	//debug_serial_port->print("Read memory len = "); debug_serial_port->println(len);
+																	//debug_serial_port->print(F("Read memory str = ")); debug_serial_port->println(memory_str);
+																	//debug_serial_port->print(F("Read memory len = ")); debug_serial_port->println(len);
 																	validate_grid(memory_str, tmp_str);  // returns a proper 4-8 grid, or empty grid if bad input.
 																	strcpy(configuration.Mem_GridSq, tmp_str);
 																	config_dirty = 1;
-																	debug_serial_port->print("Read Validated Memory Grid = "); debug_serial_port->println(configuration.Mem_GridSq);
+																	debug_serial_port->print(F("Read Validated Memory Grid = ")); debug_serial_port->println(configuration.Mem_GridSq);
 
 																	g->update = 1;
 																	g->grid = configuration.Mem_GridSq;
@@ -5572,8 +5572,8 @@ void check_ps2_keyboard()
 																	char memory_str[LCD_COLUMNS] = {};
 																	int len = read_memory(DECLINATION_WORKING_MEMORY-1, memory_str);
 																	memory_str[len] = '\0';  // replace the 255 with null
-																	//debug_serial_port->print("Read memory str = "); debug_serial_port->println(memory_str);
-																	//debug_serial_port->print("Read memory len = "); debug_serial_port->println(len);
+																	//debug_serial_port->print(F("Read memory str = ")); debug_serial_port->println(memory_str);
+																	//debug_serial_port->print(F("Read memory len = ")); debug_serial_port->println(len);
 																	process_compass(true, false);  // force a memory update
 																}
 																break;
@@ -8846,8 +8846,8 @@ int read_memory(byte memory_number, char memory_char[LCD_COLUMNS]) {
 			eeprom_byte_read = EEPROM.read(y);                    // read memory characters from EEPROM
 			if (eeprom_byte_read == 255) {
 				fill_char = 1;           // if it is the 'end of stored memory' character set a flag
-				//debug_serial_port->print("j="); debug_serial_port->println(j);
-				//debug_serial_port->print("k="); debug_serial_port->println(k);
+				//debug_serial_port->print(F("j=")); debug_serial_port->println(j);
+				//debug_serial_port->print(F("k=")); debug_serial_port->println(k);
 				if (k == 0) k = j;   // capture end for string length fucntions
 			}
 			if (!fill_char) memory_char[j] = eeprom_byte_read;    // save the retrieved character in the character array
@@ -18433,7 +18433,7 @@ void init_ESP32_GPIO_key_pins(void) {
 					#ifdef FEATURE_STRAIGHT_KEY
 							straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle
 					#endif
-					//debug_serial_port->print("read_io_handler event = 0x"); debug_serial_port->println(bits, HEX);
+					//debug_serial_port->print(F("read_io_handler event = 0x")); debug_serial_port->println(bits, HEX);
 					bits = 0x00;
 				}
 		#ifdef HARDWARE_ESP32_DEV
@@ -19379,7 +19379,7 @@ void initialize_gps_port(void) {
 
 				gps_serial_port.begin(gps_serial_port_baud_rate, SERIAL_8N1);
 
-				debug_serial_port->print("Intialized GPS Serial Port on Pin "); debug_serial_port->println(GPS_RX_PIN);
+				debug_serial_port->print(F("Intialized GPS Serial Port on Pin ")); debug_serial_port->println(GPS_RX_PIN);
 			#else
 				gps_serial_port.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
 			#endif
@@ -20372,7 +20372,7 @@ void process_buttons() { // (uint8_t button_ID) {
 				if (button_row >= NUM_BUTTON_ROWS) {
 					button_row = 0;
 				}
-				//debug_serial_port->print("Switch to Row "); debug_serial_port->println(button_row);
+				//debug_serial_port->print(F("Switch to Row ")); debug_serial_port->println(button_row);
 				refresh_button_row(button_row);
 				return;
 			}
@@ -25233,11 +25233,10 @@ void tft_backlight(int state) {
 						//bt_keyboard.get_ascii_char();
 						
 						#ifndef USE_BT_TASK
+							
+							if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much
 							#ifdef ARDUINO_RASPBERRY_PI_PICO_W
-								if (!ret) return  // there seems to be a lot of junk in the buffer so this is not all used that much
-								else inf = bt_queuepop();
-							#else
-								if (!ret) return;  // there seems to be a lot of junk in the buffer so this is not all used that much
+							else inf = bt_queuepop();							
 							#endif
 						#endif
 						myDelay(10);
@@ -25251,7 +25250,7 @@ void tft_backlight(int state) {
 
 						#ifdef DEBUG_BT_KEYBOARD_A
 							if (inf.size > 2 && inf.size < 9 && inf.keys[2] !=0)  {
-								debug_serial_port->print(" Keys = ");
+								debug_serial_port->print(F(" Keys = "));
 								for (int n = 0; n < inf.size; n++) {   // print out each char in each keys string
 										debug_serial_port->printf("%02X:",inf.keys[n]);
 								}
@@ -25955,7 +25954,7 @@ void initialize_st7789_lcd()
 						lcd.drawCentreString("Touch screen to test!",lcd.width()/2, lcd.height()/2, 2);
 						for (int i=0; i< 5; i++) {
 							debug_serial_port->print(calibrationData[i]);
-							debug_serial_port->print(" ");
+							debug_serial_port->print(F(" "));
 						}
 						debug_serial_port->println("");
 					}
@@ -25971,11 +25970,11 @@ void initialize_st7789_lcd()
 					lcd.setTextColor(TFT_BLACK, TFT_WHITE);
 					lcd.setTextSize(2);
 					//lcd.println("  calibration run");
-					debug_serial_port->println("Touch calibration Mode");
+					debug_serial_port->println(F("Touch calibration Mode"));
 
 					// check file system
 					if (!SPIFFS.begin()) {
-						debug_serial_port->println("formatting file system");
+						debug_serial_port->println(F("formatting file system"));
 
 						SPIFFS.format();
 						SPIFFS.begin();
@@ -25985,24 +25984,24 @@ void initialize_st7789_lcd()
 					if (SPIFFS.exists(CALIBRATION_FILE)) {
 						fs::File f = SPIFFS.open(CALIBRATION_FILE, "r");
 						if (f) {
-							debug_serial_port->println("Cal file exists");
+							debug_serial_port->println(F("Cal file exists"));
 							if (f.readBytes((char *)calibrationData, 14) == 14) {
 								calDataOK = 1;
-								debug_serial_port->println("Cal file data OK");
+								debug_serial_port->println(F("Cal file data OK"));
 							}
 							f.close();
 						}
 					}
 					if (!calDataOK) {
 						// calibration data valid
-						debug_serial_port->println("Cal file data OK, start calibration");
+						debug_serial_port->println(F("Cal file data OK, start calibration"));
 						lcd.setTouch(calibrationData);
 					} else {
 						// data not valid. recalibrate
-						debug_serial_port->println("Cal file data NOT OK, recalibrate");
+						debug_serial_port->println(F("Cal file data NOT OK, recalibrate"));
 						lcd.calibrateTouch(calibrationData, TFT_WHITE, TFT_RED, 15);
 						// store data
-						debug_serial_port->println("Store Cal data");
+						debug_serial_port->println(F("Store Cal data"));
 						fs::File f = SPIFFS.open(CALIBRATION_FILE, "w");
 						if (f) {
 							f.write((const unsigned char *)calibrationData, 14);
@@ -26252,12 +26251,12 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 			debug_serial_port->print(F("ms Raw Lat="));
 			debug_serial_port->print(gps.location.rawLat().negative ? "-" : "+");
 			debug_serial_port->print(gps.location.rawLat().deg);
-			debug_serial_port->print("[+");
+			debug_serial_port->print(F("[+"));
 			debug_serial_port->print(gps.location.rawLat().billionths);
 			debug_serial_port->print(F(" billionths],  Raw Long="));
 			debug_serial_port->print(gps.location.rawLng().negative ? "-" : "+");
 			debug_serial_port->print(gps.location.rawLng().deg);
-			debug_serial_port->print("[+");
+			debug_serial_port->print(F("[+"));
 			debug_serial_port->print(gps.location.rawLng().billionths);
 			debug_serial_port->print(F(" billionths],  Lat="));
 			debug_serial_port->print(gps.location.lat(), 6);
@@ -26323,7 +26322,7 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 			}
 			config_dirty = 1;  // changed ignore_gps in struct memory
 			#ifdef DEBUG_GPS
-				debug_serial_port->print("Ignore GPS=");debug_serial_port->println(configuration.ignore_gps);
+				debug_serial_port->print(F("Ignore GPS="));debug_serial_port->println(configuration.ignore_gps);
 			#endif
 		}
 	}
@@ -26361,7 +26360,7 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 			struct tm timeinfo;
 
 			#ifdef DEBUG_GPS_X
-				debug_serial_port->print("Check GPS.  Ignore (0=Use, 1=ignore) : ");debug_serial_port->println(configuration.ignore_gps);
+				debug_serial_port->print(F("Check GPS.  Ignore (0=Use, 1=ignore) : "));debug_serial_port->println(configuration.ignore_gps);
 			#endif
 
 			uint8_t gps_hour = 0;
@@ -26397,7 +26396,7 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 					//if (isAlphaNumeric(c) || ispunct(c) || c == '\r' || c == '\n') {  // valid data at correct baud rate
 						gps.encode(gps_serial_port.read());
 						#ifdef DEBUG_GPS_X
-							debug_serial_port->print(".");
+							debug_serial_port->print(F("."));
 						#endif
 						stop_msg = false;
 						lost_gps_timer = millis();
@@ -26588,8 +26587,8 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 
 		#if defined (FEATURE_MEMORIES)
 		//strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
-		debug_serial_port->print("Storing Grid "); debug_serial_port->print(grid);
-		debug_serial_port->print(" into Memory "); debug_serial_port->println(GRID_MEMORY);
+		debug_serial_port->print(F("Storing Grid ")); debug_serial_port->print(grid);
+		debug_serial_port->print(F(" into Memory ")); debug_serial_port->println(GRID_MEMORY);
 		open_eeprom();
 		for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
 			EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(grid[x]));
@@ -26627,7 +26626,7 @@ void mainloop(void)
 {
 	if (1) {
 #endif		
-		//debug_serial_port->print(".");
+		//debug_serial_port->print(F("."));
 		myDelay(1);
 
 		#ifdef OPTION_WATCHDOG_TIMER
@@ -26902,7 +26901,7 @@ void setup_esp()
 	setup_called = true;   // do not come back here again
 
 	initialize_serial_ports();        // Goody - this is available for testing startup issues	
-	debug_serial_port->println("Start Main Setup");
+	debug_serial_port->println(F("Start Main Setup"));
 	#if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
 		initialize_i2c();
 	#endif
@@ -27113,7 +27112,7 @@ void loop_1() {
 			}
 		}
 	#else
-		//debug_serial_port->print(",");
+		//debug_serial_port->print(F(","));
 		//int getFreeHeap = rp2040.getFreeHeap();
 		//debug_serial_port->print(F("Loop 1 Free Heap:")); debug_serial_port->println(getFreeHeap);
 		myDelay(10000);
@@ -27156,9 +27155,9 @@ void app_main(void)
 
 	#if (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO))
 		#if defined(PICO_CYW43_SUPPORTED)
-			debug_serial_port->println("Board Type is Pico_W or Pico_2_W");
+			debug_serial_port->println(F("Board Type is Pico_W or Pico_2_W"));
 		#else
-			debug_serial_port->println("Board Type is Pico or Pico_W");
+			debug_serial_port->println(F("Board Type is Pico or Pico_W"));
 		#endif
 	#endif
 
