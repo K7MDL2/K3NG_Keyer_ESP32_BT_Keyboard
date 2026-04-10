@@ -2129,7 +2129,7 @@ void popup(bool show);
 void sinewave_interrupt_compute();
 void initialize_sinewave_generator();
 void initialize_tonsin();
-volatile void myDelay(uint32_t _ms);
+void myDelay(uint32_t _ms);
 void setup_esp();
 int print_memory(byte memory_number, char *mem_string);
 void check_gps();
@@ -2342,8 +2342,8 @@ int32_t w = 240;
 #define QUEUEMASK       (QUEUESIZE-1)
 
 volatile int aborted = 0;
-volatile int qhead = 0;
-volatile int qtail = 0;
+int qhead = 0;
+int qtail = 0;
 volatile char queue[QUEUESIZE];
 char queuepop();
 void queueadd(const char ch);
@@ -19863,7 +19863,7 @@ void queueflush()
 }
 //#endif // BT_KEYBOARD
 
-volatile void myDelay(uint32_t _ms)
+void myDelay(uint32_t _ms)
 {
 	//const uint32_t t_ms 3000;
 	//if (_ms > t_ms) {
@@ -27191,7 +27191,7 @@ void app_main(void)
 		current_time = millis();
 
    		if (current_time - last_task_start_time >= task_start_time) {						
-			if (start_task < 250) start_task++;  // count to 250 then stop.  Each tasj=k will be assigned it sown priority to trigger on
+			if (start_task < 250) start_task += 1;  // count to 250 then stop.  Each tasj=k will be assigned it sown priority to trigger on
 			last_task_start_time = current_time;		
 		}
 

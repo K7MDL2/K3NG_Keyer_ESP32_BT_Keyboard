@@ -24,33 +24,58 @@
 
 // Only ONE line below should be uncommented to define your setup.  Add extra lines and files as needed.
 
-#if defined(PROJECT_ESP32_COMPILER)
+#if defined(PROJECT_ESP32_COMPILER)  // ESP-IDF
      #include "../../main/keyer_features_and_options_esp32_dev.h"
-#else
-     #include "../../main/keyer_features_and_options_pico.h"
-#endif
-
-       // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
-#if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD || CONFIG_DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)
-     //#define FEATURE_IDEASPARK_LCD                   // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
-     #include <../TFT_e_SPI_Custom_Config/User_Setup_IdeaSpark_170x320.h>
-#elif (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD || CONFIG_DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD)
-     //#define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
-     #include <../TFT_e_SPI_Custom_Config/User_Setup_DIYMalls_240x320.h>
-#elif (DISPLAY_TYPE == M5STACK_CORE2_LCD || CONFIG_DISPLAY_TYPE == M5STACK_CORE2_LCD)
-     //#define FEATURE_M5STACK_CORE2 // NOT working yet.
-     #include <../TFT_e_SPI_Custom_Config/User_Setup_M5Stack_Core2.h>
-#elif (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD || CONFIG_DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD)
-     //#define FEATURE_TFT_HOSYOND_320x480_LCD   
-     #include <../TFT_e_SPI_Custom_Config/User_Setup_Hosyond_320x480.h>
-#elif (DISPLAY_TYPE == TFT_320x480_CAP_LCD || CONFIG_DISPLAY_TYPE == TFT_320x480_CAP_LCD)
-     //#define FEATURE_TFT_320x480_CAP_LCD     
-     #include <../TFT_e_SPI_Custom_Config/User_Setup_ST7796_320x480_Cap.h>
-#elif (DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD || CONFIG_DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD)
-     //#define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
-     #include <../TFT_e_SPI_Custom_Config/User_Setup_Pico_320x480_res.h>    
-#else
-     #include <User_Setup.h>           // Default setup is root library folder
+     // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+     #if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD || CONFIG_DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)
+          //#define FEATURE_IDEASPARK_LCD                   // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
+          #include <../TFT_e_SPI_Custom_Config/User_Setup_IdeaSpark_170x320.h>
+     #elif (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD || CONFIG_DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD)
+          //#define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+          #include <../TFT_e_SPI_Custom_Config/User_Setup_DIYMalls_240x320.h>
+     #elif (DISPLAY_TYPE == M5STACK_CORE2_LCD || CONFIG_DISPLAY_TYPE == M5STACK_CORE2_LCD)
+          //#define FEATURE_M5STACK_CORE2 // NOT working yet.
+          #include <../TFT_e_SPI_Custom_Config/User_Setup_M5Stack_Core2.h>
+     #elif (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD || CONFIG_DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD)
+          //#define FEATURE_TFT_HOSYOND_320x480_LCD   
+          #include <../TFT_e_SPI_Custom_Config/User_Setup_Hosyond_320x480.h>
+     #elif (DISPLAY_TYPE == TFT_320x480_CAP_LCD || CONFIG_DISPLAY_TYPE == TFT_320x480_CAP_LCD)
+          //#define FEATURE_TFT_320x480_CAP_LCD     
+          #include <../TFT_e_SPI_Custom_Config/User_Setup_ST7796_320x480_Cap.h>     
+     #else
+          #include <User_Setup.h>           // Default setup is root library folder
+     #endif
+#else  // Arduino IDE
+     #if defined(ARDUINO_ESP32_DEV)  // ESP boards
+          #include "keyer_features_and_options_esp32_dev.h"
+          // for K7MDL version on ESP32-WROOM32 using esp-idf, tested on pins 21/22 i2c pins and a 4x20 display
+          #if (DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD || CONFIG_DISPLAY_TYPE == TFT_1_9_IDEASPARK_LCD)
+               //#define FEATURE_IDEASPARK_LCD                   // K7MDL version on ESP32-WROOM with onboard 1.9" 320x170 color LCD graphics display, uses SPI bus  
+               #include <User_Setups/User_Setup_IdeaSpark_170x320.h>
+          #elif (DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD || CONFIG_DISPLAY_TYPE == TFT_3_2_DIYMALLS_LCD)
+               //#define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics     display, uses SPI bus     
+               #include <User_Setups/User_Setup_DIYMalls_240x320.h>
+          #elif (DISPLAY_TYPE == M5STACK_CORE2_LCD || CONFIG_DISPLAY_TYPE == M5STACK_CORE2_LCD)
+               //#define FEATURE_M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+               #include <User_Setups/User_Setup_M5Stack_Core2.h>
+          #elif (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD || CONFIG_DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD)
+               //#define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display,         uses SPI bus     
+               #include <User_Setups/User_Setup_Hosyond_320x480.h>
+          #elif (DISPLAY_TYPE == TFT_320x480_CAP_LCD || CONFIG_DISPLAY_TYPE == TFT_320x480_CAP_LCD)
+               //#define FEATURE_TFT_320x480_CAP_LCD     
+               #include <User_Setups/User_Setup_ST7796_320x480_Cap.h>
+          #else
+               #include <User_Setup.h>           // Default setup is root library folder
+          #endif
+     #elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO) || defined(PICO_PLATFORM) // Pico boards
+          //#include "keyer_features_and_options_pico.h"
+          //#if (DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD || CONFIG_DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD)
+               //#define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
+               #include <User_Setups/User_Setup_Pico_320x480_res.h>
+          //#else
+          //     #include <User_Setup.h>           // Default setup is root library folder
+          //#endif
+     #endif
 #endif
 
 //#include <User_Setups/Setup1_ILI9341.h>  // Setup file for ESP8266 configured for my ILI9341

@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "K7MDL-2026.3.19"
+#define CODE_VERSION "K7MDL-2026.4.10"
 #define eeprom_magic_number 40          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
@@ -69,7 +69,7 @@
 
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_320x480_CAP_LCD
-    #define FEATURE_TFT_320x480_CAP_LCD    // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
+    #define FEATURE_TFT_320x480_CAP_LCD    // 
     //#define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2

@@ -30,7 +30,7 @@
 // #define HARDWARE_YCCC_SO2R_MINI // edit these files: keyer_pin_settings_yccc_so2r_mini.h, keyer_settings_yccc_so2r_mini.h, keyer_features_and_options_yccc_so2r_mini.h
 
 // Auto select platform for Pico
-#if defined(PICO_PLATFORM)
+#if defined(PICO_PLATFORM) && !defined(ARDUINO_ESP32_DEV)
   #if defined(PICO_CYW43_SUPPORTED)
     #define ARDUINO_RASPBERRY_PI_PICO_W // used for Pico2W also - has BT and WiFi
   #else
@@ -38,7 +38,7 @@
   #endif
 #endif
 
-#if defined(PROJECT_ESP32_COMPILER)
+#if defined(PROJECT_ESP32_COMPILER) || defined(ARDUINO_ESP32_DEV)
   #define HARDWARE_ESP32_DEV
 #endif
 
