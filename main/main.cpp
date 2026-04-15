@@ -20090,7 +20090,7 @@ void refresh_button_row(uint8_t row) {
 				btn[key[t].btn_idx].p_btn.drawButton(true, key[t].text_on);
 			} else {
 				//debug_serial_port->printf("Hold OFF %s  Row:%d  NumKeys:%d  Position:%d\n", key[t].text_off, row, NUM_KEYS, t);
-				btn[key[t].btn_idx].p_btn.drawButton(false, "ab"); //key[t].text_off);
+				btn[key[t].btn_idx].p_btn.drawButton(false, key[t].text_off);
 			}
 		}
 	}
