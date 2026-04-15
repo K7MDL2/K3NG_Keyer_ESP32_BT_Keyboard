@@ -85,11 +85,11 @@
 // #define TFT_WIDTH  128
 // #define TFT_WIDTH  172 // ST7789 172 x 320
 // #define TFT_WIDTH  170 // ST7789 170 x 320
-//#define TFT_WIDTH  320 // ST7789 240 x 240 and 240 x 320
+#define TFT_WIDTH  320 // ST7789 240 x 240 and 240 x 320
 // #define TFT_HEIGHT 160
 // #define TFT_HEIGHT 128
 // #define TFT_HEIGHT 240 // ST7789 240 x 240
-//#define TFT_HEIGHT 480 // ST7789 240 x 320
+#define TFT_HEIGHT 480 // ST7789 240 x 320
 // #define TFT_HEIGHT 240 // GC9A01 240 x 240
 
 // For ST7735 ONLY, define the type of display, originally this was based on the

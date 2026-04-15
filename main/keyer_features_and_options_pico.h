@@ -109,7 +109,7 @@
     //#define USE_TOUCH_TASK  // Not ready for Pico yet! - Runs check_touch_buttons in a task - works only for GT911 i2c controller. ResTouch runs on core 0 only.
     //#define SCAN_ONCE  // Only look for keyboard at startup, do to try to do a blocking reconnect.  Undefine to always requires a keyboard to be connected.
     #define USE_CONNECT_ON_CORE1  // run ConnectOrPair on core 1 - allows connect and reconnect in the background
-    //#define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard  This is a Pico only setting.  ESP32 handles both.
+    #define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard  This is a Pico only setting.  ESP32 handles both.
     #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.

@@ -19967,8 +19967,7 @@ void initialize_display() {
 					//lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2+(FONT_HEIGHT/4));
 					lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2);
 				#endif
-				//lcd.drawString("V:" + String(CODE_VERSION), SCROLL_BOX_CENTER, SCROLL_BOX_ROW3+(FONT_HEIGHT/4));
-				lcd.drawString("V:" + String(CODE_VERSION), SCROLL_BOX_CENTER, SCROLL_BOX_ROW3);
+				lcd.drawString(CODE_VERSION, SCROLL_BOX_CENTER, SCROLL_BOX_ROW3);
 				myDelay(2000);
 			#else
 				lcd_center_print_timed("K3NG Keyer", 0, 4000);
@@ -20083,15 +20082,15 @@ void popup(bool show)
 
 #ifdef FEATURE_TOUCH_DISPLAY
 void refresh_button_row(uint8_t row) {
-	lcd.setFreeFont(BUTTON_FONT);
 	for (int t=0; t < NUM_KEYS-1 ; t++) {
 		if (key[t].row == row && key[t].row < NUM_BUTTON_ROWS) {
+			lcd.setFreeFont(BUTTON_FONT);
 			if (key[t].hold) {
 				//debug_serial_port->printf("Hold ON %s  Row:%d  NumKeys:%d  Position:%d\n", key[t].text_on, row, NUM_KEYS, t);
 				btn[key[t].btn_idx].p_btn.drawButton(true, key[t].text_on);
 			} else {
 				//debug_serial_port->printf("Hold OFF %s  Row:%d  NumKeys:%d  Position:%d\n", key[t].text_off, row, NUM_KEYS, t);
-				btn[key[t].btn_idx].p_btn.drawButton(false, key[t].text_off);
+				btn[key[t].btn_idx].p_btn.drawButton(false, "ab"); //key[t].text_off);
 			}
 		}
 	}
@@ -25920,8 +25919,6 @@ void initialize_st7789_lcd()
 
 	void initialize_TFT_display(void)
 	{
-		//xMutex = xSemaphoreCreateMutex();  // crete a mutex object
-
 		#ifdef FEATURE_M5STACK_CORE2
 			//lcd.setRotation(1);
 			//lcd.invertDisplay(true);
