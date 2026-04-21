@@ -74,6 +74,7 @@
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define FEATURE_TFT_DISPLAY
+    #define LCD_ROTATION 3
     #define TFT_320_480
     #define TOUCH_BUTTON_16
     #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled.
@@ -96,6 +97,7 @@
     #define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
+    #define LCD_ROTATION 3
     //#define TOUCH_BUTTON_16   Must have FEATURE_TOUCH_DISPLAY enabled
     #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define TFT_320_480  // sets screen layout appropriate for this resolution

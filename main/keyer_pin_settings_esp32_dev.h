@@ -173,7 +173,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_X1        3598    // x1 3600 default
     #define TOUCH_Y         345     // y  300 default
     #define TOUCH_Y1        3549    // y1 3600 default
-    #define TOUCH_BITS      (0x01) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
+    #define TOUCH_BITS      (0x01) // param bits are bool: inverty=bit2, invertx=bit1, rotate=bit0
     #define potentiometer    0 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define tx_key_line_1   18 // (high = key down/tx on)
     #define tx_key_line_2   16 
