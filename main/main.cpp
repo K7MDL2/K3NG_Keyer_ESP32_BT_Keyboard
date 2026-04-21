@@ -4272,7 +4272,7 @@ void update_icons(void) {
 			}
 
 			if (time_disp_updated) {
-				lcd.drawString(time_str, TIME_ANCHOR, STATUS_BAR_Y_CURSOR);
+				lcd.drawString(time_str, TIME_ANCHOR, STATUS_BAR_Y_CURSOR, STATUS_BAR_FONT);
 				time_disp_updated = false;
 			}
 		#endif
@@ -4281,12 +4281,12 @@ void update_icons(void) {
 		{
 			sprintf(tx_str, "T%d", last_tx);
 			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-			lcd.drawString(tx_str, TX_NUM_ANCHOR, row);   // blank out space
+			lcd.drawString(tx_str, TX_NUM_ANCHOR, row, STATUS_BAR_FONT);   // blank out space
 
 			sprintf(tx_str, "T%d", configuration.current_tx);
 			if (!key_tx) lcd.setTextColor(TFT_RED, TFT_BLACK);  // enabled
 			else lcd.setTextColor(TFT_GREEN, TFT_BLACK); // disabled
-			lcd.drawString(tx_str, TX_NUM_ANCHOR, row); // update display
+			lcd.drawString(tx_str, TX_NUM_ANCHOR, row, STATUS_BAR_FONT); // update display
 
 			last_tx = configuration.current_tx;  // remember last state
 			last_key_tx = key_tx;
@@ -4295,18 +4295,18 @@ void update_icons(void) {
 		if (stop_msg_changed || strcmp(grid_sq_str, last_GridSq) != 0)  // connect status and/or grid changed, update display
 		{
 			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-			lcd.drawString(last_GridSq, GRID_ANCHOR, row);   // blank out space
+			lcd.drawString(last_GridSq, GRID_ANCHOR, row, STATUS_BAR_FONT);   // blank out space
 
 			if (!configuration.ignore_gps && !stop_msg) {
 				lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);
-				lcd.drawString(grid_sq_str, GRID_ANCHOR, row); // update display
+				lcd.drawString(grid_sq_str, GRID_ANCHOR, row, STATUS_BAR_FONT); // update display
 			} else {
 				#ifndef FEATURE_BT_KEYBOARD
 					lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);
 				#else
 					lcd.setTextColor(TFT_GREY, TFT_BLACK);
 				#endif
-				lcd.drawString(grid_sq_str, GRID_ANCHOR, row); // update display
+				lcd.drawString(grid_sq_str, GRID_ANCHOR, row, STATUS_BAR_FONT); // update display
 			}
 
 			strcpy(last_GridSq, grid_sq_str);  // write grid square
@@ -4325,8 +4325,8 @@ void update_icons(void) {
 			lcd.setTextColor(TFT_CYAN, TFT_BLACK);
 			itoa(configuration.wpm, WPM, 10);
 			strncat(WPM, "wpm", 6);
-			lcd.drawString("       ", WPM_ANCHOR, row);  // erase old
-			lcd.drawString(WPM,       WPM_ANCHOR, row);  // WPM rate
+			lcd.drawString("       ", WPM_ANCHOR, row, STATUS_BAR_FONT);  // erase old
+			lcd.drawString(WPM,       WPM_ANCHOR, row, STATUS_BAR_FONT);  // WPM rate
 			last_WPM = configuration.wpm;
 		}
 
@@ -4510,10 +4510,10 @@ void service_display() {
 						//lcd.setTextPadding(2);
 						//int16_t w = lcd.textWidth(lcd_scroll_buffer[y]);  // width of string with font specified
 						//lcd.drawRect(SCROLL_TEXT_LEFT_SIDE, y1, w, FONT_HEIGHT, TFT_BLACK);
-						lcd.drawString(lcd_scroll_buffer[y], SCROLL_TEXT_LEFT_SIDE, y1);
+						lcd.drawString(lcd_scroll_buffer[y], SCROLL_TEXT_LEFT_SIDE, y1, GFXFF);
 					#else  // do char by char
 						char c = lcd_scroll_buffer[y].charAt(x);
-						lcd.drawChar(c, x1, y1);  // use char in scroll buffer and place at x1, y1 on graphics screen
+						lcd.drawChar(c, x1, y1, GFXFF);  // use char in scroll buffer and place at x1, y1 on graphics screen
 					#endif
 
 					//lcd.setCursor(x1, y1);
@@ -4748,7 +4748,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 		lcd.setTextPadding(2);
 		lcd.fillRect(SCROLL_BOX_LEFT_SIDE, y1-FONT_HEIGHT, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
 		lcd.setTextColor(TFT_WHITE);
-		lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1);
+		lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, GFXFF);
 		//lcd.setTextDatum(SCROLL_BOX_DATUM);   // restore to generic datum
 	#else
 		lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
@@ -18301,17 +18301,17 @@ void display_heading(void) {
 		strcpy(last_heading, h_str);
 		lcd.setFreeFont(SCROLL_BOX_FONT);
 		lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-		lcd.drawString(last_heading, 10, 40);
+		lcd.drawString(last_heading, 10, 40, GFXFF);
 		lcd.setTextColor(TFT_WHITE, TFT_BLUE);
-		lcd.drawString(h_str, 10, 40);
+		lcd.drawString(h_str, 10, 40, GFXFF);
 
 		sprintf(h_str, "(Dec is %3.3f Deg)", declination);
 		strcpy(last_dec, h_str);
 		lcd.setFreeFont(SCROLL_BOX_FONT);
 		lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-		lcd.drawString(last_dec, 10, 70);
+		lcd.drawString(last_dec, 10, 70, GFXFF);
 		lcd.setTextColor(TFT_WHITE, TFT_BLUE);
-		lcd.drawString(h_str, 10, 70);
+		lcd.drawString(h_str, 10, 70, GFXFF);
 
 		update_heading_display_flag = true;
 	#endif
@@ -19961,18 +19961,18 @@ void initialize_display() {
 			#ifdef FEATURE_TFT_DISPLAY
 				lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
 				lcd.setFreeFont(SCROLL_BOX_FONT);
-				//lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1+(FONT_HEIGHT/4));
-				lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1);
+				//lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1+(FONT_HEIGHT/4), GFXFF);
+				lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1, GFXFF);
 				#ifdef FEATURE_BT_KEYBOARD
-					//lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2+(FONT_HEIGHT/4));
-					lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2);
+					//lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2+(FONT_HEIGHT/4), GFXFF);
+					lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2, GFXFF);
 				#endif
-				lcd.drawString(CODE_VERSION, SCROLL_BOX_CENTER, SCROLL_BOX_ROW3);
+				lcd.drawString(CODE_VERSION, SCROLL_BOX_CENTER, SCROLL_BOX_ROW3, GFXFF);
 				myDelay(2000);
 			#else
 				lcd_center_print_timed("K3NG Keyer", 0, 4000);
 				lcd_center_print_timed("BT Keyboard Search..", 1, 4000);
-				if (LCD_ROWS > 3) lcd_center_print_timed("V:" + String(CODE_VERSION), 3, 4000);      // display the code version on the fourth line of the display
+				if (LCD_ROWS > 3) lcd_center_print_timed(CODE_VERSION, 3, 4000);      // display the code version on the fourth line of the display
 			#endif
 
 			#ifdef OPTION_PERSONALIZED_STARTUP_SCREEN
@@ -19981,7 +19981,7 @@ void initialize_display() {
 				} else if (LCD_ROWS > 2) {
 					#ifdef FEATURE_TFT_DISPLAY
 						lcd.setTextDatum(MC_DATUM);
-						lcd.drawString(custom_startup_field, SCROLL_BOX_CENTER, SCROLL_BOX_ROW4);
+						lcd.drawString(custom_startup_field, SCROLL_BOX_CENTER, SCROLL_BOX_ROW4, GFXFF);
 						lcd.setTextDatum(MY_DATUM);
 					#else
 						lcd_center_print_timed("hi", 1, 4000);                    // display 'hi' on the 2nd line anyway
@@ -20118,46 +20118,46 @@ void create_buttons() {
 				ba = 2;
 				bs = bw + 10;  // start of next button left edge
 				lcd.setFreeFont(BUTTON_FONT);
-				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
-				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
-				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
-				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
-				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 4);  // library modified to ignore text size
-				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 4);  // library modified to ignore text size
+				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", GFXFF);  // library modified to ignore text size
 			#else
 				ba = 1;
 				bs = bw + 4;  // start of next button left edge
 				lcd.setFreeFont(BUTTON_FONT);
-				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 2);  // library modified to ignore text size
+				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", GFXFF);  // library modified to ignore text size
 			#endif
 		#else
 			ba = 1;
 			bs = bw + 3;
 			lcd.setFreeFont(BUTTON_FONT);
-			btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[5].p_btn.initButtonUL(&lcd,  ba+(5*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[6].p_btn.initButtonUL(&lcd,  ba+(6*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[7].p_btn.initButtonUL(&lcd,  ba+(7*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
+			btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[5].p_btn.initButtonUL(&lcd,  ba+(5*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[6].p_btn.initButtonUL(&lcd,  ba+(6*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[7].p_btn.initButtonUL(&lcd,  ba+(7*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
 
 			// 2nd row of 8
-			btn[8].p_btn.initButtonUL(&lcd,  ba+(0*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[9].p_btn.initButtonUL(&lcd,  ba+(1*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[10].p_btn.initButtonUL(&lcd, ba+(2*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[11].p_btn.initButtonUL(&lcd, ba+(3*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[12].p_btn.initButtonUL(&lcd, ba+(4*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[13].p_btn.initButtonUL(&lcd, ba+(5*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[14].p_btn.initButtonUL(&lcd, ba+(6*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[15].p_btn.initButtonUL(&lcd, ba+(7*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", 2);  // library modified to ignore text size
-			btn[16].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", 2);  // library modified to ignore text size
+			btn[8].p_btn.initButtonUL(&lcd,  ba+(0*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[9].p_btn.initButtonUL(&lcd,  ba+(1*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[10].p_btn.initButtonUL(&lcd, ba+(2*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[11].p_btn.initButtonUL(&lcd, ba+(3*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[12].p_btn.initButtonUL(&lcd, ba+(4*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[13].p_btn.initButtonUL(&lcd, ba+(5*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[14].p_btn.initButtonUL(&lcd, ba+(6*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[15].p_btn.initButtonUL(&lcd, ba+(7*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
+			btn[16].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", GFXFF);  // library modified to ignore text size
 		#endif
 
 		refresh_button_row(0);
