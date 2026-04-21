@@ -1438,7 +1438,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 											// Download from here https://github.com/lbernstone/Tone32 - do not use, now included in Arduino library
 	#include "keyer_esp32_dev.h"
 	#include <esp_task_wdt.h>
-	static const char* TAG = "Main";
+	__attribute__((unused)) static const char* TAG = "Main";
 	//#define ARDUINO_ARCH_ESP32
 #elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 	// RP2350: last sector in Flash get overwritten by the Errata-E10 fix for RP235x CPUs  Causes corrupt btstack key db in TLV
@@ -1916,7 +1916,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#include <freertos/event_groups.h>
 	//#include "freertos/semphr.h"
 	#include <freertos/task.h>
-	static EventGroupHandle_t Key_Events = NULL;
+	//static EventGroupHandle_t Key_Events = NULL;
 #endif
 
 #if defined(FEATURE_LCD_HD44780)
@@ -14735,7 +14735,7 @@ void serial_set_weighting(PRIMARY_SERIAL_CLS * port_to_use) {
 
 #if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE)
 void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
-	byte incoming;
+	__attribute__((unused)) byte incoming;
 
 	myDelay(100);
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
@@ -15701,7 +15701,7 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
 	byte loop1 = 1;
 	byte x = 0;
 	byte y = 0;
-	char incoming_char = ' ';
+	__attribute__((unused)) char incoming_char = ' ';
 	char random_character = 0;
 
 	randomSeed(millis());
@@ -16229,7 +16229,7 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
 	byte loop2;
 	byte x;
 	String cw_to_send_to_user(10);
-	char incoming_char = ' ';
+	__attribute__((unused)) char incoming_char = ' ';
 	byte practice_type;
 	char word_buffer[10];
 
@@ -19725,7 +19725,7 @@ void initialize_bt_keyboard(){  // init the BT 4.2 stack for ESP32-WROOM-32 for 
 			ESP_ERROR_CHECK(ret);
 
 			if (bt_keyboard.setup(pairing_handler, keyboard_connected_handler, keyboard_lost_connection_handler)) {  // Must be called once
-				esp_bt_controller_config_t cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+				__attribute__((unused)) esp_bt_controller_config_t cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 				cfg.mode = BT_MODE_BTDM;
   				ESP_LOGI("BLE", " Config - mode: %d, controller task stack: %d\n", cfg.mode, cfg.controller_task_stack_size);
 				#ifndef USE_BT_TASK  // let the check_bt_keyboard task handle it.
@@ -20101,16 +20101,16 @@ void refresh_button_row(uint8_t row) {
 // Create all our button objects.  Some diplays have more space so placement changes.
 void create_buttons() {
 	#ifdef FEATURE_TOUCH_DISPLAY
-		lcd.setFreeFont(FMB9);
+		lcd.setFreeFont(BUTTON_FONT);
 		//lcd.setLabelDatum(MY_DATUM);
 
 		int16_t bh = BUTTON_HEIGHT;
 		int16_t bw = BUTTON_WIDTH;
 		int16_t br = BUTTON_ROW;
-		int16_t br2 = BUTTON_ROW2;
 		int16_t ba = 1;  // edge of row start
 		int16_t bs = bw + 4; //spacing between buttons
-
+		char btext[4] = {};
+		
 		#ifndef TOUCH_BUTTON_16
 
 			// All touch displays have at least 5 usable keys and a CW Scroll Box touch zone
@@ -20118,12 +20118,12 @@ void create_buttons() {
 				ba = 2;
 				bs = bw + 10;  // start of next button left edge
 				lcd.setFreeFont(BUTTON_FONT);
-				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
-				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
-				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
-				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
-				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
-				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, "", GFXFF);  // library modified to ignore text size
+				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
+				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
+				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
+				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
+				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
+				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, GFXFF);  // library modified to ignore text size
 			#else
 				ba = 1;
 				bs = bw + 4;  // start of next button left edge
@@ -20149,6 +20149,7 @@ void create_buttons() {
 			btn[7].p_btn.initButtonUL(&lcd,  ba+(7*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
 
 			// 2nd row of 8
+			int16_t br2 = BUTTON_ROW2;
 			btn[8].p_btn.initButtonUL(&lcd,  ba+(0*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
 			btn[9].p_btn.initButtonUL(&lcd,  ba+(1*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
 			btn[10].p_btn.initButtonUL(&lcd, ba+(2*bs), br2, bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, "", GFXFF);  // library modified to ignore text size
@@ -20332,7 +20333,7 @@ void TX_select_key(uint16_t key_ID) {
 void process_buttons() { // (uint8_t button_ID) {
 	// Process button presses
 	#ifdef FEATURE_TOUCH_DISPLAY
-		static int last_button = 0;
+		//static int last_button = 0;
 		uint16_t key_ID = 254;
 		static uint8_t mem_number = 0;
 
@@ -20427,7 +20428,7 @@ void process_buttons() { // (uint8_t button_ID) {
 				queueflush(); queueadd(PS2_ESC);  //  Stop any send in progress, clear buffer
 				break;
 		}
-		last_button = key_ID;  // update last button ID
+		//last_button = key_ID;  // update last button ID
 	#endif
 }
 
@@ -20480,14 +20481,15 @@ void process_buttons() { // (uint8_t button_ID) {
 
 						#ifdef USE_RES_TOUCH
 							//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex							
-							uint16_t threshold = 20;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also
+							//uint16_t threshold = 20;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also
 							#ifdef DEBUG_TOUCH
 								debug_serial_port->print(F("GetTouch1: Check for pressed - "));
 							#endif
 
 							pressed = lcd.getTouch(&t_x, &t_y, threshold);
-							int z = lcd.getTouchRawZ();
+							
 							#ifdef DEBUG_TOUCH
+								int z = lcd.getTouchRawZ();
 								debug_serial_port->printf("GetTouch2: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, z, pressed);
 							#endif
 							//  xSemaphoreGive (xMutex);  // release the mutex
@@ -25185,16 +25187,14 @@ void tft_backlight(int state) {
 					bool keyDN = false;
 					bool keyUP = false;
 					static bool scanned = 0; 
-					static bool CMD_KEY = false;
-					static bool last_key = true;
+					//static bool CMD_KEY = false;
+					//static bool last_key = true;
 					uint8_t modifier = 0;
 					
 					#ifdef HARDWARE_ESP32_DEV
-						TickType_t duration = 1;  // do not block when not in a task
-						TickType_t repeat_period_;
+						TickType_t duration = 1;  // do not block when not in a task						
 					#else
-						uint32_t duration = 1;  // do not block when not in a task
-						uint32_t repeat_period_;
+						uint32_t duration = 1;  // do not block when not in a task						
 					#endif
 
 					#ifdef USE_BT_TASK
@@ -25317,6 +25317,11 @@ void tft_backlight(int state) {
 									#endif
 
 									#ifdef Key_LOOKUP_METHOD
+										#ifdef HARDWARE_ESP32_DEV						
+											TickType_t repeat_period_;
+										#else						
+											uint32_t repeat_period_;
+										#endif
 										static char last_ch_;
 										bool caps_lock_ = false;
 										const char shift_trans_dict_[] =
@@ -25572,7 +25577,7 @@ void tft_backlight(int state) {
 								}  // end of valid keystroke
 							}
 						}  // inf size 7 or 8
-						last_key = keyDN;
+						//last_key = keyDN;
 						keyDN = false;
 						ch = 0;
 						//myDelay(5);
@@ -25927,7 +25932,7 @@ void initialize_st7789_lcd()
 		#else
 			lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
 			//lcd.invertDisplay(1);
-			lcd.setRotation(3);  //3 for most displays
+			lcd.setRotation(LCD_ROTATION);  //3 for most displays
 
 			#ifdef FEATURE_TOUCH_DISPLAY
 				#if defined(CAL_TOUCH1)
@@ -26381,12 +26386,11 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 					}
 				}
 			#else
-				while (gps_serial_port.available() > 0) {
-					char c;
-					int d;
+				while (gps_serial_port.available() > 0) {										
 
 					#ifdef DEBUG_GPS
-						c = d = gps_serial_port.peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout
+						char c;
+						c = gps_serial_port.peek();   // if gibbersh then baud rate likely wrong, skip read and force a timeout
 						debug_serial_port->print(c);
 					#endif
 
@@ -26891,7 +26895,7 @@ void setup_esp()
 {
 	static bool setup_called = false;
 	#if defined(USE_TOUCH_TASK) || defined(USE_BT_TASK) || defined(USE_MAIN_TASK) || defined(USE_GPS_TASK) || defined(USE_CONNECT_TASK)
-		BaseType_t xReturned;
+		__attribute__((unused)) BaseType_t xReturned;
 	#endif
 
 	if (setup_called) return;  // for main.ino co-existance
@@ -27084,11 +27088,11 @@ void core1_run() {
 	#endif
 }
 
-void loop_1() {
-	static uint32_t last_free_check = 0;
+void loop_1() {	
 
 	#if (defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO_W))
-		
+		static uint32_t last_free_check = 0;
+
 		Serial.println("Starting Core 1 loop1()");
 					
 		for (;;) {

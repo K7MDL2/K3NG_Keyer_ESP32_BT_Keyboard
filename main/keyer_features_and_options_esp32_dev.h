@@ -91,6 +91,7 @@
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_STRAIGHT_KEY
     #define FEATURE_TFT_DISPLAY    
+    #define LCD_ROTATION 3
     //#define SCAN_ONCE   // limits scan cycle to startup only, best for keyboards that reconnect with scannning (K380, Rii)
     #define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
     #define USE_MAIN_TASK // runs main loop in a task
@@ -115,6 +116,7 @@
     #define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
+    #define LCD_ROTATION 3
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
     #define USE_CORE1  // for Pico and ESP32, this moves some features to run in tasks on Core 1 instead of Core 0.
     #define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task on Core 0 or 1
@@ -150,6 +152,7 @@
     ///#define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY
+    #define LCD_ROTATION 3
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features 
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
     //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
@@ -181,6 +184,7 @@
     #define FEATURE_TFT_DISPLAY
     #define TFT_320_480
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
+    #define LCD_ROTATION 3
     //#define TOUCH_BUTTON_16  //single panel of 16 buttons, only on 320x480 or larger displays
     #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
@@ -207,6 +211,7 @@
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     //#define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY    
     //#define FEATURE_TFT_DISPLAY   // graphics, does not require touch
+    #define LCD_ROTATION 3
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
     #define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scannning (K380, Rii)
     #define TOUCH_BUTTON_16  // PUt up a single panel of 16 button vs cycling though 4 rows of 4 buttons each
