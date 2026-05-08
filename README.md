@@ -29,7 +29,8 @@ To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Key
 
 Under Arduino, for ESP32 and Pico only,  I automatically detect the board type and set the proper #define for that board, no need to edit the keyere-hardware.h file.  If you have a different display, or no display, update the settings in Feature and Options header file.  TFT_eSPI library is used for both ESP32 and Pico.  Your TFT display needs to be one of the types supported in TFT_eSPI's UserSetup.h file.  I have tested displays with both the GT911 and XPT2046 touch controllers.  The XPT2046 has built in support in the TFT_eSPI libary.  GT911 is an i2c controller and uses a separate library.  It should be easy to substitute other touch controllers, just need a 'pressed' event (polled) with x and y values.
 
-From the original K3NG site:
+_____________________________________________
+## From the original K3NG site:
 
 The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot of features and flexibility, rivaling commercial keyers which often cost significantly more. The code can be used with a full blown Arduino board or an AVR microcontroller chip can be programmed and used directly in a circuit. This keyer is suitable as a standalone keyer or for use permanently installed inside a rig, especially homebrew QRP rigs. It’s open source code so you can fully customize it to fit your needs and also perhaps learn from it or find coding ideas for other projects.
 
@@ -39,7 +40,7 @@ The K3NG Keyer is an open source Arduino based CW (Morse Code) keyer with a lot 
 >Documentation is located here: https://github.com/k3ng/k3ng_cw_keyer/wiki
 _____________________________________________
 
-This fork on a ESP32-WROOM32 and Pico2W adds:
+## This fork on a ESP32-WROOM32 and Pico2W adds:
  - BT keyboards (Select BLE and BT Classic models)
  - A few different type TFT displays with 320x170, 320,240, and 480x320 resolutions
  - Touch buttons on touch enabled displays
@@ -59,6 +60,10 @@ Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Key
 >
 
 See the Wiki Pages for more information about parts supported and configuration. https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
+
+_____________________________________________
+
+## Project Info
 
 This is a 3.5" 480x320 TFT with a single panel of 16 keys.  If you press the Mem key, a blue message window pops up diplaying the contents of each memory.  You can use Insert Memory macro '\Ix' to insert memories (1-9 only).  For example I have memories 7 and 8 programmed with my callsign and grid square.
 
