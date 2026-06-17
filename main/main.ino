@@ -27,13 +27,14 @@
   void setup() {
     Serial.begin(115200);
     delay(3000);  // long delay to give time for the serial console to reset and read chars.
-    Serial.println("\n\n*** Call Main Setup ***");
+    //Serial.println("\n\n*** Call Main Setup ***");
     setup_esp(); // call actual setup
+    //Serial.println("\n\n*** End Main Setup ***");
   }
 
   void loop() {  
     delay(100);
-    Serial.println("Call App Main");
+    //Serial.println("Call App Main");
     call_app_main();  // will never return
   }
 

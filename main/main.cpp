@@ -1386,6 +1386,12 @@ Recent Update History
 			Button 2 cycles through all 10 CW memories with each tap and displays teh txt in each memory.
 			All other buttons only have test text, no roles are assigned yet.
 
+		2026.06.07 //K7MDL
+			Many changes large and small since Dec 2025.  See gityub Wiki and change history for complete info.
+			Some big ones are:
+			1. Manually merged most of the orignal code changes frm 2022 to 2025 (current).  The last change made in 2025 was Teensy with MIDI.
+			2. Added Pico 2W.
+
 	Documentation: https://github.com/k3ng/k3ng_cw_keyer/wiki
 
 	Support: https://groups.io/g/radioartisan  ( Please do not email K3NG directly for support.  Thanks )
@@ -1439,6 +1445,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#include "keyer_esp32_dev.h"
 	#include <esp_task_wdt.h>
 	__attribute__((unused)) static const char* TAG = "Main";
+	#ifdef FEATURE_MIDI
+		//#include "USB.h"
+		//#include <MIDIUSB.h>  // For USB MIDI support
+		uint8_t CC_NUMBER = 1;
+	#endif
 	//#define ARDUINO_ARCH_ESP32
 #elif defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 	// RP2350: last sector in Flash get overwritten by the Errata-E10 fix for RP235x CPUs  Causes corrupt btstack key db in TLV
@@ -1511,6 +1522,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#include "keyer_features_and_options_iz3gme.h"
 #elif defined(HARDWARE_YCCC_SO2R_MINI)
 	#include "keyer_features_and_options_yccc_so2r_mini.h"
+#elif defined(HARDWARE_TEENSY4)
+	#define EEPROM_size 4096
+	#include "keyer_features_and_options.h"
 #else
 	#include "keyer_features_and_options.h"
 #endif
@@ -1608,6 +1622,502 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#include "esp32-hal-log.h"
 #endif
 
+#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+	// --------------- Motherboard/Protoboard version --------------------------
+	// Uncomment one of these to account for Touch interrupt differences, or
+	// if not using any of these boards, comment them all out to use the default old values
+	//#define SMALL_PCB_V1 // For the   small motherboard 4/18/2022
+	//#define V1_4_3_PCB   // For the V1 4.3" motherboard 4/18/2022
+	//#define V2_4_3_PCB   // For the V2 4.3" motherboard 4/21/2022
+	//#define V21_7_PCB    // For the V2.1 7" motherboard 12/30/2022
+	#define V22_7_PCB    // For the V2.1 7" motherboard 12/30/2022
+
+	//  Usually defined in main program header file such as RadioConfig.h for SDR_887x program
+    #ifdef USE_RA8875
+	    #include <SPI.h>                    // included with Arduino
+        #include <RA8875.h>                 // internal Teensy library with ft5206 cap touch enabled in user_setting.h
+        #include <ili9488_t3_font_Arial.h>      // https://github.com/PaulStoffregen/ILI9341_t3
+        #include <ili9488_t3_font_ArialBold.h>  // https://github.com/PaulStoffregen/ILI9341_t3
+		int VFOA_font_px_width = 24;  //  spaces and dots are not same width as letters and numbers
+		int VFOB_font_px_width = 18;  //  This is the px width used to pad x coord in place of printing spaces.
+
+        #define  TFT_WIDTH       800 
+        #define  TFT_HEIGHT      480
+		#define  SCREEN_ROTATION   0
+		#define  V2_4_3_PCB  
+        #if defined SMALL_PCB_V1
+            #define  RA8875_INT        28   //for John's small V1 motherboard
+        #elif defined V1_4_3_PCB || defined V2_4_3_PCB || defined V21_7_PCB || defined V22_7_PCB
+            #define  RA8875_INT        27   //27 for John's larger 4.3" motherboard
+        #else
+            #define  RA8875_INT        14   //14 for K7MDL old prototype board
+        #endif    
+        #define  RA8875_CS         10       //any digital pin
+        #define  RA8875_RESET      9        //any pin or nothing!
+        #define  MAXTOUCHLIMIT     3        //1...5  using 3 for 3 finger swipes, otherwise 2 for pinches or just 1 for touch
+		RA8875 lcd    = RA8875(RA8875_CS,RA8875_RESET); //initialize the display object		      	  		
+    #endif
+
+	#ifdef USE_RA8876
+	    #include <RA8876_t3.h>                  // https://github.com/wwatson4506/Ra8876LiteTeensy
+        #include <ili9488_t3_font_Arial.h>      // https://github.com/PaulStoffregen/ILI9341_t3
+        #include <ili9488_t3_font_ArialBold.h>  // https://github.com/PaulStoffregen/ILI9341_t3
+        #include <FT5206.h>
+        #define  USE_RA8876_t3
+        #define  TFT_WIDTH      480 //1024 
+        #define  TFT_HEIGHT     320 //600
+		#define  SCREEN_ROTATION    2
+		#define  V22_7_PCB
+        #if defined SMALL_PCB_V1
+            #define  CTP_INT        28  //for John's small V1 motherboard
+        #elif definedV1_4_3_PCB || defined V2_4_3_PCB || defined V21_7_PCB || defined V22_7_PCB
+            #define  CTP_INT        27  // for John's larger 4.3" motherboard
+        #else
+            #define  CTP_INT        14  //14 for K7MDL old prototype board
+        #endif
+        #define  RA8876_CS         10   //any digital pin
+        #define  RA8876_RESET       9   //any pin or nothing!
+        #define  MAXTOUCHLIMIT      3   //1...5  using 3 for 3 finger swipes, otherwise 2 for pinches or just 1 for touch              
+		RA8876_t3 lcd = RA8876_t3(RA8876_CS,RA8876_RESET); //initiate the display object
+		FT5206 cts    = FT5206(CTP_INT);    // Be sure to set the motherboard version used to get the correct Touch INT
+    #endif // USE_RA8876_t3
+
+	// From RA8876_t3/RA8876Registers.h
+	#define TFT_BLACK		  0x0000
+	#define TFT_WHITE		  0xffff
+	#define TFT_RED		  	  0xf800
+	#define TFT_LIGHTRED	  0xfc10
+	#define TFT_CRIMSON		  0x8000
+	#define TFT_GREEN		  0x07e0
+	#define TFT_PALEGREEN	  0x87f0
+	#define TFT_DARKGREEN	  0x0400
+	#define TFT_BLUE		  0x001f
+	#define TFT_LIGHTBLUE	  0x051f
+	#define TFT_SKYBLUE		  0x841f
+	#define TFT_DARKBLUE	  0x0010
+	#define TFT_YELLOW		  0xffe0
+	#define TFT_LIGHTYELLOW	  0xfff0
+	#define TFT_DARKYELLOW	  0x8400 // mustard
+	#define TFT_GOLD		  0x8400 // clsoe to Gold
+	#define TFT_CYAN		  0x07ff
+	#define TFT_LIGHTCYAN	  0x87ff
+	#define TFT_DARKCYAN	  0x0410
+	#define TFT_MAGENTA		  0xf81f
+	#define TFT_VIOLET		  0xfc1f
+	#define TFT_BLUEVIOLET	  0x8010
+	#define TFT_ORCHID		  0xA145 
+	// Other sources of RGB color definitions
+	#define TFT_NAVY          0x000F
+	#define TFT_MAROON        0x7800
+	#define TFT_PURPLE        0x780F
+	#define TFT_OLIVE         0x7BE0
+	#define TFT_LIGHTGREY     0xC618
+	#define TFT_DARKGREY      0x7BEF
+	#define TFT_ORANGE        0xFD20
+	#define TFT_GREENYELLOW   0xAFE5
+	#define TFT_PINK          0xF81F
+	#define TFT_LIGHTORANGE   0xFC80 // the experimentalist
+
+	// Some custom color mixes   RGB565 
+	// Can use the RGB565 Color PIcker tool  at https://www.barth-dev.de/online/rgb565-color-picker/
+	#define myDARKGREY    31727u
+	#define myVDARKGREY   0x4A49  //0x632C //0x5AEC 0x2945  0x4A49  0x4208
+	//#define myVDARKGREEN  0x12C3 // very dark green
+	const uint16_t myVDARKGREEN = 0x12C3; // very dark green  spectrum function wants this form.
+	#define myDARKGREEN   0x02C0 // dark green
+	#define myDARKBLUE    0x02B0
+	#define myVDARKBLUE   0x01B0 // very dark blue
+	#define myVDKORANGE   0xCB21 // very dark orange, maybe burnt orange
+	#define myDKYELLOW    0x9422 // very dark yellow
+	#define myDKPINK      0xA1F3 // dark 
+	#define myDARKRED     0xC8C9 // dark red, lighter than Maroon
+	#define myMIDGREEN    0x1688 // green , not bright
+
+	// Convert 24bit RGB to RGB565 using  http://www.drakker.org/convert_rgb565.html
+	#define myBRIGHTPINK  0xF8F1
+	#define myMIDGREEN2   0x03E0
+	#define myBRIGHTGREEN 0x6646
+	#define myVIOILET     0xA01F
+	#define myLAVBLUE     0x631F
+	#define myGREY        0xBDF7
+	//Conversion formula is RGB565 = (((RGB888&0xf80000)>>8) + ((RGB888&0xfc00)>>5) + ((RGB888&0xf8)>>3));
+	#define TL_DATUM 0 // Top left (default)
+	#define TC_DATUM 1 // Top centre
+	#define TR_DATUM 2 // Top right
+	#define ML_DATUM 3 // Middle left
+	#define CL_DATUM 3 // Centre left, same as above
+	#define MC_DATUM 4 // Middle centre
+	#define CC_DATUM 4 // Centre centre, same as above
+	#define MR_DATUM 5 // Middle right
+	#define CR_DATUM 5 // Centre right, same as above
+	#define BL_DATUM 6 // Bottom left
+	#define BC_DATUM 7 // Bottom centre
+	#define BR_DATUM 8 // Bottom right
+	
+	uint16_t  addr_row = 0xFFFF;
+	uint16_t  addr_col = 0xFFFF;
+	uint16_t  win_xe = 0xFFFF;
+	uint16_t  win_ye = 0xFFFF;
+	uint8_t   padX = 0;  // non-RA887x displays this will always be 0
+	uint8_t   textdatum = TL_DATUM;
+
+	#define LOAD_GLCD
+
+	uint32_t fontsloaded = 0;               // Bit field of fonts loaded
+
+	typedef struct {
+	const unsigned char *chartbl;
+	const unsigned char *widthtbl;
+	unsigned       char height;
+	} fontinfo;
+
+	// This is a structure to conveniently hold infomation on the fonts
+	// Stores font character image address pointer, width table and height
+
+	const fontinfo fontdata [] = {
+	{ 0, 0, 0 },
+	{ 0, 0, 8 }
+	};
+
+	bool textwrap  = false;
+
+	#define setFreeFont(a) setFont(a)
+	#define setTextFont(a) setFont(a)
+	#define drawRoundRect(x, y, w, h, xr, c) drawRoundRect(x, y, w, h, xr, xr, c)
+	#define fillRoundRect(x, y, w, h, xr, c) fillRoundRect(x, y, w, h, xr, xr, c);
+	//#define digitalWrite(a, b)
+	#define fontHeight() getFontHeight()+16
+	#define textWidth(a) getFontWidth()+12
+
+	/***************************************************************************************
+	** Function name:           setTextDatum
+	** Description:             Set the text position reference datum
+	***************************************************************************************/
+	void setTextDatum(uint8_t d)
+	{
+		textdatum = d;
+	}
+
+	/***************************************************************************************
+	** Function name:           setTextPadding
+	** Description:             Define padding width (aids erasing old text and numbers)
+	***************************************************************************************/
+	void setTextPadding(uint16_t x_width)
+	{
+		padX = x_width;
+	}
+
+	#ifdef SAVE_FOR_LATER
+	/***************************************************************************************
+	** Function name:           drawString
+	** Description :            draw string with padding if it is defined
+	***************************************************************************************/
+	int drawString(const char *string, int poX, int poY, int font)
+	{
+		int16_t sumX = 0;
+		uint8_t padding = 1;
+		unsigned int cheight = 0;
+		_width = tft.width();
+		_height = tft.height();
+
+		if (textdatum || padX)
+		{
+			// Find the pixel width of the string in the font
+			unsigned int cwidth  = textWidth(string, font);
+
+			// Get the pixel height of the font
+			cheight = pgm_read_byte( &fontdata[font].height ) * textsize;
+
+		switch(textdatum) {
+		case TC_DATUM:
+			poX -= cwidth/2;
+			padding = 2;
+			break;
+		case TR_DATUM:
+			poX -= cwidth;
+			padding = 3;
+			break;
+		case ML_DATUM:
+			poY -= cheight/2;
+			padding = 1;
+			break;
+		case MC_DATUM:
+			poX -= cwidth/2;
+			poY -= cheight/2;
+			padding = 2;
+			break;
+		case MR_DATUM:
+			poX -= cwidth;
+			poY -= cheight/2;
+			padding = 3;
+			break;
+		case BL_DATUM:
+			poY -= cheight;
+			padding = 1;
+			break;
+		case BC_DATUM:
+			poX -= cwidth/2;
+			poY -= cheight;
+			padding = 2;
+			break;
+		case BR_DATUM:
+			poX -= cwidth;
+			poY -= cheight;
+			padding = 3;
+			break;
+		}
+		DPRINTLN("PARMS=");
+		DPRINTLN(_width);
+	DPRINTLN(_height);
+		// Check coordinates are OK, adjust if not
+		if (poX < 0) poX = 0;
+		if (poX+cwidth>_width)   poX = _width - cwidth;
+		if (poY < 0) poY = 0;
+		if (poY+cheight>_height) poY = _height - cheight;
+	}
+	DPRINTLN(poX);
+	DPRINTLN(poY);
+	//while (*string) sumX += drawChar(*(string++), poX+sumX, poY, font);
+	lcd.setCursor(poX+sumX, poY);
+	lcd.setFont(Arial_14);
+	lcd.setTextColor(WHITE, BLACK);
+	while (*string) sumX += tft.print(*(string++));
+	//#define PADDING_DEBUG
+
+	#ifndef PADDING_DEBUG
+	if((padX>sumX) && (textcolor!=textbgcolor))
+	{
+		int padXc = poX+sumX; // Maximum left side padding
+		switch(padding) {
+		case 1:
+			lcd.fillRect(padXc,poY,padX-sumX,cheight, textbgcolor);
+			break;
+		case 2:
+			lcd.fillRect(padXc,poY,(padX-sumX)>>1,cheight, textbgcolor);
+			padXc = (padX-sumX)>>1;
+			if (padXc>poX) padXc = poX;
+			lcd.fillRect(poX - padXc,poY,(padX-sumX)>>1,cheight, textbgcolor);
+			break;
+		case 3:
+			if (padXc>padX) padXc = padX;
+			lcd.fillRect(poX + sumX - padXc,poY,padXc-sumX,cheight, textbgcolor);
+			break;
+		}
+	}
+	#else
+
+	// This is debug code to show text (green box) and blanked (white box) areas
+	// to show that the padding areas are being correctly sized and positioned
+	if((padX>sumX) && (textcolor!=textbgcolor))
+	{
+		int padXc = poX+sumX; // Maximum left side padding
+		tft.drawRect(poX,poY,sumX,cheight, GREEN);
+		switch(padding) {
+		case 1:
+			tft.drawRect(padXc,poY,padX-sumX,cheight, WHITE);
+			break;
+		case 2:
+			tft.drawRect(padXc,poY,(padX-sumX)>>1, cheight, WHITE);
+			padXc = (padX-sumX)>>1;
+			if (padXc>poX) padXc = poX;
+			tft.drawRect(poX - padXc,poY,(padX-sumX)>>1,cheight, WHITE);
+			break;
+		case 3:
+			if (padXc>padX) padXc = padX;
+			tft.drawRect(poX + sumX - padXc,poY,padXc-sumX,cheight, WHITE);
+			break;
+		}
+	}
+	#endif
+
+	return sumX;
+	}
+
+	/***************************************************************************************
+	** Function name:           drawCentreString
+	** Descriptions:            draw string centred on dX
+	***************************************************************************************/
+	int drawCentreString(const char *string, int dX, int poY, int font)
+	{
+	byte tempdatum = textdatum;
+	int sumX = 0;
+	textdatum = TC_DATUM;
+	sumX = drawString(string, dX, poY, font);
+	textdatum = tempdatum;
+	return sumX;
+	}
+
+	/***************************************************************************************
+	** Function name:           drawRightString
+	** Descriptions:            draw string right justified to dX
+	***************************************************************************************/
+	int drawRightString(const char *string, int dX, int poY, int font)
+	{
+	byte tempdatum = textdatum;
+	int sumX = 0;
+	textdatum = TR_DATUM;
+	sumX = drawString(string, dX, poY, font);
+	textdatum = tempdatum;
+	return sumX;
+	}
+
+	/***************************************************************************************
+	** Function name:           textWidth
+	** Description:             Return the width in pixels of a string in a given font
+	***************************************************************************************/
+	int16_t textWidth(const char *string, int font)
+	{
+		#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+			unsigned int str_width  = 0;
+			char uniCode;
+			char *widthtable;
+
+			if (font>1 && font<9)
+			//widthtable = (char *)pgm_read_word( &(fontdata[font].widthtbl ) ) - 32; //subtract the 32 outside the loop
+			widthtable = (char *)( &(fontdata[font].widthtbl ) ) - 32; //subtract the 32 outside the loop
+			else return 0;
+
+			while (*string)
+			{
+				uniCode = *(string++);
+			#ifdef LOAD_GLCD
+				if (font == 1) str_width += 6;
+				else
+			#endif
+				str_width += (int) (widthtable + uniCode); // Normally we need to subract 32 from uniCode
+			}
+			return str_width * textsize;
+		#else
+			lcd.textwidth(char * c);
+		#endif
+	}
+
+	/***************************************************************************************
+	** Function name:           fillCircle
+	** Description:             draw a filled circle
+	***************************************************************************************/
+	 void fillCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
+	{
+		tft.drawFastVLine(x0, y0 - r, r + r + 1, color);
+		//fillCircleHelper(x0, y0, r, 3, 0, color);
+	}
+
+	/***************************************************************************************
+	** Function name:           fillCircleHelper
+	** Description:             Support function for filled circle drawing
+	***************************************************************************************/
+
+	// Used to do circles and roundrects
+	 void fillCircleHelper(int16_t x0, int16_t y0, int16_t r, uint8_t cornername, int16_t delta, uint16_t color)
+	{
+		int16_t f     = 1 - r;
+		int16_t ddF_x = 1;
+		int16_t ddF_y = -r - r;
+		int16_t x     = 0;
+
+		delta++;
+		while (x < r) {
+			if (f >= 0) {
+			r--;
+			ddF_y += 2;
+			f     += ddF_y;
+			}
+			x++;
+			ddF_x += 2;
+			f     += ddF_x;
+
+			if (cornername & 0x1) {
+			tft.drawFastVLine(x0 + x, y0 - r, r + r + delta, color);
+			tft.drawFastVLine(x0 + r, y0 - x, x + x + delta, color);
+			}
+			if (cornername & 0x2) {
+			tft.drawFastVLine(x0 - x, y0 - r, r + r + delta, color);
+			tft.drawFastVLine(x0 - r, y0 - x, x + x + delta, color);
+			}
+		}
+	}
+
+	/***************************************************************************************
+	** Function name:           drawCircle
+	** Description:             Draw a circle outline
+	***************************************************************************************/
+	 void drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
+	{
+	int16_t f = 1 - r;
+	int16_t ddF_x = 1;
+	int16_t ddF_y = - r - r;
+	int16_t x = 0;
+
+	//fastSetup();
+
+	tft.drawPixel(x0 + r, y0  , color);
+	tft.drawPixel(x0 - r, y0  , color);
+	tft.drawPixel(x0  , y0 - r, color);
+	tft.drawPixel(x0  , y0 + r, color);
+
+	while (x < r) {
+		if (f >= 0) {
+		r--;
+		ddF_y += 2;
+		f += ddF_y;
+		}
+		x++;
+		ddF_x += 2;
+		f += ddF_x;
+
+		tft.drawPixel(x0 + x, y0 + r, color);
+		tft.drawPixel(x0 - x, y0 + r, color);
+		tft.drawPixel(x0 - x, y0 - r, color);
+		tft.drawPixel(x0 + x, y0 - r, color);
+
+		tft.drawPixel(x0 + r, y0 + x, color);
+		tft.drawPixel(x0 - r, y0 + x, color);
+		tft.drawPixel(x0 - r, y0 - x, color);
+		tft.drawPixel(x0 + r, y0 - x, color);
+	}
+	}
+
+	/***************************************************************************************
+	** Function name:           drawCircleHelper
+	** Description:             Support function for circle drawing
+	***************************************************************************************/
+	 void drawCircleHelper( int16_t x0, int16_t y0, int16_t r, uint8_t cornername, uint16_t color)
+	{
+	int16_t f     = 1 - r;
+	int16_t ddF_x = 1;
+	int16_t ddF_y = -2 * r;
+	int16_t x     = 0;
+
+	while (x < r) {
+		if (f >= 0) {
+		r--;
+		ddF_y += 2;
+		f     += ddF_y;
+		}
+		x++;
+		ddF_x += 2;
+		f     += ddF_x;
+		if (cornername & 0x4) {
+		tft.drawPixel(x0 + x, y0 + r, color);
+		tft.drawPixel(x0 + r, y0 + x, color);
+		}
+		if (cornername & 0x2) {
+		tft.drawPixel(x0 + x, y0 - r, color);
+		tft.drawPixel(x0 + r, y0 - x, color);
+		}
+		if (cornername & 0x8) {
+		tft.drawPixel(x0 - r, y0 + x, color);
+		tft.drawPixel(x0 - x, y0 + r, color);
+		}
+		if (cornername & 0x1) {
+		tft.drawPixel(x0 - r, y0 - x, color);
+		tft.drawPixel(x0 - x, y0 - r, color);
+		}
+	}
+	}
+	#endif
+#endif
+
 #if !defined(HARDWARE_GENERIC_STM32F103C) && !defined(FEATURE_MCP23017_EXPANDER) // bypass when using mcp23017_write_io in place of digital write
 	#if (paddle_left == 0) || (paddle_right == 0)
 	#error "You cannot define paddle_left or paddle_right as 0 to disable"
@@ -1652,8 +2162,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 		#include <BluetoothHIDMaster.h>
 		// We need the inverse map, borrow from the Keyboard library
-		#include <HID_Keyboard.h>
-
+		//#include <HID_Keyboard.h>
 		extern const uint8_t KeyboardLayout_en_US[128];
 		BluetoothHIDMaster bt_keyboard;
 		HIDKeyStream keystream;
@@ -1759,6 +2268,16 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		#define FMB12 &fonts::FreeMonoBold12pt7b
 		#define FS9 &fonts::FreeSans9pt7b
 		#define TFT_HEIGHT 240
+	#elif defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)	
+
+		#define LOAD_GFXFF
+		#include "Fonts\GFXFF\Free_Fonts.h" // Include the header file attached to this sketch
+		#include "Fonts\GFXFF\FreeSans12pt7b.h"
+		#include "Fonts\GFXFF\FreeSans18pt7b.h"
+		#include "Fonts\GFXFF\FreeSans9pt7b.h"
+		#include "Fonts\GFXFF\FreeSerif9pt7b.h"
+		#include "Fonts\GFXFF\FreeSerif12pt7b.h"
+		#include "Fonts\GFXFF\FreeMonoBold18pt7b.h"
 	#else
 		#include "SPI.h"
 		#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
@@ -1791,10 +2310,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#ifdef TFT_320_480   // 320x480 display
 
-		#define TFT_FONT_SMALL FS9      // FreeFont mono 9pt, not bold.
-		#define TFT_FONT_MEDIUM FMB18  // FM18, FMB18 	// FreeFont Mono Bold 12pt
-		#define SCROLL_BOX_FONT TFT_FONT_MEDIUM
-		#define BUTTON_FONT FS12
+		#define TFT_FONT_SMALL FS12      // FreeFont mono 9pt, not bold.		
+		#define TFT_FONT_MEDIUM FS18  // FM18, FMB18 	// FreeFont Mono Bold 12pt
+		#define SCROLL_BOX_FONT FS18		
 		#define COLUMN_WIDTH (lcd.textWidth("W")+2)    // width of mono-spaced scroll box font in pixels, W is a wide letter
 		#define FONT_HEIGHT (lcd.fontHeight()+2)   // using 2px padding for line separation
 		#define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
@@ -1809,7 +2327,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		#define LINE_SPACER 14  // between scroll text lines
 
 		// Status Bar
-		#define STATUS_BAR_FONT 4   // 2  or FM9 or FS9
+		#define STATUS_BAR_FONT TFT_FONT_MEDIUM   // 2  or FM9 or FS9
 		#define ICON_COLUMN_WIDTH COLUMN_WIDTH-4    // width of mono-spaced status bar font in pixels
 		#define ICON_SPACING (ICON_COLUMN_WIDTH-1)
 		#define TIME_ANCHOR (4)
@@ -1821,10 +2339,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#else   // 240x320 and 170x320
 
-		#define TFT_FONT_SMALL FS9      // FreeFont mono 9pt, not bold.
-		#define TFT_FONT_MEDIUM FS12 //FMB12  	// FreeFont Mono Bold 12pt
+		#define TFT_FONT_SMALL FMB9      // FreeFont mono 9pt, not bold.
+		#define TFT_FONT_MEDIUM FMB12  	// FreeFont Mono Bold 12pt
 		#define SCROLL_BOX_FONT FMB12
-		//#define BUTTON_FONT FS12
 		#define COLUMN_WIDTH (lcd.textWidth("W")+2)    // width of mono-spaced scroll box font in pixels, W is a wide letter
 		#define FONT_HEIGHT ((lcd.fontHeight()+2))    // using 2px padding for line separation
 		#define SCREEN_WIDTH (TFT_HEIGHT-1)   // We are rotated horizontal so width and height are reversed.
@@ -1842,7 +2359,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		#define LINE_SPACER 12  // between scroll text lines
 
 		// Status Bar
-		#define STATUS_BAR_FONT 2   // 2  or FM9 or FS9
+		#define STATUS_BAR_FONT FS9   // 2  or FM9 or FS9
 		#define ICON_COLUMN_WIDTH 12    // width of mono-spaced status bar font in pixels
 		#define ICON_SPACING (ICON_COLUMN_WIDTH+2)
 		#define TIME_ANCHOR (2)
@@ -1888,7 +2405,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#define SCROLL_BOX_BOTTOM (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT)
 
 	#define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
-	#define TFT_SET_VIEWPORT (lcd.setViewport(SCROLL_BOX_LEFT_SIDE+2, SCROLL_BOX_TOP+2, SCROLL_BOX_WIDTH-4, SCROLL_BOX_HEIGHT-4, false))
+	#define TFT_SET_VIEWPORT (lcd_setViewport(SCROLL_BOX_LEFT_SIDE+2, SCROLL_BOX_TOP+2, SCROLL_BOX_WIDTH-4, SCROLL_BOX_HEIGHT-4, false))
 	#define TFT_SET_WINDOW (lcd.setWindow(SCROLL_BOX_LEFT_SIDE+1, SCROLL_BOX_TOP+1, SCROLL_BOX_WIDTH-2, SCROLL_BOX_HEIGHT-2))
 #endif
 
@@ -1956,6 +2473,19 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	// #include <hidboot.h>  // Arduino 1.6.x (and maybe 1.5.x) has issues with these three lines, moreover we noted that Arduino 1.8.6 it's not afected by an issue during USB Shield SPI init see https://github.com/felis/USB_Host_Shield_2.0/issues/390
 	// #include <usbhub.h>   // Uncomment the three lines if you are using FEATURE_USB_KEYBOARD or FEATURE_USB_MOUSE
 	// #include <Usb.h>      // Note: the most updated USB Library can be downloaded at https://github.com/felis/USB_Host_Shield_2.0
+#endif
+
+#if defined(FEATURE_MIDI)
+	// forward declare some functions 
+	void midi_setup();
+	void midi_key_tx(int state);
+	void midi_key_ptt(int state);
+	void myControlChange(byte channel, byte control, byte value);
+	void setupIambicMode(int modeB);
+	void sendMidiResponseOk(int ok);
+	void sendKeyerStateResponse();
+	void midi_send_wpm_response();
+  	void midi_setup();
 #endif
 
 #if defined(FEATURE_CW_COMPUTER_KEYBOARD)
@@ -2147,6 +2677,10 @@ void tft_backlight(int state);  // toggles the backlight GPIO pin on and off fro
 void setup_1();
 void loop_1();
 void core1_run();
+void debug_probe(uint8_t index);
+void setActiveWindow_default(void);
+void setActiveWindow(int16_t XL, int16_t XR, int16_t YT, int16_t YB);
+void updateActiveWindow(bool full);
 #ifdef USE_MAIN_TASK
 	void mainloop(void * pvParameters);
 #else
@@ -2327,12 +2861,11 @@ enum button_ID{
 
 // ________________________________
 //
-#ifdef FEATURE_TFT_DISPLAY
-void initialize_TFT_display(void);
-void initialize_m5stack_core2();
-int32_t h = 320;  // calculate actual at run time
-int32_t w = 240;
-#endif
+	void initialize_TFT_display(void);
+	void initialize_m5stack_core2();
+	int32_t h = 320;  // calculate actual at run time
+	int32_t w = 240;
+
 // ________________________________
 //
 
@@ -3062,6 +3595,84 @@ unsigned long millis_rollover = 0;
 	#endif //FEATURE_SO2R_ANTENNA
 #endif //FEATURE_SO2R_BASE
 
+#ifdef FEATURE_TFT_DISPLAY
+// wrapper functions to help convert RA8876 lib to match fucntion calls ofthe TFT_eSPI lib	
+void lcd_setTextDatum(uint8_t mydatum) {
+	#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+		setTextDatum(mydatum);
+	#else
+		lcd.setTextDatum(mydatum);
+	#endif
+}
+
+void lcd_resetViewport() {
+	#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+		//lcd_resetViewport();
+	#else
+		lcd.resetViewport();
+	#endif	
+}
+
+void lcd_setViewport(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+	#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+		//lcd_resetViewport(x, y, w, h);
+	#else
+		lcd.setViewport(x, y, w, h);
+	#endif	
+}
+
+void lcd_setTextWrap(bool a, bool b) {
+	#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+		textwrap = a;
+	#else
+		lcd.setTextWrap(a, b);
+	#endif	
+}
+
+/***************************************************************************************
+** Function name:           lcd_drawChar
+** Description:             Convert drawChar to putString for RA8876
+***************************************************************************************/
+void lcd_drawChar(const char c, uint16_t x, uint16_t y)
+{		
+	#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+		//Serial.printf(" In drawChar |%c| at x:%d y:%d - ", c, x, y);
+		lcd.setCursor(x, y);		
+		lcd.drawGFXFontChar(c);
+	#else
+		lcd.drawChar(c, x, y);
+	#endif
+}
+
+/***************************************************************************************
+** Function name:           lcd_drawString
+** Description:             Convert drawString to putString for RA8876
+***************************************************************************************/
+void lcd_drawString(const char* s, uint16_t x, uint16_t y) //const GFXfont *f = NULL)
+{		
+	#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD			
+		lcd.putString(x, y, s);		
+	#else
+		lcd.drawString(s, x, y);
+	#endif
+}
+
+/***************************************************************************************
+** Function name:           setTextPadding
+** Description:             Define padding width (aids erasing old text and numbers)
+***************************************************************************************/
+uint8_t lcd_setTextPadding(uint16_t x_width)
+{
+	#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD	
+		setTextPadding(x_width);
+		return padX;   // convert cases where needed to take width+padx		
+	#else
+		lcd.setTextPadding(x_width);
+		return 0;  // function takes cared of padding on non-RA887x displays
+	#endif
+}
+#endif
+
 // ------------------------   Pico  BT Keyboard Support Functions --------------------------------------------------
 
 #if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
@@ -3198,9 +3809,12 @@ byte async_eeprom_write = 0;
 
 // Are you a radio artisan ?
 
-void wdt_reset(){
-	//esp_task_wdt_reset();
-}
+#ifndef HARDWARE_TEENSY4
+	void wdtreset(void)
+	{
+		//esp_task_wdt_reset();
+	}
+#endif
 
 #if defined FEATURE_BUTTONS
 #include "src\buttonarray\buttonarray.h"
@@ -4133,7 +4747,7 @@ void check_backlight() {
 			analogWrite(keyer_power_led,keyer_power_led_asleep_duty);
 		}
 
-		#ifdef FEATURE_TFT_DISPLAY
+		#if defined(FEATURE_TFT_DISPLAY) || defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)
 			tft_backlight(0);  // turn it off
 		#else
 			lcd.noBacklight();
@@ -4150,7 +4764,7 @@ void check_backlight() {
 			analogWrite(keyer_power_led,keyer_power_led_awake_duty);
 		}
 
-		#ifdef FEATURE_TFT_DISPLAY
+		#if defined(FEATURE_TFT_DISPLAY) || defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)
 			tft_backlight(1);  // turn it on
 		#else
 			lcd.backlight();
@@ -4173,13 +4787,20 @@ void lcd_scroll_box_clear() {
 			//    debug_serial_port->println(F("Close Viewport"));
 					lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
 					myDelay(1);
-			//    lcd.resetViewport();
+			//    lcd_resetViewport();
 			//}
 			//else {
 			//    debug_serial_port->println(F("Clear scroll box, no Close Viewport"));
 			//    lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
 					lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 			//}
+		#elif defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)				
+			#ifdef USE_RA8875
+				tft.clearScreen();
+			#endif
+			#ifdef USE_RA8875
+				tft.clearActiveScreen();
+			#endif
 		#else
 				lcd.clear();
 				lcd.noCursor();//sp5iou 20180328
@@ -4238,8 +4859,22 @@ int touch_button_available() {
 	#endif
 }
 
+#include <type_traits>
+//template <typename STATUS_BAR_FONT>
+
+template <typename T>
+void checkIfPointer(const T&) {
+    //if constexpr (std::is_pointer_v<T>) {
+    //    debug_serial_port->println("This variable is a pointer type.");
+		lcd.setFreeFont(STATUS_BAR_FONT);
+    //} else {
+    //    debug_serial_port->println("This variable is NOT a pointer type.");
+	//	lcd.setTextFont(STATUS_BAR_FONT);
+    //}
+}
+
 void update_icons(void) {
-#ifdef FEATURE_TFT_DISPLAY
+	#ifdef FEATURE_TFT_DISPLAY
 		if (popup_active) return;  // bail, these screen writes below are outside the popup window
 		static char last_GridSq[grid_len_max] = "";
 		static byte last_key_tx = false;
@@ -4247,16 +4882,14 @@ void update_icons(void) {
 		static bool stop_msg_changed = false;
 		char tx_str[7] = "";
 		static uint8_t last_tx = 0;
-		const int32_t row = STATUS_BAR_Y_CURSOR;
 
 		if (last_stop_msg != stop_msg) {
 			stop_msg_changed = true;
 			last_stop_msg = stop_msg;
 		}
-
-		lcd.setTextDatum(MY_DATUM);
-		//lcd.setFreeFont(STATUS_BAR_FONT);
-		lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)
+		lcd_setTextDatum(MY_DATUM);
+		
+		checkIfPointer(STATUS_BAR_FONT);
 
 		#ifdef FEATURE_GPS      // if not enabled leave the default grey 00:00:00 printed at init time.
 		if (!time_disp_updated && !configuration.ignore_gps && !stop_msg) {
@@ -4272,7 +4905,7 @@ void update_icons(void) {
 			}
 
 			if (time_disp_updated) {
-				lcd.drawString(time_str, TIME_ANCHOR, STATUS_BAR_Y_CURSOR, STATUS_BAR_FONT);
+				lcd_drawString(time_str, TIME_ANCHOR, STATUS_BAR_Y_CURSOR);
 				time_disp_updated = false;
 			}
 		#endif
@@ -4281,12 +4914,12 @@ void update_icons(void) {
 		{
 			sprintf(tx_str, "T%d", last_tx);
 			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-			lcd.drawString(tx_str, TX_NUM_ANCHOR, row, STATUS_BAR_FONT);   // blank out space
+			lcd_drawString(tx_str, TX_NUM_ANCHOR, STATUS_BAR_Y_CURSOR);   // blank out space
 
 			sprintf(tx_str, "T%d", configuration.current_tx);
 			if (!key_tx) lcd.setTextColor(TFT_RED, TFT_BLACK);  // enabled
 			else lcd.setTextColor(TFT_GREEN, TFT_BLACK); // disabled
-			lcd.drawString(tx_str, TX_NUM_ANCHOR, row, STATUS_BAR_FONT); // update display
+			lcd_drawString(tx_str, TX_NUM_ANCHOR, STATUS_BAR_Y_CURSOR); // update display
 
 			last_tx = configuration.current_tx;  // remember last state
 			last_key_tx = key_tx;
@@ -4295,18 +4928,18 @@ void update_icons(void) {
 		if (stop_msg_changed || strcmp(grid_sq_str, last_GridSq) != 0)  // connect status and/or grid changed, update display
 		{
 			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-			lcd.drawString(last_GridSq, GRID_ANCHOR, row, STATUS_BAR_FONT);   // blank out space
+			lcd_drawString(last_GridSq, GRID_ANCHOR, STATUS_BAR_Y_CURSOR);   // blank out space
 
 			if (!configuration.ignore_gps && !stop_msg) {
 				lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);
-				lcd.drawString(grid_sq_str, GRID_ANCHOR, row, STATUS_BAR_FONT); // update display
+				lcd_drawString(grid_sq_str, GRID_ANCHOR, STATUS_BAR_Y_CURSOR); // update display
 			} else {
 				#ifndef FEATURE_BT_KEYBOARD
 					lcd.setTextColor(TFT_MAGENTA, TFT_BLACK);
 				#else
 					lcd.setTextColor(TFT_GREY, TFT_BLACK);
 				#endif
-				lcd.drawString(grid_sq_str, GRID_ANCHOR, row, STATUS_BAR_FONT); // update display
+				lcd_drawString(grid_sq_str, GRID_ANCHOR, STATUS_BAR_Y_CURSOR); // update display
 			}
 
 			strcpy(last_GridSq, grid_sq_str);  // write grid square
@@ -4325,23 +4958,25 @@ void update_icons(void) {
 			lcd.setTextColor(TFT_CYAN, TFT_BLACK);
 			itoa(configuration.wpm, WPM, 10);
 			strncat(WPM, "wpm", 6);
-			lcd.drawString("       ", WPM_ANCHOR, row, STATUS_BAR_FONT);  // erase old
-			lcd.drawString(WPM,       WPM_ANCHOR, row, STATUS_BAR_FONT);  // WPM rate
+			lcd_drawString("       ", WPM_ANCHOR, STATUS_BAR_Y_CURSOR);  // erase old
+			lcd_drawString(WPM,       WPM_ANCHOR, STATUS_BAR_Y_CURSOR);  // WPM rate
 			last_WPM = configuration.wpm;
 		}
+
+		const uint16_t row = STATUS_BAR_Y_CURSOR + (FONT_HEIGHT/2) + 2;
 
 		#ifdef NOT_USING_THESE_NOW
 		if (last_sending_mode != sending_mode)    // modes are : Auto, Manual, Auto-Interrupted
 		{
 			switch (last_sending_mode) {
-				case AUTOMATIC_SENDING:             lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('A', ICON_ANCHOR, row); break;
-				case AUTOMATIC_SENDING_INTERRUPTED: lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('I', ICON_ANCHOR, row); break;
-				case MANUAL_SENDING:                lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('M', ICON_ANCHOR, row); break;
+				case AUTOMATIC_SENDING:             lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd_drawChar('A', ICON_ANCHOR, STATUS_BAR_Y_CURSOR); break;
+				case AUTOMATIC_SENDING_INTERRUPTED: lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd_drawChar('I', ICON_ANCHOR, STATUS_BAR_Y_CURSOR); break;
+				case MANUAL_SENDING:                lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd_drawChar('M', ICON_ANCHOR, STATUS_BAR_Y_CURSOR); break;
 			}
 			switch (sending_mode) {
-				case AUTOMATIC_SENDING:             lcd.setTextColor(TFT_ORANGE, TFT_BLACK); lcd.drawChar('A', ICON_ANCHOR, row); break;
-				case AUTOMATIC_SENDING_INTERRUPTED: lcd.setTextColor(TFT_ORANGE, TFT_BLACK); lcd.drawChar('I', ICON_ANCHOR, row); break;
-				case MANUAL_SENDING:                lcd.setTextColor(TFT_PINK, TFT_BLACK);   lcd.drawChar('M', ICON_ANCHOR, row); break;
+				case AUTOMATIC_SENDING:             lcd.setTextColor(TFT_ORANGE, TFT_BLACK); lcd_drawChar('A', ICON_ANCHOR, STATUS_BAR_Y_CURSOR); break;
+				case AUTOMATIC_SENDING_INTERRUPTED: lcd.setTextColor(TFT_ORANGE, TFT_BLACK); lcd_drawChar('I', ICON_ANCHOR, STATUS_BAR_Y_CURSOR); break;
+				case MANUAL_SENDING:                lcd.setTextColor(TFT_PINK, TFT_BLACK);   lcd_drawChar('M', ICON_ANCHOR, STATUS_BAR_Y_CURSOR); break;
 			}
 			last_sending_mode = sending_mode;
 		}
@@ -4352,14 +4987,14 @@ void update_icons(void) {
 		if (last_keyer_machine_mode != keyer_machine_mode)    // modes are : Beacon KEYER_NORMAL KEYER_COMMAND_MODE
 		{
 			switch (last_keyer_machine_mode) {
-				case BEACON:              lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('B', ICON_ANCHOR+ICON_SPACING, row); break;
-				case KEYER_NORMAL:        lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('N', ICON_ANCHOR+ICON_SPACING, row); break;
-				case KEYER_COMMAND_MODE:  lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd.drawChar('C', ICON_ANCHOR+ICON_SPACING, row); break;
+				case BEACON:              lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd_drawChar('B', ICON_ANCHOR+ICON_SPACING, row); break;
+				case KEYER_NORMAL:        lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd_drawChar('N', ICON_ANCHOR+ICON_SPACING, row); break;
+				case KEYER_COMMAND_MODE:  lcd.setTextColor(TFT_BLACK, TFT_BLACK); lcd_drawChar('C', ICON_ANCHOR+ICON_SPACING, row); break;
 			}
 			switch (keyer_machine_mode) {
-				case BEACON:              lcd.setTextColor(TFT_ORANGE, TFT_BLACK);    lcd.drawChar('B', ICON_ANCHOR+ICON_SPACING, row); break;
-				case KEYER_NORMAL:        lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK); lcd.drawChar('N', ICON_ANCHOR+ICON_SPACING, row);; break;
-				case KEYER_COMMAND_MODE:  lcd.setTextColor(TFT_PINK, TFT_BLACK);      lcd.drawChar('C', ICON_ANCHOR+ICON_SPACING, row); break;
+				case BEACON:              lcd.setTextColor(TFT_ORANGE, TFT_BLACK);    lcd_drawChar('B', ICON_ANCHOR+ICON_SPACING, row); break;
+				case KEYER_NORMAL:        lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK); lcd_drawChar('N', (ICON_ANCHOR+ICON_SPACING), row); break;
+				case KEYER_COMMAND_MODE:  lcd.setTextColor(TFT_PINK, TFT_BLACK);      lcd_drawChar('C', ICON_ANCHOR+ICON_SPACING, row); break;
 			}
 			last_keyer_machine_mode = keyer_machine_mode;
 		}
@@ -4370,13 +5005,13 @@ void update_icons(void) {
 		{
 			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
 			if (ptt_line_activated) {
-					lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
+					lcd_drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
 					lcd.setTextColor(TFT_RED, TFT_BLACK);
-					lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
+					lcd_drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
 			} else {
-					lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
+					lcd_drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
 					lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-					lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
+					lcd_drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
 			}
 			last_ptt_line_activated = ptt_line_activated;
 		}
@@ -4387,10 +5022,10 @@ void update_icons(void) {
 		{
 			if (pause_sending_buffer != 0) {
 					lcd.setTextColor(TFT_GOLD, TFT_BLACK);
-					lcd.drawChar('P', ICON_ANCHOR+(3*ICON_SPACING), row);   // Sending Paused
+					lcd_drawChar('P', ICON_ANCHOR+(3*ICON_SPACING), row);   // Sending Paused
 			} else {
 					lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-					lcd.drawChar('P', ICON_ANCHOR+(3*ICON_SPACING), row);
+					lcd_drawChar('P', ICON_ANCHOR+(3*ICON_SPACING), row);
 			}
 			last_pause_sending_buffer = pause_sending_buffer;
 		}
@@ -4401,10 +5036,10 @@ void update_icons(void) {
 			{
 				if (bt_keyboard.is_connected()) {
 						lcd.setTextColor(TFT_BLUE, TFT_BLACK);
-						lcd.drawChar('B', ICON_ANCHOR+(4*ICON_SPACING), row); // BT connected status
+						lcd_drawChar('B', ICON_ANCHOR+(4*ICON_SPACING), row); // BT connected status
 				} else {
 						lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-						lcd.drawChar('B', ICON_ANCHOR+(4*ICON_SPACING), row);
+						lcd_drawChar('B', ICON_ANCHOR+(4*ICON_SPACING), row);
 				}
 				last_BT_Connected = bt_keyboard.is_connected();
 			}
@@ -4412,9 +5047,9 @@ void update_icons(void) {
 
 		lcd.setTextColor(TFT_WHITE, TFT_BLACK);   // set back to normal size and color
 		lcd.setFreeFont(TFT_FONT_MEDIUM);
-		lcd.setTextDatum(MY_DATUM);
+		lcd_setTextDatum(MY_DATUM);
 		stop_msg_changed = false;
-#endif
+	#endif
 }
 
 
@@ -4424,7 +5059,7 @@ void testlcd(char status, int x, int y) {
 	int x1=SCROLL_TEXT_LEFT_SIDE+(x*COLUMN_WIDTH);
 	lcd.setFreeFont(TFT_FONT_MEDIUM);
 	//debug_serial_port->printf("-char [%c] x=%d y=%d x1=%d y1=%d value=%c --\n", status, x, y, x1, y1, (char)lcd_scroll_buffer[y].charAt(x));
-	lcd.drawChar(status, x1, y1);
+	lcd_drawChar(status, x1, y1);
 }
 #endif
 
@@ -4481,14 +5116,14 @@ void service_display() {
 		} else {
 			if (lcd_scroll_buffer[y].charAt(x) > 0){   // called to redraw a screen, not live characters, such as when un- pause type event ended
 				#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-					#ifdef FEATURE_TFT_DISPLAY
+					#if defined(FEATURE_TFT_DISPLAY) || defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)
 						tft_backlight(1);  // turn it off
-					#else
+					#else						
 						lcd.backlight();
-					#endif
+					#endif					
 				#endif  // FEATURE_LCD_BACKLIGHT_AUTO_DIM
 		#ifdef FEATURE_TFT_DISPLAY
-					lcd.setTextDatum(SCROLL_BOX_DATUM);
+					lcd_setTextDatum(SCROLL_BOX_DATUM);
 					lcd.setFreeFont(SCROLL_BOX_FONT);
 
 					//int y1=SCROLL_TEXT_TOP_LINE+(y*FONT_HEIGHT);
@@ -4507,13 +5142,13 @@ void service_display() {
 					lcd.setTextColor(TFT_WHITE);
 
 					#ifdef DO_STRING
-						//lcd.setTextPadding(2);
+						//lcd_setTextPadding(2);
 						//int16_t w = lcd.textWidth(lcd_scroll_buffer[y]);  // width of string with font specified
 						//lcd.drawRect(SCROLL_TEXT_LEFT_SIDE, y1, w, FONT_HEIGHT, TFT_BLACK);
-						lcd.drawString(lcd_scroll_buffer[y], SCROLL_TEXT_LEFT_SIDE, y1, GFXFF);
+						lcd_drawString(lcd_scroll_buffer[y], SCROLL_TEXT_LEFT_SIDE, y1, GFXFF);
 					#else  // do char by char
 						char c = lcd_scroll_buffer[y].charAt(x);
-						lcd.drawChar(c, x1, y1, GFXFF);  // use char in scroll buffer and place at x1, y1 on graphics screen
+						lcd_drawChar(c, x1, y1);  // use char in scroll buffer and place at x1, y1 on graphics screen
 					#endif
 
 					//lcd.setCursor(x1, y1);
@@ -4653,43 +5288,43 @@ void display_scroll_print_char(char charin){
 void clear_display_row(byte row_number)
 {
 	#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-		#ifdef FEATURE_TFT_DISPLAY
+		#if defined(FEATURE_TFT_DISPLAY) || defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)
 			tft_backlight(1);  // turn it off
 		#else
 			lcd.backlight();
 		#endif
 	#endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 
-	#ifndef FEATURE_TFT_DISPLAY
+	#if !defined(FEATURE_TFT_DISPLAY) && !defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)
 			lcd.noCursor();//sp5iou 20180328
 	#endif
 
-	uint32_t y1 = 0;
-	switch (row_number) {
-		case 0: y1 = SCROLL_BOX_ROW1; break;
-		case 1: y1 = SCROLL_BOX_ROW2; break;
-		case 2: y1 = SCROLL_BOX_ROW3; break;
-		case 3: y1 = SCROLL_BOX_ROW4; break;
-		case 4: y1 = SCROLL_BOX_ROW5; break;
-		default: y1 = SCROLL_BOX_ROW1; break;
-	}
+	#ifdef FEATURE_TFT_DISPLAY
+		uint32_t y1 = 0;
+		switch (row_number) {
+			case 0: y1 = SCROLL_BOX_ROW1; break;
+			case 1: y1 = SCROLL_BOX_ROW2; break;
+			case 2: y1 = SCROLL_BOX_ROW3; break;
+			case 3: y1 = SCROLL_BOX_ROW4; break;
+			case 4: y1 = SCROLL_BOX_ROW5; break;
+		}
 		y1 -= FONT_HEIGHT;
 
 		// blank out line
-	#ifdef FEATURE_TFT_DISPLAY
+	
 			//lcd.setFreeFont(SCROLL_BOX_FONT);
-			//lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
+			//lcd_setTextDatum(SCROLL_BOX_CENTER_DATUM);
 			//lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP+6+(row_number*FONT_HEIGHT+2), SCROLL_BOX_WIDTH, FONT_HEIGHT, 6, TFT_BLACK);
 			//lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, y1, SCROLL_BOX_WIDTH, FONT_HEIGHT, 6, TFT_BLACK);
-			//lcd.setTextPadding(2);
+			//lcd_setTextPadding(2);
 			lcd.drawRect(SCROLL_BOX_LEFT_SIDE, y1, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
 			lcd.fillRect(SCROLL_BOX_LEFT_SIDE, y1, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
 			//lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-			//lcd.setTextDatum(SCROLL_BOX_DATUM);  // set back to usual
+			//lcd_setTextDatum(SCROLL_BOX_DATUM);  // set back to usual
 			// Loop method
 			//int32_t y1 = SCROLL_TOP_LINE+(row_number*FONT_HEIGHT);
 			//int32_t x1 = SCROLL_LEFT_SIDE-4+(x*COLUMN_WIDTH);
-			//lcd.drawChar(' ', x1, y1);
+			//lcd_drawChar(' ', x1, y1);
 			//lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 	#else
 			for (byte x = 0; x < LCD_COLUMNS; x++) {
@@ -4702,8 +5337,7 @@ void clear_display_row(byte row_number)
 
 //-------------------------------------------------------------------------------------------------------
 #ifdef FEATURE_DISPLAY
-void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration)
-{
+void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration) {
 	if (in_pairing_mode == 2) return;  // block other tasks from updating the screen during pairing code display
 	if (in_pairing_mode == 1) in_pairing_mode = 2;   // close the gate to block others. This is reset to 0 by pairing mode handler.
 	if (row_number >= LCD_ROWS)
@@ -4711,7 +5345,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 	//debug_serial_port->printf("Start lcd_center_print_timed(): Row:%d  Duration:%d  Incoming string is:", row_number, duration);
 	//debug_serial_port->println(lcd_print_string);
 	#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-		#ifdef FEATURE_TFT_DISPLAY
+		#if defined(FEATURE_TFT_DISPLAY) || defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)
 			tft_backlight(1);  // turn it off
 		#else
 			lcd.backlight();
@@ -4733,7 +5367,7 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 	}
 	#ifdef FEATURE_TFT_DISPLAY
 		lcd.setFreeFont(SCROLL_BOX_FONT);
-		lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
+		lcd_setTextDatum(SCROLL_BOX_CENTER_DATUM);
 		//uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT)+(FONT_HEIGHT/4);
 		uint32_t y1 = SCROLL_BOX_ROW1;
 		switch (row_number) {
@@ -4745,11 +5379,15 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 			default: break;
 		}
 		//debug_serial_port->print(F("lcd_center_print_timed(): string = ")); debug_serial_port->println(lcd_print_string);
-		lcd.setTextPadding(2);
+		lcd_setTextPadding(2);
 		lcd.fillRect(SCROLL_BOX_LEFT_SIDE, y1-FONT_HEIGHT, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
 		lcd.setTextColor(TFT_WHITE);
-		lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, GFXFF);
-		//lcd.setTextDatum(SCROLL_BOX_DATUM);   // restore to generic datum
+		#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD		
+			lcd_drawString(lcd_print_string.c_str(), SCROLL_BOX_CENTER, y1, SCROLL_BOX_FONT);
+		#else
+			lcd_drawString(lcd_print_string.c_str(), SCROLL_BOX_CENTER, y1);
+		#endif
+		//lcd_setTextDatum(SCROLL_BOX_DATUM);   // restore to generic datum
 	#else
 		lcd.setCursor(((LCD_COLUMNS - lcd_print_string.length())/2),row_number);
 		lcd.print(lcd_print_string);
@@ -4816,7 +5454,6 @@ void check_for_dead_op()
 	// go in and out of command mode to clear or just reset the unit
 
 {
-
 	#ifdef DEBUG_LOOP
 		debug_serial_port->println(F("loop: entering check_for_dead_op"));
 	#endif
@@ -6599,6 +7236,10 @@ void ptt_key(){
 			}
 		#endif //FEATURE_SO2R_BASE
 
+		#ifdef FEATURE_MIDI
+      		midi_key_ptt(1);
+    	#endif
+
 		ptt_line_activated = 1;
 
 		#ifdef FEATURE_SO2R_BASE
@@ -6738,6 +7379,11 @@ void ptt_unkey(){
 				#endif
 			#endif //FEATURE_SO2R_BASE
 		}
+
+		#ifdef FEATURE_MIDI
+      		midi_key_ptt(0);
+		#endif
+
 		ptt_line_activated = 0;
 		#ifdef FEATURE_SEQUENCER
 			sequencer_ptt_inactive_time = millis();
@@ -7036,7 +7682,7 @@ int read_settings_from_eeprom() {
 		return 1;
 	#endif
 
-	#if !defined(ARDUINO_SAM_DUE) || (defined(ARDUINO_SAM_DUE) && defined(FEATURE_EEPROM_E24C1024))
+	#if (!defined(ARDUINO_SAM_DUE) && !defined(HARDWARE_TEENSY4)) || (defined(ARDUINO_SAM_DUE) && defined(FEATURE_EEPROM_E24C1024))
 
 		#if defined(DEBUG_EEPROM_READ_SETTINGS)
 			debug_serial_port->println(F("read_settings_from_eeprom: start"));
@@ -7552,7 +8198,14 @@ void tx_and_sidetone_key (int state)
 			if (key_tx) {
 				byte previous_ptt_line_activated = ptt_line_activated;
 				ptt_key();
-				if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_active_state);}
+				if (current_tx_key_line) {
+					digitalWrite (current_tx_key_line, tx_key_line_active_state);
+					// send usb midi NoteOn on configured channel
+					#ifdef FEATURE_MIDI
+						//MIDI.sendNoteOn(60, 127, CC_NUMBER); // Note On, max velocity
+						//MIDI.flush();
+					#endif
+				}
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 					if ((wk2_both_tx_activated) && (tx_key_line_2)) {
 						digitalWrite (tx_key_line_2, HIGH);
@@ -7569,7 +8222,13 @@ void tx_and_sidetone_key (int state)
 		} else {
 			if ((state == 0) && (key_state)) {
 				if (key_tx) {
-					if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_inactive_state);}
+					if (current_tx_key_line) {
+						digitalWrite (current_tx_key_line, tx_key_line_inactive_state);
+						#ifdef FEATURE_MIDI
+							//MIDI.sendNoteOff(60, 0, CC_NUMBER); // Note Off
+							//MIDI.flush();
+						#endif
+					}
 					#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 						if ((wk2_both_tx_activated) && (tx_key_line_2)) {
 							digitalWrite (tx_key_line_2, LOW);
@@ -7708,7 +8367,7 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
 			#endif //FEATURE_INTERNET_LINK
 
 			#if defined(OPTION_WATCHDOG_TIMER)
-				wdt_reset();
+				wdtreset();
 			#endif  //OPTION_WATCHDOG_TIMER
 
 			#if defined(FEATURE_ROTARY_ENCODER)
@@ -7930,6 +8589,10 @@ void speed_set(int wpm_set){
 			update_led_ring();
 		#endif //FEATURE_LED_RING
 
+		#ifdef FEATURE_MIDI
+      		midi_send_wpm_response();
+    	#endif
+
 		#ifdef FEATURE_DISPLAY
 			lcd_center_print_timed_wpm();
 		#endif
@@ -7962,7 +8625,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
 	while (looping) {
 		myDelay(1);
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 
 		#ifdef FEATURE_POTENTIOMETER
@@ -8773,8 +9436,8 @@ void command_mode() {
 					break;
 
 				case 9: // button was hit
-								// Serial.print(F("Button - "));
-								// Serial.println(button_that_was_pressed);
+						// debug_serial_port->print(F("Button - "));
+						// debug_serial_port->println(button_that_was_pressed);
 
 					#if defined(FEATURE_MEMORIES)
 						if (button_that_was_pressed == 0){  // button 0 was hit - exit
@@ -9256,7 +9919,7 @@ void command_keying_compensation_adjust() {
 
 
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
@@ -9300,7 +9963,7 @@ void command_dah_to_dit_ratio_adjust() {
 
 
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
@@ -9343,7 +10006,7 @@ void command_weighting_adjust() {
 		}
 
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
@@ -9381,7 +10044,7 @@ void command_tuning_mode() {
 	while (looping) {
 		myDelay(1);
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 
 		if (paddle_pin_read(paddle_left) == LOW) {
@@ -9515,7 +10178,7 @@ void command_sidetone_freq_adj() {
 		}
 
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
@@ -9593,7 +10256,7 @@ void command_speed_mode(byte mode) {
 		}
 
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
@@ -10140,7 +10803,7 @@ void send_the_dits_and_dahs(char const * cw_to_send){
 		#endif
 
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}  // for (int x = 0;x < 12;x++)
@@ -12998,6 +13661,9 @@ void check_serial(){
 
 	while (primary_serial_port->available() > 0) {
 		myDelay(1);
+		#ifdef DEBUG_LOOP
+			debug_serial_port->println(F("loop: check_serial chars available"));
+		#endif
 		incoming_serial_byte = primary_serial_port->read();
 		#ifdef FEATURE_SLEEP
 			last_activity_time = millis();
@@ -13046,6 +13712,10 @@ void check_serial(){
 
 	}  //while (primary_serial_port->available() > 0)
 
+	#ifdef DEBUG_LOOP
+		debug_serial_port->println(F("loop: check_serial: primary serial checked"));
+	#endif
+
 	#ifdef FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
 		while (secondary_serial_port->available() > 0) {
 			myDelay(1);
@@ -13078,7 +13748,9 @@ void check_serial(){
 			service_command_line_interface(secondary_serial_port);
 		} //  while (secondary_serial_port->available() > 0)
 	#endif //FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
-
+	#ifdef DEBUG_LOOP
+		debug_serial_port->println(F("loop: check_serial: secondary serial checked"));
+	#endif
 }
 #endif //defined(FEATURE_SERIAL)
 
@@ -17246,7 +17918,7 @@ byte play_memory(byte memory_number) {
 	unsigned int jump_back_to_y = 9999;
 	byte jump_back_to_memory_number = 255;
 	static byte prosign_flag = 0;
-	static byte prosign_before_flag = 0;
+	__attribute__((unused)) static byte prosign_before_flag = 0;
 	byte eeprom_byte_read = 0;
 	byte pause_sending_buffer_backspace = 0;
 
@@ -18105,6 +18777,49 @@ int memory_end(byte memory_number) {
 }
 #endif
 
+#ifdef FEATURE_MIDI
+/*
+// Send Control Change messages
+for (int i = 1; i < 128; i++) {
+	MIDI.sendControlChange(10, i, 9);  // cc number, cc value, channel
+	delay(50);
+}
+
+// MIDI message buffer
+uint8_t midiMessage[3];
+
+// Function to send a MIDI note
+void sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+midiMessage[0] = 0x90 | (channel - 1); // Note On message
+midiMessage[1] = note; // Note value
+midiMessage[2] = velocity; // Velocity
+MidiUSB.sendMIDI(midiEventPacket_t(midiMessage));
+MidiUSB.flush();
+}
+
+// Function to send a MIDI note off
+void sendMidiNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+midiMessage[0] = 0x80 | (channel - 1); // Note Off message
+midiMessage[1] = note; // Note value
+midiMessage[2] = 0; // Velocity
+MidiUSB.sendMIDI(midiEventPacket_t(midiMessage));
+MidiUSB.flush();
+}
+
+// Example: Read incoming MIDI messages
+void read_MIDI_in(void) {
+  midiEventPacket_t rx;
+  do {
+    rx = MidiUSB.read();
+    if (rx.header != 0) {
+      debug_serial_port->printf("MIDI Received: %02X %02X %02X %02X\n",
+                    rx.header, rx.byte1, rx.byte2, rx.byte3);
+    }
+  } while (rx.header != 0);
+}
+*/
+#endif
+
 // used for MCP23017 and COMPASS devices
 #if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
 #include <Wire.h>
@@ -18124,10 +18839,10 @@ void initialize_i2c(void) {
 	#else  // ESP32 and maybe others
 		#ifdef USE_WIRE1
 			Wire1.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
-			debug_serial_port->printf("Intialized I2C Bus on Bus 1 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
+			//debug_serial_port->printf("Intialized I2C Bus on Bus 1 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
 		#else
 			Wire.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
-			debug_serial_port->printf("Intialized I2C Bus on Bus 0 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
+			//debug_serial_port->printf("Intialized I2C Bus on Bus 0 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
 		#endif
 	#endif
 }
@@ -18301,17 +19016,17 @@ void display_heading(void) {
 		strcpy(last_heading, h_str);
 		lcd.setFreeFont(SCROLL_BOX_FONT);
 		lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-		lcd.drawString(last_heading, 10, 40, GFXFF);
+		lcd_drawString(last_heading, 10, 40, GFXFF);
 		lcd.setTextColor(TFT_WHITE, TFT_BLUE);
-		lcd.drawString(h_str, 10, 40, GFXFF);
+		lcd_drawString(h_str, 10, 40, GFXFF);
 
 		sprintf(h_str, "(Dec is %3.3f Deg)", declination);
 		strcpy(last_dec, h_str);
 		lcd.setFreeFont(SCROLL_BOX_FONT);
 		lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-		lcd.drawString(last_dec, 10, 70, GFXFF);
+		lcd_drawString(last_dec, 10, 70, GFXFF);
 		lcd.setTextColor(TFT_WHITE, TFT_BLUE);
-		lcd.drawString(h_str, 10, 70, GFXFF);
+		lcd_drawString(h_str, 10, 70, GFXFF);
 
 		update_heading_display_flag = true;
 	#endif
@@ -18420,12 +19135,13 @@ void init_ESP32_GPIO_key_pins(void) {
 	#ifdef HARDWARE_ESP32_DEV
 		IRAM_ATTR void read_io_handler(void *pvParameters) {
 			while (1) {
-				myDelay(1);
+				myDelay(1);				
 	 #else
 		void read_io_handler(void) {
 	 #endif	
 				uint8_t bits = 0;
 				if (paddle_irq) {
+					debug_serial_port->println(F("read_io_handler event start"));
 					paddle_irq = 0;
 					bits = mcp23017.readPort(MCP23017Port::A);
 					paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
@@ -18446,7 +19162,7 @@ void init_ESP32_GPIO_key_pins(void) {
 	void init_MCP23017(void) {	
 		// Set the expander port A pins for the paddles to input with pullup
 		// could be bus 1 if board has a touch controller. else normally bus 0
-		//debug_serial_port->println("MCP23107: Start setup");
+		Serial.println("MCP23107: Start setup");
 		mcp23017.init();
 		mcp23017.interruptMode(MCP23017InterruptMode::Or);  // MCP23017InterruptMode::Separated
 		mcp23017.interrupt(MCP23017Port::A, CHANGE);
@@ -18508,9 +19224,9 @@ void initialize_pins() {
 		pinMode (paddle_right, INPUT_PULLUP);
 	#endif
 #else
-	pinMode (paddle_left, INPUT);
+	pinMode (paddle_left, INPUT_PULLUP);
 	digitalWrite (paddle_left, HIGH);
-	pinMode (paddle_right, INPUT);
+	pinMode (paddle_right, INPUT_PULLUP);
 	digitalWrite (paddle_right, HIGH);
 #endif //defined (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) sp5iou 20180329
 
@@ -18596,7 +19312,7 @@ void initialize_pins() {
 	if (bt_keyboard_LED) {
 		pinMode(bt_keyboard_LED, OUTPUT);
 		digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
-		debug_serial_port->print(F("BT Keyboard connected LED inactive state = ")); debug_serial_port->println(bt_keyboard_LED_pin_inactive_state);
+		//debug_serial_port->print(F("BT Keyboard connected LED inactive state = ")); debug_serial_port->println(bt_keyboard_LED_pin_inactive_state);
 	}
 
 	#ifdef FEATURE_CW_DECODER
@@ -18803,74 +19519,74 @@ void initialize_pins() {
 void initialize_debug_startup()  {
 #ifdef DEBUG_STARTUP
 
-	serial_status(debug_serial_port);
+	serial_status(Serial);
 	#if defined(FEATURE_SERIAL)
-	debug_serial_port->println(F("FEATURE_SERIAL"));
+	Serial.println(F("FEATURE_SERIAL"));
 	#endif
 	#ifdef FEATURE_COMMAND_LINE_INTERFACE
-	debug_serial_port->println(F("FEATURE_COMMAND_LINE_INTERFACE"));
+	Serial.println(F("FEATURE_COMMAND_LINE_INTERFACE"));
 	#endif
 	#ifndef OPTION_DO_NOT_SAY_HI
-	debug_serial_port->println(F("OPTION_DO_NOT_SAY_HI"));
+	Serial.println(F("OPTION_DO_NOT_SAY_HI"));
 	#endif
 	#ifdef FEATURE_MEMORIES
-	debug_serial_port->println(F("FEATURE_MEMORIES"));
+	Serial.println(F("FEATURE_MEMORIES"));
 	#endif
 	#ifdef FEATURE_MEMORY_MACROS
-	debug_serial_port->println(F("FEATURE_MEMORY_MACROS"));
+	Serial.println(F("FEATURE_MEMORY_MACROS"));
 	#endif
 	#ifdef FEATURE_WINKEY_EMULATION
-	debug_serial_port->println(F("FEATURE_WINKEY_EMULATION"));
+	Serial.println(F("FEATURE_WINKEY_EMULATION"));
 	#endif
 	#ifdef OPTION_WINKEY_2_SUPPORT
-	debug_serial_port->println(F("OPTION_WINKEY_2_SUPPORT"));
+	Serial.println(F("OPTION_WINKEY_2_SUPPORT"));
 	#endif
 	#ifdef FEATURE_BEACON
-	debug_serial_port->println(F("FEATURE_BEACON"));
+	Serial.println(F("FEATURE_BEACON"));
 	#endif
 	#ifdef FEATURE_TRAINING_COMMAND_LINE_INTERFACE
-	debug_serial_port->println(F("FEATURE_TRAINING_COMMAND_LINE_INTERFACE"));
+	Serial.println(F("FEATURE_TRAINING_COMMAND_LINE_INTERFACE"));
 	#endif
 	#ifdef FEATURE_POTENTIOMETER
-	debug_serial_port->println(F("FEATURE_POTENTIOMETER"));
+	Serial.println(F("FEATURE_POTENTIOMETER"));
 	#endif
 	#if defined(FEATURE_SERIAL_HELP)
-	debug_serial_port->println(F("FEATURE_SERIAL_HELP"));
+	Serial.println(F("FEATURE_SERIAL_HELP"));
 	#endif
 	#ifdef FEATURE_HELL
-	debug_serial_port->println(F("FEATURE_HELL"));
+	Serial.println(F("FEATURE_HELL"));
 	#endif
 	#ifdef FEATURE_AMERICAN_MORSE
-	debug_serial_port->println(F("FEATURE_AMERICAN_MORSE"));
+	Serial.println(F("FEATURE_AMERICAN_MORSE"));
 	#endif
 	#ifdef FEATURE_PS2_KEYBOARD
-	debug_serial_port->println(F("FEATURE_PS2_KEYBOARD"));
+	Serial.println(F("FEATURE_PS2_KEYBOARD"));
 	#endif
 	#ifdef FEATURE_DEAD_OP_WATCHDOG
-	debug_serial_port->println(F("FEATURE_DEAD_OP_WATCHDOG"));
+	Serial.println(F("FEATURE_DEAD_OP_WATCHDOG"));
 	#endif
 	#ifdef FEATURE_AUTOSPACE
-	debug_serial_port->println(F("FEATURE_AUTOSPACE"));
+	Serial.println(F("FEATURE_AUTOSPACE"));
 	#endif
 	#ifdef FEATURE_FARNSWORTH
-	debug_serial_port->println(F("FEATURE_FARNSWORTH"));
+	Serial.println(F("FEATURE_FARNSWORTH"));
 	#endif
 	#ifdef FEATURE_DL2SBA_BANKSWITCH
-	debug_serial_port->println(F("FEATURE_DL2SBA_BANKSWITCH"));
+	Serial.println(F("FEATURE_DL2SBA_BANKSWITCH"));
 	#endif
 	#ifdef FEATURE_BUTTONS
-	debug_serial_port->println(F("FEATURE_BUTTONS"));
+	Serial.println(F("FEATURE_BUTTONS"));
 	#endif
 	#ifdef FEATURE_COMMAND_MODE
-	debug_serial_port->println(F("FEATURE_COMMAND_MODE"));
+	Serial.println(F("FEATURE_COMMAND_MODE"));
 	#endif
 	#ifdef FEATURE_LCD_4BIT
-	debug_serial_port->println(F("FEATURE_LCD_4BIT"));
+	Serial.println(F("FEATURE_LCD_4BIT"));
 	#endif
 	#ifdef FEATURE_LCD_8BIT
-	debug_serial_port->println(F("FEATURE_LCD_8BIT"));
+	Serial.println(F("FEATURE_LCD_8BIT"));
 	#endif
-	debug_serial_port->println(F("setup: exiting, going into loop"));
+	Serial.println(F("setup: exiting, going into loop"));
 #endif //DEBUG_STARTUP
 }
 
@@ -19213,7 +19929,7 @@ void initialize_potentiometer(){
 		pot_wpm_high_value = initial_pot_wpm_high_value;
 		last_pot_wpm_read = pot_value_wpm();
 		configuration.pot_activated = 1;
-//    Serial.print(pot_value_wpm());//SP5IOU 20220129
+//    debug_serial_port->print(pot_value_wpm());//SP5IOU 20220129
 	#endif
 
 }
@@ -19566,11 +20282,15 @@ void pairing_handler(uint32_t pid) {
 		debug_serial_port->println(pid);
 		myDelay(5);
 		char pass[28];
-		clear_display_row(1);
+		#ifdef FEATURE_DISPLAY
+			clear_display_row(1);
+		#endif
 		debug_serial_port->println(F("Print pairing Code to the screen"));
 		in_pairing_mode = 1;
 		sprintf(pass, "Pairing Code %lu", pid);
-		lcd_center_print_timed(pass, 1, 15000);
+		#ifdef FEATURE_DISPLAY
+			lcd_center_print_timed(pass, 1, 15000);
+		#endif
 }
 
 #endif
@@ -19621,6 +20341,7 @@ void kb(void *cbdata, int key) {
 		inf.state = state;
 		last_active_time = millis();   // reset backlight tomeout timer
 		static KeyModifier mod_key; 
+		bool skip_to_end = false;
 
 		// Modifier key has been pressed.  Set hold key flag and bit mask and exit, then only process regular keys until modifier key is let up
 				switch (key) {
@@ -19659,10 +20380,10 @@ void kb(void *cbdata, int key) {
 					_holding = 1;
 					inf.modifier = (KeyModifier) mod_key;	
 					//debug_serial_port->printf("5 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
-					goto end;  // don't send this key thru
+					skip_to_end = true;  // don't send this key thru
 				}
 				
-				if (state && _heldKey && _holding) {  // new modifier key was pressed															
+				if (state && _heldKey && _holding && !skip_to_end) {  // new modifier key was pressed															
 					inf.keys[0] =(uint8_t) mod_key;
 					inf.modifier = mod_key;
 					inf.keys[2] = key; 
@@ -19670,7 +20391,7 @@ void kb(void *cbdata, int key) {
 					goto end_kb;
 				}
 
-				if (!state && _heldKey && _holding) { // modifier was let up, clear it		
+				if (!state && _heldKey && _holding && !skip_to_end) { // modifier was let up, clear it		
 					if (key == _heldKey) {
 						_holding = 0;
 						_heldKey = 0;
@@ -19679,7 +20400,7 @@ void kb(void *cbdata, int key) {
 					inf.keys[2] = 0; 		
 					inf.modifier = (KeyModifier) 0;														
 					//debug_serial_port->printf("8 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
-					goto end;
+					skip_to_end = true;
 				}
 
 				end_kb:
@@ -19687,13 +20408,11 @@ void kb(void *cbdata, int key) {
 					debug_serial_port->printf("kb2: state:%d  mod:0x%02x  keys[0]:0x%02x  keys[2]:0x%02x\n", state, inf.modifier, inf.keys[0], inf.keys[2]);					
 				#endif
 				
-		if (state) bt_queueadd(inf);
+		if (state && !skip_to_end) bt_queueadd(inf);
 
 		#ifdef DEBUG_BT_KEYBOARD
 			if (state) debug_serial_port->printf("Kb (callback) out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
 		#endif
-
-		end:
 }
 #endif
 
@@ -19892,6 +20611,61 @@ const char btn2_text[] = {"This is even longer test text Msg #2"};
 const char btn3_text[] = {"This is for Button Msg #3"};
 const char btn4_text[] = {"This is test text Msg #4"};
 
+#if defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)
+	#ifdef USE_RA8876
+
+		int16_t _activeWindowXL = 0;
+		int16_t _activeWindowXR = SCREEN_WIDTH;
+		int16_t _activeWindowYT = 0;
+		int16_t _activeWindowYB = SCREEN_HEIGHT;
+
+		void updateActiveWindow(bool full)
+		{ 
+			if (full){
+				// X
+				lcd.activeWindowXY(0, 0);
+				lcd.activeWindowWH(SCREEN_WIDTH, SCREEN_HEIGHT);;
+			} else {
+				lcd.activeWindowXY(_activeWindowXL, _activeWindowYT);
+				lcd.activeWindowWH(_activeWindowXR-_activeWindowXL, _activeWindowYB-_activeWindowYT);		
+			}
+		}
+
+		/**************************************************************************/
+		void setActiveWindow(int16_t XL, int16_t XR, int16_t YT, int16_t YB)
+		{
+			//if (_portrait){ swapvals(XL,YT); swapvals(XR,YB);}
+
+			//	if (XR >= SCREEN_WIDTH) XR = SCREEN_WIDTH;
+			//	if (YB >= SCREEN_HEIGHT) YB = SCREEN_HEIGHT;
+			_activeWindowXL = XL; _activeWindowXR = XR;
+			_activeWindowYT = YT; _activeWindowYB = YB;
+			updateActiveWindow(false);
+		}
+
+		/**************************************************************************/
+		/*!		
+				Set the Active Window as FULL SCREEN
+		*/
+		/**************************************************************************/
+		void setActiveWindow_default(void)
+		{
+			_activeWindowXL = 0; _activeWindowXR = SCREEN_WIDTH;
+			_activeWindowYT = 0; _activeWindowYB = SCREEN_HEIGHT;
+			//if (_portrait){swapvals(_activeWindowXL,_activeWindowYT); swapvals(_activeWindowXR,_activeWindowYB);}
+			updateActiveWindow(true);
+		}
+
+		/**************************************************************************/
+		/*!
+				this update the RA8875 Active Window registers
+				[private]
+		*/
+		/**************************************************************************/
+
+	#endif
+#endif
+
 void initialize_display() {
 
 	#ifdef FEATURE_DISPLAY
@@ -19915,8 +20689,92 @@ void initialize_display() {
 		#if defined (FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_LCD_I2C_FDEBRABANDER)
 			lcd.begin();
 			lcd.home();
+		
+		#elif defined(FEATURE_TFT_TEENSY_RA887x_CAP_LCD)
+			#ifdef FEATURE_TFT_DISPLAY
+
+					#ifdef LOAD_GLCD
+					fontsloaded = 0x0002; // Bit 1 set
+					#endif
+					#ifdef LOAD_FONT2
+					fontsloaded |= 0x0004; // Bit 2 set
+					#endif
+					#ifdef LOAD_FONT4
+					fontsloaded |= 0x0010; // Bit 4 set
+					#endif
+					#ifdef LOAD_FONT6
+					fontsloaded |= 0x0040; // Bit 6 set
+					#endif
+					#ifdef LOAD_FONT7
+					fontsloaded |= 0x0080; // Bit 7 set
+					#endif
+					#ifdef LOAD_FONT8
+					fontsloaded |= 0x0100; // Bit 8 set
+					#endif
+
+				#ifdef USE_RA8876
+					debug_serial_port->print(F("Initializing RA8876 Display\n"));   
+					lcd.begin(50000000UL);  // 10 is very slow, 30, much better, 40-50 seem to be were perf gain flattens off.  
+					// Works up to 70Mhz but so little perf gain above 40Mhz thaqt 50Mhz seems a solid compromise.
+					cts.begin();
+					cts.setTouchLimit(MAXTOUCHLIMIT);
+					lcd.touchEnable(false);   // Ensure the resitive controller, if any is off
+					lcd.displayImageStartAddress(PAGE1_START_ADDR); 
+					lcd.displayImageWidth(SCREEN_WIDTH);
+					lcd.displayWindowStartXY(0,0);
+					// specify the page 2 for the current canvas
+					lcd.canvasImageStartAddress(PAGE2_START_ADDR);
+					// specify the page 1 for the current canvas
+					lcd.canvasImageStartAddress(PAGE1_START_ADDR);
+					lcd.canvasImageWidth(SCREEN_WIDTH);
+					//lcd.activeWindowXY(0,0);
+					//lcd.activeWindowWH(SCREEN_WIDTH,SCREEN_HEIGHT);
+					setActiveWindow_default();				
+					//setActiveWindow(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT);
+					lcd.graphicMode(true);
+					lcd.clearActiveScreen();
+					lcd.selectScreen(0);  // Select screen page 0
+					lcd.fillScreen(TFT_DARKBLUE);
+					lcd.setBackGroundColor(BLUE);
+					lcd.setTextColor(WHITE, BLACK);
+					lcd.backlight(true);
+					lcd.displayOn(true);
+					lcd.setRotation(SCREEN_ROTATION); // 0 is normal, 1 is 90, 2 is 180, 3 is 270 degrees.  
+									// RA8876 touch controller is upside down compared to the RA8875 so correcting for it there.
+				#endif
+		
+				#ifdef USE_RA8875
+					DPRINTLN(F("Initializing RA8875 Display"));
+					tft.begin(RA8875_800x480);
+					tft.setRotation(SCREEN_ROTATION); // 0 is normal, 1 is 90, 2 is 180, 3 is 270 degrees
+					delay(20);
+					#ifdef USE_FT5206_TOUCH
+						tft.useCapINT(RA8875_INT);
+						tft.setTouchLimit(MAXTOUCHLIMIT);
+						tft.enableCapISR(true);
+						tft.setTextColor(RA8875_WHITE, RA8875_BLACK);
+					#else
+						#ifdef USE_RA8875
+							//tft.print("you should open RA8875UserSettings.h file and uncomment USE_FT5206_TOUCH!");
+						#endif  // USE_RA8875
+					#endif // USE_FT5206_TOUCH
+				#endif
+				#ifdef FEATURE_TFT_DISPLAY
+					initialize_TFT_display();
+				#endif
+			#endif
+
+				// Display Startup Banner
+				lcd.setFont(Arial_28_Bold);
+				lcd.setTextColor(BLUE);
+				lcd.setCursor(70, 100);
+				lcd.print(CODE_VERSION); // Customize the Startup Banner Text
+				lcd.setCursor(70, 200);
+				lcd.setFont(Arial_28_Bold);
+
 		#elif !defined (FEATURE_TFT_DISPLAY)
 			lcd.begin(LCD_COLUMNS, LCD_ROWS);
+			Serial.println(F("Completed Basic LCD init"));
 			lcd.clear();
 		#endif
 
@@ -19959,15 +20817,15 @@ void initialize_display() {
 			lcd_center_print_timed("K3NGKeyr", 0, 4000);
 		} else {
 			#ifdef FEATURE_TFT_DISPLAY
-				lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
+				lcd_setTextDatum(SCROLL_BOX_CENTER_DATUM);
 				lcd.setFreeFont(SCROLL_BOX_FONT);
-				//lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1+(FONT_HEIGHT/4), GFXFF);
-				lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1, GFXFF);
+				//lcd_drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1+(FONT_HEIGHT/4), GFXFF);
+				lcd_drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1);
 				#ifdef FEATURE_BT_KEYBOARD
-					//lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2+(FONT_HEIGHT/4), GFXFF);
-					lcd.drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2, GFXFF);
+					//lcd_drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2+(FONT_HEIGHT/4), GFXFF);
+					lcd_drawString("BT Keyboard Search..", SCROLL_BOX_CENTER, SCROLL_BOX_ROW2);
 				#endif
-				lcd.drawString(CODE_VERSION, SCROLL_BOX_CENTER, SCROLL_BOX_ROW3, GFXFF);
+				lcd_drawString(CODE_VERSION, SCROLL_BOX_CENTER, SCROLL_BOX_ROW3);
 				myDelay(2000);
 			#else
 				lcd_center_print_timed("K3NG Keyer", 0, 4000);
@@ -19980,9 +20838,9 @@ void initialize_display() {
 					lcd_center_print_timed(custom_startup_field, 1, 4000);    // display the custom field on the second line of the display, maximum field length is the number of columns
 				} else if (LCD_ROWS > 2) {
 					#ifdef FEATURE_TFT_DISPLAY
-						lcd.setTextDatum(MC_DATUM);
-						lcd.drawString(custom_startup_field, SCROLL_BOX_CENTER, SCROLL_BOX_ROW4, GFXFF);
-						lcd.setTextDatum(MY_DATUM);
+						lcd_setTextDatum(MC_DATUM);
+						lcd_drawString(custom_startup_field, SCROLL_BOX_CENTER, SCROLL_BOX_ROW4);
+						lcd_setTextDatum(MY_DATUM);
 					#else
 						lcd_center_print_timed("hi", 1, 4000);                    // display 'hi' on the 2nd line anyway
 						lcd_center_print_timed(custom_startup_field, 2, 4000);    // display the custom field on the third line of the display, maximum field length is the number of columns
@@ -20054,7 +20912,7 @@ void popup(bool show)
 	#ifdef FEATURE_TFT_DISPLAY
 		if (!show && popup_active) {  // remove popup window unless it is a repeat key
 			lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
-			lcd.resetViewport();
+			lcd_resetViewport();
 			lcd.setFreeFont(TFT_FONT_MEDIUM);
 			display_scroll_print_char('~');
 			popup_active = false;
@@ -20064,10 +20922,10 @@ void popup(bool show)
 		}
 		// draw the popup window and post the text
 		//debug_serial_port->println(F("popup on"));
-		lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+		lcd_setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
 		popup_active = true;
 		lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
-		lcd.setTextWrap(true,true);
+		lcd_setTextWrap(true,true);
 		lcd.setCursor(SCROLL_BOX_LEFT_SIDE,SCROLL_BOX_TOP);
 		lcd.setFreeFont(TFT_FONT_MEDIUM);
 		lcd.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -20476,7 +21334,7 @@ void process_buttons() { // (uint8_t button_ID) {
 								t_x = tp.points[0].x;
 								t_y = tp.points[0].y;
 							}
-							if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);
+							//if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);
 						#endif
 
 						#ifdef USE_RES_TOUCH
@@ -20595,7 +21453,7 @@ void blink_ptt_dits_and_dahs(char const * cw_to_send){
 		}
 
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
 	}
 }
@@ -22538,14 +23396,14 @@ void parse_get(String str){
 
 	#if defined(DEBUG_WEB_PARSE_GET)
 		debug_serial_port->print(F("parse_get: raw workstring: "));
-		Serial.println(str);
+		debug_serial_port->println(str);
 	#endif
 
 	workstring = str.substring(str.indexOf("?")+1);
 
 	#if defined(DEBUG_WEB_PARSE_GET)
 		debug_serial_port->print(F("parse_get: workstring: "));
-		Serial.println(workstring);
+		debug_serial_port->println(workstring);
 	#endif
 
 	while(workstring.indexOf("=") > 0){
@@ -22570,14 +23428,14 @@ void parse_get(String str){
 			parse_get_results[parse_get_results_index].value_string = value;
 			parse_get_results[parse_get_results_index].value_long = value.toInt();
 
-			// Serial.print(parse_get_results_index);
-			// Serial.print(F(":"));
-			// Serial.print(parse_get_results[parse_get_results_index].parameter);
-			// Serial.print(F(":"));
-			// Serial.print(parse_get_results[parse_get_results_index].value_string);
-			// Serial.print(F(":"));
-			// Serial.print(parse_get_results[parse_get_results_index].value_long);
-			// Serial.println(F("$"));
+			// debug_serial_port->print(parse_get_results_index);
+			// debug_serial_port->print(F(":"));
+			// debug_serial_port->print(parse_get_results[parse_get_results_index].parameter);
+			// debug_serial_port->print(F(":"));
+			// debug_serial_port->print(parse_get_results[parse_get_results_index].value_string);
+			// debug_serial_port->print(F(":"));
+			// debug_serial_port->print(parse_get_results[parse_get_results_index].value_long);
+			// debug_serial_port->println(F("$"));
 
 			parse_get_results_index++;
 		}
@@ -24559,10 +25417,127 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 		#endif
  }
 
+#ifdef FEATURE_MIDI
 
+void midi_setup() {
+  // set callback for commands
+  usbMIDI.setHandleControlChange(myControlChange);
+}
+
+void midi_key_tx(int state) {
+  if (state) {
+    usbMIDI.sendNoteOn(OPTION_MIDI_BASE_NOTE+1, 99, OPTION_MIDI_KEYER_CHANNEL);
+  } else {
+    usbMIDI.sendNoteOff(OPTION_MIDI_BASE_NOTE+1, 0, OPTION_MIDI_KEYER_CHANNEL);
+  }
+}
+
+void midi_key_ptt(int state) {
+  if (state) {
+    usbMIDI.sendNoteOn(OPTION_MIDI_BASE_NOTE+0, 99, OPTION_MIDI_KEYER_CHANNEL);
+  } else {
+    usbMIDI.sendNoteOff(OPTION_MIDI_BASE_NOTE+0, 0, OPTION_MIDI_KEYER_CHANNEL);
+  }
+}
+
+// MIDI callback
+void myControlChange(byte channel, byte control, byte value) {
+  // debug
+  //usbMIDI.sendNoteOn(OPTION_MIDI_BASE_NOTE+1, 99, OPTION_MIDI_KEYER_CHANNEL);
+  //delay(100);
+  //usbMIDI.sendNoteOff(OPTION_MIDI_BASE_NOTE+1, 0, OPTION_MIDI_KEYER_CHANNEL);
+  // end debug
+
+  int ok = 1;
+
+  if (channel != OPTION_MIDI_INPUT_CHANNEL) {
+    // error, unexpected channel
+    sendMidiResponseOk(0);
+    return;
+  }
+
+  switch (control) {
+    case OPTION_MIDI_IS_KEYER_CONTROL:
+      // no switching in this Sketch
+      sendMidiResponseOk(0);
+//      if (value > 0) {
+//        setupIambic(1);
+//      } else {
+//        setupIambic(0);
+//      }
+      break;
+    case OPTION_MIDI_IAMBIC_CONTROL:
+      if (value > 0) {
+        setupIambicMode(1);
+      } else {
+        setupIambicMode(0);
+      }
+      break;
+    case OPTION_MIDI_WPM_CONTROL:
+      speed_set(value);
+      #ifdef FEATURE_WINKEY_EMULATION
+        winkey_port_write(((value - pot_wpm_low_value)|128),0);
+      #endif
+      break;
+    case OPTION_MIDI_REVERSE_CONTROL:
+      if (value > 0) {
+        configuration.paddle_mode = PADDLE_REVERSE;
+      } else {
+        configuration.paddle_mode = PADDLE_NORMAL;
+      }
+      break;
+    case OPTION_MIDI_GET_KEYER_STATE_CONTROL:
+      sendKeyerStateResponse();
+      break;
+    default:
+      // unknown command
+      sendMidiResponseOk(0);
+  }
+  if (ok == 1) {
+    sendMidiResponseOk(1);
+  } else {
+    sendMidiResponseOk(0);
+  }
+}
+
+void setupIambicMode(int modeB) {
+  if (modeB == 1) {
+    configuration.keyer_mode = IAMBIC_B;
+  } else {
+    configuration.keyer_mode = IAMBIC_A;
+  }
+  config_dirty = 1;
+}
+
+void sendMidiResponseOk(int ok) {
+  if (ok == 1) {
+    // ok
+    usbMIDI.sendControlChange(OPTION_MIDI_RESPONSE_OK, 99, OPTION_MIDI_RESPONSE_CHANNEL);
+  } else {
+    // error
+    usbMIDI.sendControlChange(OPTION_MIDI_RESPONSE_FAIL, 0, OPTION_MIDI_RESPONSE_CHANNEL);
+  }
+}
+
+void sendKeyerStateResponse() {
+  usbMIDI.sendControlChange(OPTION_MIDI_RESPONSE_IS_KEYER, 2, OPTION_MIDI_RESPONSE_CHANNEL);
+  usbMIDI.sendControlChange(OPTION_MIDI_RESPONSE_WPM, configuration.wpm, OPTION_MIDI_RESPONSE_CHANNEL);
+  usbMIDI.sendControlChange(OPTION_MIDI_RESPONSE_REVERSE, ( configuration.paddle_mode == PADDLE_REVERSE ? 1 : 0 ), OPTION_MIDI_RESPONSE_CHANNEL);
+  if (configuration.keyer_mode == IAMBIC_B) {
+    usbMIDI.sendControlChange(OPTION_MIDI_RESPONSE_IAMBIC, 1, OPTION_MIDI_RESPONSE_CHANNEL);
+  } else if (configuration.keyer_mode == IAMBIC_A) {
+    usbMIDI.sendControlChange(OPTION_MIDI_RESPONSE_IAMBIC, 0, OPTION_MIDI_RESPONSE_CHANNEL);
+  }
+}
+
+void midi_send_wpm_response() {
+  usbMIDI.sendControlChange(OPTION_MIDI_RESPONSE_WPM, configuration.wpm, OPTION_MIDI_RESPONSE_CHANNEL);
+}
+
+#endif // FEATURE_MIDI
+//-------------------------------------------------------------------------------------------------------
 // DL2DBG contributed code (adapted into code by Goody K3NG)
 // Based on https://forum.arduino.cc/index.php?topic=446209.15
-
 
 #if defined(FEATURE_SINEWAVE_SIDETONE)
 #include <driver/dac_oneshot.h>
@@ -25092,8 +26067,13 @@ void tft_backlight(int state) {
 		static bool state_last = 254;
 
 		if (!configuration.backlight_timeout_disable && (state != state_last)) { // do nothing effectively disabling timeout
-			if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
-			else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
+			#ifdef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+				if (state) lcd.backlight(true);
+				else lcd.backlight(false);
+			#else
+				if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
+				else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
+			#endif
 			state_last = state;
 			#ifdef DEBUG_BACKLIGHT
 				debug_serial_port->printf("tft_backlight: Timeout disabled=%d  state=%d\n", configuration.backlight_timeout_disable, state);
@@ -25648,7 +26628,7 @@ void initialize_m5stack_core2()
 		auto ms = millis();
 
 		lcd.setRotation(1);
-		lcd.setTextDatum(ML_DATUM);
+		lcd_setTextDatum(ML_DATUM);
 		//lcd.setWindow(0,0,w,h);
 		if (M5.Speaker.begin())
 				debug_serial_port->println(F("** M5 Speaker started"));
@@ -25930,10 +26910,11 @@ void initialize_st7789_lcd()
 			//initialize_m5stack_core2();
 			// h and w are defined as 320 and 240 globally.  Crashes when calling height() or width() functions.
 		#else
-			lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
-			//lcd.invertDisplay(1);
-			lcd.setRotation(LCD_ROTATION);  //3 for most displays
-
+			#ifndef FEATURE_TFT_TEENSY_RA887x_CAP_LCD
+				lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
+				//lcd.invertDisplay(1);
+				lcd.setRotation(LCD_ROTATION);  //3 for most displays
+			#endif
 			#ifdef FEATURE_TOUCH_DISPLAY
 				#if defined(CAL_TOUCH1)
 					uint16_t calibrationData[5] = {304, 3548, 145, 3600, 1};  // plug in results of cal below
@@ -26047,15 +27028,15 @@ void initialize_st7789_lcd()
 			#endif
 		#endif
 		lcd.fillScreen(TFT_BLACK);
-		lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
+		lcd_setTextDatum(MY_DATUM); // Centre text on x,y position
 		// Set up new screen and draw status bar and icons in it
 		lcd.setTextColor(TFT_GREY, TFT_BLACK);
-		lcd.setTextColor(TFT_RED);
+		lcd.setTextColor(TFT_RED);		
 		lcd.drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_BOX_HEIGHT, 6, TFT_RED);
 		lcd.drawFastHLine(0, SCROLL_BOX_TOP-2, SCREEN_WIDTH, TFT_RED);
 		lcd.drawFastHLine(0,SCROLL_BOX_TOP-1, SCREEN_WIDTH, TFT_RED);
-		//lcd.setTextWrap(false, false);                         // turn off text wrap, else will overwrite the borders
-		lcd.setTextWrap(true, true);                         // turn off text wrap, else will overwrite the borders
+		//lcd_setTextWrap(false, false);                         // turn off text wrap, else will overwrite the borders
+		lcd_setTextWrap(true, true);                         // turn off text wrap, else will overwrite the borders
 		lcd.setTextColor(TFT_WHITE,TFT_BLACK);
 		// now updae scroll box area with satus messages and eventually CW text to send
 
@@ -26072,7 +27053,7 @@ void initialize_st7789_lcd()
 		//lcd.setCursor(SCROLL_TEXT_LEFT_SIDE, SCROLL_TEXT_TOP_LINE);
 		//lcd.setTextColor(TFT_WHITE,TFT_BLACK);
 		//lcd.setTextFont(4); //&fonts::FreeMonoBold12pt7b)
-		//lcd.setTextDatum(MY_DATUM); // Centre text on x,y position
+		//lcd_setTextDatum(MY_DATUM); // Centre text on x,y position
 		//lcd.setFreeFont(TFT_FONT_MEDIUM);
 	}
 #endif
@@ -26631,8 +27612,10 @@ void mainloop(void)
 		myDelay(1);
 
 		#ifdef OPTION_WATCHDOG_TIMER
-			wdt_reset();
+			wdtreset();
 		#endif  //OPTION_WATCHDOG_TIMER
+
+		//debug_serial_port->println(F("Entered main loop"));
 
 		//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
 			#if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
@@ -26660,7 +27643,7 @@ void mainloop(void)
 						#endif
 
 						#ifdef OPTION_WATCHDOG_TIMER
-							wdt_reset();
+							wdtreset();
 						#endif                                                                      // OPTION_WATCHDOG_TIMER
 
 						#ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
@@ -26680,7 +27663,6 @@ void mainloop(void)
 				#endif
 				check_paddles();
 				service_dit_dah_buffers();
-
 				#if defined(FEATURE_SERIAL)
 						check_serial();
 						check_paddles();
@@ -26853,19 +27835,19 @@ void TaskMonitor(void *pvParameters) {
 	for (;;) {
 		#if defined(FEATURE_GPS) && defined(USE_GPS_TASK)
 			UBaseType_t mark1 = uxTaskGetStackHighWaterMark(xHandle_GPS);
-			Serial.print("GPS Task High Water Mark: "); Serial.print(mark1); Serial.print(" words ("); Serial.print(mark1 * sizeof(StackType_t)); Serial.println(" bytes)");
+			debug_serial_port->print("GPS Task High Water Mark: "); debug_serial_port->print(mark1); debug_serial_port->print(" words ("); debug_serial_port->print(mark1 * sizeof(StackType_t)); debug_serial_port->println(" bytes)");
 		#endif
 		#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK)
 			UBaseType_t mark2 = uxTaskGetStackHighWaterMark(xHandle_TOUCH);
-			Serial.print("Touch Task High Water Mark: "); Serial.print(mark2); Serial.print(" words ("); Serial.print(mark2 * sizeof(StackType_t)); Serial.println(" bytes)");
+			debug_serial_port->print("Touch Task High Water Mark: "); debug_serial_port->print(mark2); debug_serial_port->print(" words ("); debug_serial_port->print(mark2 * sizeof(StackType_t)); debug_serial_port->println(" bytes)");
 		#endif
 		#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
 			UBaseType_t mark3 = uxTaskGetStackHighWaterMark(xHandle_BT);
-			Serial.print("BT Keyboard Task High Water Mark: "); Serial.print(mark3); Serial.print(" words ("); Serial.print(mark3 * sizeof(StackType_t)); Serial.println(" bytes)");
+			debug_serial_port->print("BT Keyboard Task High Water Mark: "); debug_serial_port->print(mark3); debug_serial_port->print(" words ("); debug_serial_port->print(mark3 * sizeof(StackType_t)); debug_serial_port->println(" bytes)");
 		#endif
 		#if defined(USE_MAIN_TASK)
-			UBaseType_t mark5 = uxTaskGetStackHighWaterMark(xHandle_MAIN);
-			Serial.print("Main Task High Water Mark: "); Serial.print(mark5); Serial.print(" words ("); Serial.print(mark4 * sizeof(StackType_t)); Serial.println(" bytes)");
+			UBaseType_t mark4 = uxTaskGetStackHighWaterMark(xHandle_MAIN);
+			debug_serial_port->print("Main Task High Water Mark: "); debug_serial_port->print(mark4); debug_serial_port->print(" words ("); debug_serial_port->print(mark4 * sizeof(StackType_t)); debug_serial_port->println(" bytes)");
 		#endif
 		vTaskDelay(pdMS_TO_TICKS(2000));
 	}
@@ -26881,15 +27863,21 @@ void ps() {
 	unsigned long runtime;
 	tasks = uxTaskGetSystemState(pxTaskStatusArray, tasks, &runtime);
 
-	Serial.printf("# Tasks: %d\n", tasks);
-	Serial.println("ID, NAME, STATE, PRIO, CYCLES");
+	debug_serial_port->printf("# Tasks: %d\n", tasks);
+	debug_serial_port->println("ID, NAME, STATE, PRIO, CYCLES");
 	
 	for (int i = 0; i < tasks; i++) {
-		Serial.printf("%d: %-16s %-10s %d %lu\n", i, pxTaskStatusArray[i].pcTaskName, eTaskStateName[pxTaskStatusArray[i].eCurrentState], (int)pxTaskStatusArray[i].uxCurrentPriority, pxTaskStatusArray[i].ulRunTimeCounter);
+		debug_serial_port->printf("%d: %-16s %-10s %d %lu\n", i, pxTaskStatusArray[i].pcTaskName, eTaskStateName[pxTaskStatusArray[i].eCurrentState], (int)pxTaskStatusArray[i].uxCurrentPriority, pxTaskStatusArray[i].ulRunTimeCounter);
 	}
 	delete[] pxTaskStatusArray;
 }
 #endif
+
+void debug_probe(uint8_t index) {
+	Serial.print("Debug_wait index =  "); Serial.println(index);
+	delay(index * 300);
+	Serial.print("Debug_wait complete index = "); Serial.println(index);
+}
 
 void setup_esp()
 {
@@ -26900,12 +27888,14 @@ void setup_esp()
 
 	if (setup_called) return;  // for main.ino co-existance
 	setup_called = true;   // do not come back here again
-
+	
 	initialize_serial_ports();        // Goody - this is available for testing startup issues	
-	debug_serial_port->println(F("Start Main Setup"));
+	//debug_serial_port->println(F("Start Main Setup"));
+
 	#if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
 		initialize_i2c();
 	#endif
+
 	initialize_pins();
 	initialize_gps_port();	
 	// initialize_debug_startup();       // Goody - this is available for testing startup issues
@@ -26944,7 +27934,6 @@ void setup_esp()
 		initialize_compass();  //  ist8310 compass
 	#endif
 	update_icons();  // must follow bt keyboard
-
 	#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 		bool core1_separate_stack = true;  // for FreeRTOS multicore - create 8K stack on both cores.
 	#endif
@@ -26959,7 +27948,7 @@ void setup_esp()
 
 	#if defined(FEATURE_GPS) && defined(USE_GPS_TASK) && defined(HARDWARE_ESP32_DEV)
 		#if !defined(USE_CORE1)
-			Serial.println("Starting GPS Task on Core 0");
+			debug_serial_port->println("Starting GPS Task on Core 0");
 			xReturned = xTaskCreate(
 				check_gps,      /* Function that implements the task. */
 				"Chk_GPS",          /* Text name for the task. */
@@ -26969,7 +27958,7 @@ void setup_esp()
 				&xHandle_GPS);
 		#endif
 		#if defined(USE_CORE1)
-			Serial.println("Starting GPS Task on Core 1");
+			debug_serial_port->println("Starting GPS Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
 				check_gps,      /* Function that implements the task. */
 				"Chk_GPS",          /* Text name for the task. */
@@ -26985,7 +27974,7 @@ void setup_esp()
 
 	#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK) && defined(HARDWARE_ESP32_DEV)
 		#if !defined(USE_CORE1)
-			Serial.println("Starting Touch Task on Core 0");
+			debug_serial_port->println("Starting Touch Task on Core 0");
 			xReturned = xTaskCreate(
 				check_touch_buttons,      /* Function that implements the task. */
 				"Chk_Touch",          /* Text name for the task. */
@@ -26995,7 +27984,7 @@ void setup_esp()
 				&xHandle_TOUCH);
 		#endif
 		#if defined(USE_CORE1)
-			Serial.println("Starting Touch Task on Core 1");
+			debug_serial_port->println("Starting Touch Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
 				check_touch_buttons,      /* Function that implements the task. */
 				"Chk_Touch",          /* Text name for the task. */
@@ -27015,7 +28004,7 @@ void setup_esp()
 	
 	#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK) && defined(HARDWARE_ESP32_DEV)
 		#if !defined(USE_CORE1)
-			Serial.println("Starting Check BT Keyboard Task on Core 0");
+			debug_serial_port->println("Starting Check BT Keyboard Task on Core 0");
 			xReturned = xTaskCreate(
 				check_bt_keyboard,       /* Function that implements the task. */
 				"ChkBTKeys",          /* Text name for the task. */
@@ -27025,7 +28014,7 @@ void setup_esp()
 				&xHandle_BT); //use core 0
 		#endif
 		#if defined(USE_CORE1)  // keep bt on core 0, too many interactions with TFT_eSPI and such
-			Serial.println("Starting Check BT Keyboard Task on Core 1");
+			debug_serial_port->println("Starting Check BT Keyboard Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
 				check_bt_keyboard,       /* Function that implements the task. */
 				"ChkBTKeys",          /* Text name for the task. */
@@ -27047,7 +28036,7 @@ void setup_esp()
 	// ---------------Main Loop -----------------------------------------------------------------------------------
 
 	#if defined(USE_MAIN_TASK)  && defined(HARDWARE_ESP32_DEV) // Run on Core 0
-		Serial.println("Starting Main Loop Task on Core 0");
+		debug_serial_port->println("Starting Main Loop Task on Core 0");
 		xReturned = xTaskCreate(
 			mainloop,       /* Function that implements the task. */			
 			"MainLoop",     /* Text name for the task. */
@@ -27076,7 +28065,7 @@ void setup_1() {
 extern "C" char *sbrk(int i);
 void printFreeMemory() {
     char stack_dummy = 0;
-    Serial.printf("Approx free memory: %d bytes\n", &stack_dummy - sbrk(0));
+    debug_serial_port->printf("Approx free memory: %d bytes\n", &stack_dummy - sbrk(0));
 }
 #endif
 
@@ -27093,7 +28082,7 @@ void loop_1() {
 	#if (defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO_W))
 		static uint32_t last_free_check = 0;
 
-		Serial.println("Starting Core 1 loop1()");
+		debug_serial_port->println("Starting Core 1 loop1()");
 					
 		for (;;) {
 
@@ -27169,7 +28158,7 @@ void app_main(void)
 	for(;;)
 	{
 		myDelay(1);
-		
+
 		uint32_t current_time = millis();
 
 		#ifndef TASK_PROCESS_STATUS
@@ -27221,6 +28210,7 @@ void app_main(void)
 #else
 void call_app_main()
 {
+	//debug_serial_port->println(" Start App Main");
 	app_main();
 }
 #endif

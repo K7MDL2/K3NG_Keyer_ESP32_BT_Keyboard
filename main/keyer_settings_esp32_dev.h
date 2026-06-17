@@ -50,7 +50,7 @@
   #define LCD_ROWS 3      // number of rows in teh CW Scroill Box
 #elif defined(FEATURE_TFT_DISPLAY)  // all 320px wideTFT displays
   #define LCD_COLUMNS 18  // sets the char per line in cw text scroll box
-  #define LCD_ROWS 5      // number of rows in the CW Scroill Box
+  #define LCD_ROWS 4      // number of rows in the CW Scroill Box
 #else
   #define LCD_COLUMNS 20
   #define LCD_ROWS 4

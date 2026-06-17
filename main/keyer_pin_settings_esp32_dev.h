@@ -74,7 +74,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #define paddle_left     23   // if I2c is not used (compass and exander) then can use 21 and 22 here on connector.  Must be a pin with an internal pullup.
       #define paddle_right    19       
       #ifdef FEATURE_STRAIGHT_KEY
-        #define pin_straight_key 35 //used by sd card. pin 23 has a resistor pullup
+        #define pin_straight_key 35 //  if 35 used, requires ext pullup resistor
       #endif //FEATURE_STRAIGHT_KEY
     #endif
     #define GPS_RX_PIN      36 // unused input from non-installed U3.  Has pullup R to 3.3v installed.  Solder a wire to R3.

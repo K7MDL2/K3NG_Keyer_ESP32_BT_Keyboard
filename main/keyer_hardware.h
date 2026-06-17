@@ -28,6 +28,8 @@
 // #define HARDWARE_OPENCWKEYER_MK2 // https://github.com/ok1cdj/OpenCWKeyerMK2  edit these files: keyer_features_and_options_opencwkeyer_mk2.h keyer_pin_settings_opencwkeyer_mk2.h keyer_settings_opencwkeyer_mk2.h
 // #define HARDWARE_IZ3GME // https://github.com/iz3gme/k3ng_cw_keyer  edit these files: keyer_features_and_options_iz3gme.h keyer_pin_settings_iz3gme.h keyer_settings.h
 // #define HARDWARE_YCCC_SO2R_MINI // edit these files: keyer_pin_settings_yccc_so2r_mini.h, keyer_settings_yccc_so2r_mini.h, keyer_features_and_options_yccc_so2r_mini.h
+// #define HARDWARE_TEENSY4 // Teensy 4
+// #define HARDWARE_ESP32S3 // force ESP32
 
 // Auto select platform for Pico
 #if defined(PICO_PLATFORM) && !defined(ARDUINO_ESP32_DEV)
@@ -38,13 +40,12 @@
   #endif
 #endif
 
-#if defined(PROJECT_ESP32_COMPILER) || defined(ARDUINO_ESP32_DEV)
+#if defined(PROJECT_ESP32_COMPILER) || defined(ARDUINO_ESP32_DEV) || defined(HARDWARE_ESP32S3)
   #define HARDWARE_ESP32_DEV
 #endif
 
 // #define HARDWARE_TEST_EVERYTHING
 // #define HARDWARE_TEST
-
 
 /* 
     HARDWARE_GENERIC_STM32F103C  (Contributed by sp5iou)
@@ -96,7 +97,7 @@
 #elif defined(ARDUINO_AVR_PROMICRO) || defined(ARDUINO_AVR_LEONARDO) || defined(ARDUINO_AVR_MICRO) || defined(ARDUINO_AVR_YUN) || defined(ARDUINO_AVR_ESPLORA) || defined(ARDUINO_AVR_LILYPAD_USB) || defined(ARDUINO_AVR_ROBOT_CONTROL) || defined(ARDUINO_AVR_ROBOT_MOTOR) || defined(ARDUINO_AVR_LEONARDO_ETH)  || defined(ARDUINO_SAMD_VARIANT_COMPLIANCE)
   #define PRIMARY_SERIAL_CLS Serial_
   #define SECONDARY_SERIAL_CLS Serial_ 
-#elif defined(TEENSYDUINO)
+#elif defined(HARDWARE_TEENSY4)
   #define PRIMARY_SERIAL_CLS usb_serial_class
   #define SECONDARY_SERIAL_CLS usb_serial_class
 #elif defined(_BOARD_PIC32_PINGUINO_) // || defined(_BOARD_PIC32_PINGUINO_OTG_)
