@@ -174,12 +174,12 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_Y         345     // y  300 default
     #define TOUCH_Y1        3549    // y1 3600 default
     #define TOUCH_BITS      (0x01) // param bits are bool: inverty=bit2, invertx=bit1, rotate=bit0
-    #define potentiometer    0 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+    #define potentiometer   35 // 35 Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define tx_key_line_1   18 // (high = key down/tx on)
-    #define tx_key_line_2   16 
+    #define tx_key_line_2    0 
     #define sidetone_line   26 //26 connect a passive buzzer for sidetone
     #define audio_enable     4  // audio amp enable = LOW for this display (only?)
-    #define ptt_tx_1        22 // 22 for PTT ("push to talk") lines, GPIO22 is RED LED
+    #define ptt_tx_1         0 // 22 for PTT ("push to talk") lines, GPIO22 is RED LED
     #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 
     #define tx_pause_pin     0 
@@ -328,8 +328,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #define potentiometer_enable_pin 0  // if defined, the potentiometer will be enabled only when this pin is held low; set to 0 to ignore this pin
 
 #ifdef FEATURE_BUTTONS
-  #define analog_buttons_pin 0 //A0 VP pin on the board Not all pins of ESP32 are available for ADC. See https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
-  #define command_mode_active_led 27 //for ESP32_DEV board On Board LED
+  #define analog_buttons_pin 32 //A0 VP pin on the board Not all pins of ESP32 are available for ADC. See https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
+  #define command_mode_active_led 16 //for ESP32_DEV board On Board LED
 #endif //FEATURE_BUTTONS
 
 /*

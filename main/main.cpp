@@ -1615,7 +1615,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_BUTTONS)
-	#include "src/buttonarray/buttonarray.h"
+	#include "../components/buttonarray/buttonarray.h"
 #endif
 
 #if defined(FEATURE_SIDETONE_NEWTONE) && !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
@@ -2147,6 +2147,20 @@ void tft_backlight(int state);  // toggles the backlight GPIO pin on and off fro
 void setup_1();
 void loop_1();
 void core1_run();
+void check_the_memory_buttons();
+byte analogbuttonread(byte button_number);
+void command_sidetone_freq_adj();
+void command_dah_to_dit_ratio_adjust();
+void command_weighting_adjust();
+void command_speed_mode(byte mode);
+void command_program_memory();
+void command_keying_compensation_adjust();
+void command_set_serial_number();
+void command_tuning_mode();
+void command_set_mem_repeat_delay();
+void beep_boop();
+void command_alphabet_send_practice();
+void program_memory(int memory_number);
 #ifdef USE_MAIN_TASK
 	void mainloop(void * pvParameters);
 #else
@@ -2219,8 +2233,8 @@ enum button_ID{
 	// This section collects a list of 16 buttons assigned into an array by the user in theor priority order in key_settings.h file.
 	//enum Button_assign_label{BN_PAUSE,BN_TXEN,BN_WPMUP,BN_WPMDN,BN_M1,BN_M2,BN_M3,BN_M4,BN_M5,BN_M6,BN_M7,BN_M8,BN_MEM,BN_TUNE,BN_TXSELECT,BN_TONE};
 	//enum Button_assign_label{B_PAUSE,B_TXEN,B_WPMUP,B_WPMDN,B_M1,B_M2,B_M3,B_M4,B_M5,B_M6,B_M7,B_M8,B_MEM,B_TUNE,B_TXSELECT,B_TONE};
-	const int button_array_size = 16;
-	int button_array[button_array_size] = BUTTON_ASSIGNMENT_ORDER;
+	const int b_array_size = 16;
+	int b_array[b_array_size] = BUTTON_ASSIGNMENT_ORDER;
 /*
 	// These defines provide the user with button labels in the keyer_settings.h file array macro positioned in their preferred order
 	#define B_PAUSE     BN_PAUSE
@@ -3203,7 +3217,7 @@ void wdt_reset(){
 }
 
 #if defined FEATURE_BUTTONS
-#include "src\buttonarray\buttonarray.h"
+#include "../components/buttonarray/buttonarray.h"
 #endif //FEATURE_BUTTONS
 
 void service_sending_pins(){
@@ -20174,9 +20188,9 @@ void initialize_buttons() {
 		int i, b;
 		int r = 0;
 
-		for (b = 0; b < button_array_size; b++) {
+		for (b = 0; b < b_array_size; b++) {
 			for (i=0; i < NUM_KEYS; i++) {
-				if (key[i].key_event == button_array[b]) {
+				if (key[i].key_event == b_array[b]) {
 					//debug_serial_port->printf("function=%s", key[i].text_off);
 					#ifdef TOUCH_BUTTON_16
 						key[i].btn_idx = b;  // row is always 0 which is default
