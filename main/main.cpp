@@ -1616,7 +1616,6 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 #if defined(FEATURE_BUTTONS)
 	#include "../components/buttonarray/buttonarray.h"
-	#include "../components/buttonarray/buttonarray.cpp"
 #endif
 
 #if defined(FEATURE_SIDETONE_NEWTONE) && !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
