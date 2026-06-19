@@ -2161,6 +2161,11 @@ void command_set_mem_repeat_delay();
 void beep_boop();
 void command_alphabet_send_practice();
 void program_memory(int memory_number);
+void serial_set_pot_low_high(PRIMARY_SERIAL_CLS * port_to_use);
+void check_potentiometer();
+byte pot_value_wpm();
+void command_speed_set(int wpm_set);
+void init_MCP23017(void);
 #ifdef USE_MAIN_TASK
 	void mainloop(void * pvParameters);
 #else
@@ -18412,29 +18417,18 @@ void init_ESP32_GPIO_key_pins(void) {
 #endif
 
 //---------------------------------------------------------------------
+
 #if defined(FEATURE_MCP23017_EXPANDER)
-//------ For Port Expander Only ---------------------------------------------------------------
-	#ifdef HARDWARE_ESP32_DEV
-		static void IRAM_ATTR paddle_intr_handler(void *arg) {
-			paddle_irq = 1;
-			portYIELD_FROM_ISR();
-		}
-	#else
-		static void paddle_intr_handler(void) {
-			paddle_irq = 1;
-			read_io_handler();
-		}
-	#endif
-		
-//-------------------------------------------------------------------
-	#ifdef HARDWARE_ESP32_DEV
+	//------ For Port Expander Only ---------------------------------------------------------------
+
+	#ifdef HARDWARE_ESP32_DEV   // runs as a task
 		IRAM_ATTR void read_io_handler(void *pvParameters) {
 			while (1) {
 				myDelay(1);
 	 #else
-		void read_io_handler(void) {
+		void read_io_handler(void) {  // otherwise called from an interrrupt
 	 #endif	
-				uint8_t bits = 0;
+				uint8_t bits = 0x00;
 				if (paddle_irq) {
 					paddle_irq = 0;
 					bits = mcp23017.readPort(MCP23017Port::A);
@@ -18443,15 +18437,43 @@ void init_ESP32_GPIO_key_pins(void) {
 					#ifdef FEATURE_STRAIGHT_KEY
 							straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle
 					#endif
-					//debug_serial_port->print(F("read_io_handler event = 0x")); debug_serial_port->println(bits, HEX);
+					debug_serial_port->print(F("read_io_handler event = 0x")); debug_serial_port->println(bits, HEX);
 					bits = 0x00;
+					mcp23017.clearInterrupts();
 				}
 		#ifdef HARDWARE_ESP32_DEV
 			}
 		#endif		
 	}
+	
+	//-------------------------------------------------------------------
 
-//-------------------------------------------------------------------
+	#ifdef HARDWARE_ESP32_DEV  // for ESP32 read_io_handler is run as a task polling paddle_irq.
+		//volatile SemaphoreHandle_t extSemaphore;
+		//portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+		void IRAM_ATTR paddle_intr_handler(void *arg) {
+			//BaseType_t xHigherPriorityTaskWoken;
+			//xHigherPriorityTaskWoken = pdFALSE;
+			//portENTER_CRITICAL_ISR(&mux);
+			//debug_serial_port->print("p1");
+			paddle_irq = 1;
+			//portEXIT_CRITICAL_ISR(&mux);
+			//read_io_handler();
+			//xSemaphoreGiveFromISR(extSemaphore, &xHigherPriorityTaskWoken);
+			// It is safe to use digitalRead/Write here if you want to toggle an output
+			//debug_serial_port->print("p2");
+			//portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+			portYIELD_FROM_ISR();
+		}
+	#else   // for other CPUs each interrupt queries the MCP pins
+		static void paddle_intr_handler(void) {
+			paddle_irq = 1;
+			read_io_handler();
+		}
+	#endif		
+
+	//-------------------------------------------------------------------
 
 	void init_MCP23017(void) {	
 		// Set the expander port A pins for the paddles to input with pullup
@@ -18459,7 +18481,7 @@ void init_ESP32_GPIO_key_pins(void) {
 		//debug_serial_port->println("MCP23107: Start setup");
 		mcp23017.init();
 		mcp23017.interruptMode(MCP23017InterruptMode::Or);  // MCP23017InterruptMode::Separated
-		mcp23017.interrupt(MCP23017Port::A, CHANGE);
+		mcp23017.interrupt(MCP23017Port::A, CHANGE);   // port A change only, not port B
 		mcp23017.pinMode(paddle_left, INPUT_PULLUP, false);
 		mcp23017.pinMode(paddle_right, INPUT_PULLUP, false);
 		#ifdef FEATURE_STRAIGHT_KEY
@@ -18484,10 +18506,10 @@ void init_ESP32_GPIO_key_pins(void) {
 			mcp23017.clearInterrupts();
 		#endif
 	
-		//debug_serial_port->println(F("MCP23107: Read from Port A to verify it works"));
+		debug_serial_port->println(F("MCP23107: Read from Port A to verify it works"));
 		uint16_t val;
 		val = mcp23017.readPort(MCP23017Port::A);
-		//debug_serial_port->print(F("MCP23107: Port A read:")); debug_serial_port->println(val, HEX);
+		debug_serial_port->print(F("MCP23107: Port A read:")); debug_serial_port->println(val, HEX);
 		mcp23017.clearInterrupts();
 
 		#ifdef HARDWARE_ESP32_DEV

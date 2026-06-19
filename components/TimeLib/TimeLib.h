@@ -18,7 +18,7 @@
 
 
 #if !defined(__time_t_defined) // avoid conflict with newlib or other posix libc
-typedef unsigned long time_t;
+typedef _TIME_T_ time_t;
 #endif
 
 
