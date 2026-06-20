@@ -18430,16 +18430,16 @@ void init_ESP32_GPIO_key_pins(void) {
 	 #endif	
 				uint8_t bits = 0x00;
 				if (paddle_irq) {
-					paddle_irq = 0;
-					bits = mcp23017.readPort(MCP23017Port::A);
+					paddle_irq = 0;		
+					bits = mcp23017.readPort(MCP23017Port::A);		
 					paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
 					paddle_right_state = bits & (1 << paddle_right);  // mask right paddle
 					#ifdef FEATURE_STRAIGHT_KEY
 							straight_key_state = bits & (1 << pin_straight_key);  // mask right paddle
 					#endif
-					debug_serial_port->print(F("read_io_handler event = 0x")); debug_serial_port->println(bits, HEX);
+					//debug_serial_port->print(F("read_io_handler event = 0x")); debug_serial_port->println(bits, HEX);
 					bits = 0x00;
-					mcp23017.clearInterrupts();
+					//mcp23017.clearInterrupts();
 				}
 		#ifdef HARDWARE_ESP32_DEV
 			}
@@ -18449,21 +18449,8 @@ void init_ESP32_GPIO_key_pins(void) {
 	//-------------------------------------------------------------------
 
 	#ifdef HARDWARE_ESP32_DEV  // for ESP32 read_io_handler is run as a task polling paddle_irq.
-		//volatile SemaphoreHandle_t extSemaphore;
-		//portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-
 		void IRAM_ATTR paddle_intr_handler(void *arg) {
-			//BaseType_t xHigherPriorityTaskWoken;
-			//xHigherPriorityTaskWoken = pdFALSE;
-			//portENTER_CRITICAL_ISR(&mux);
-			//debug_serial_port->print("p1");
 			paddle_irq = 1;
-			//portEXIT_CRITICAL_ISR(&mux);
-			//read_io_handler();
-			//xSemaphoreGiveFromISR(extSemaphore, &xHigherPriorityTaskWoken);
-			// It is safe to use digitalRead/Write here if you want to toggle an output
-			//debug_serial_port->print("p2");
-			//portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 			portYIELD_FROM_ISR();
 		}
 	#else   // for other CPUs each interrupt queries the MCP pins
@@ -18516,7 +18503,7 @@ void init_ESP32_GPIO_key_pins(void) {
 			BaseType_t xReturned;
 			//debug_serial_port->println(F("MCP23107: Setup read_io_handler"));
 			// create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.		
-			xReturned = xTaskCreate(read_io_handler, "read_io_handler", 1024, NULL, 6, NULL);
+			xReturned = xTaskCreate(read_io_handler, "read_io_handler", 2048, NULL, 6, NULL);
 			if (xReturned)
 				debug_serial_port->println(F("MCP23107: read_io_handler Setup Complete"));
 			else
