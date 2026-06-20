@@ -1615,7 +1615,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_BUTTONS)
-	#include "src/buttonarray/buttonarray.h"
+	//#include "../components/buttonarray/buttonarray.h"
+	#include "lib/buttonarray/buttonarray.h"
+	#include "lib/buttonarray/buttonarray.cpp"
 #endif
 
 #if defined(FEATURE_SIDETONE_NEWTONE) && !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
@@ -2147,6 +2149,25 @@ void tft_backlight(int state);  // toggles the backlight GPIO pin on and off fro
 void setup_1();
 void loop_1();
 void core1_run();
+void check_the_memory_buttons();
+byte analogbuttonread(byte button_number);
+void command_sidetone_freq_adj();
+void command_dah_to_dit_ratio_adjust();
+void command_weighting_adjust();
+void command_speed_mode(byte mode);
+void command_program_memory();
+void command_keying_compensation_adjust();
+void command_set_serial_number();
+void command_tuning_mode();
+void command_set_mem_repeat_delay();
+void beep_boop();
+void command_alphabet_send_practice();
+void program_memory(int memory_number);
+void serial_set_pot_low_high(PRIMARY_SERIAL_CLS * port_to_use);
+void check_potentiometer();
+byte pot_value_wpm();
+void command_speed_set(int wpm_set);
+void init_MCP23017(void);
 #ifdef USE_MAIN_TASK
 	void mainloop(void * pvParameters);
 #else
@@ -2219,8 +2240,8 @@ enum button_ID{
 	// This section collects a list of 16 buttons assigned into an array by the user in theor priority order in key_settings.h file.
 	//enum Button_assign_label{BN_PAUSE,BN_TXEN,BN_WPMUP,BN_WPMDN,BN_M1,BN_M2,BN_M3,BN_M4,BN_M5,BN_M6,BN_M7,BN_M8,BN_MEM,BN_TUNE,BN_TXSELECT,BN_TONE};
 	//enum Button_assign_label{B_PAUSE,B_TXEN,B_WPMUP,B_WPMDN,B_M1,B_M2,B_M3,B_M4,B_M5,B_M6,B_M7,B_M8,B_MEM,B_TUNE,B_TXSELECT,B_TONE};
-	const int button_array_size = 16;
-	int button_array[button_array_size] = BUTTON_ASSIGNMENT_ORDER;
+	const int b_array_size = 16;
+	int b_array[b_array_size] = BUTTON_ASSIGNMENT_ORDER;
 /*
 	// These defines provide the user with button labels in the keyer_settings.h file array macro positioned in their preferred order
 	#define B_PAUSE     BN_PAUSE
@@ -3201,10 +3222,6 @@ byte async_eeprom_write = 0;
 void wdt_reset(){
 	//esp_task_wdt_reset();
 }
-
-#if defined FEATURE_BUTTONS
-#include "src\buttonarray\buttonarray.h"
-#endif //FEATURE_BUTTONS
 
 void service_sending_pins(){
 
@@ -18402,32 +18419,21 @@ void init_ESP32_GPIO_key_pins(void) {
 #endif
 
 //---------------------------------------------------------------------
+
 #if defined(FEATURE_MCP23017_EXPANDER)
-//------ For Port Expander Only ---------------------------------------------------------------
-	#ifdef HARDWARE_ESP32_DEV
-		static void IRAM_ATTR paddle_intr_handler(void *arg) {
-			paddle_irq = 1;
-			portYIELD_FROM_ISR();
-		}
-	#else
-		static void paddle_intr_handler(void) {
-			paddle_irq = 1;
-			read_io_handler();
-		}
-	#endif
-		
-//-------------------------------------------------------------------
-	#ifdef HARDWARE_ESP32_DEV
+	//------ For Port Expander Only ---------------------------------------------------------------
+
+	#ifdef HARDWARE_ESP32_DEV   // runs as a task
 		IRAM_ATTR void read_io_handler(void *pvParameters) {
 			while (1) {
 				myDelay(1);
 	 #else
-		void read_io_handler(void) {
+		void read_io_handler(void) {  // otherwise called from an interrrupt
 	 #endif	
-				uint8_t bits = 0;
+				uint8_t bits = 0x00;
 				if (paddle_irq) {
-					paddle_irq = 0;
-					bits = mcp23017.readPort(MCP23017Port::A);
+					paddle_irq = 0;		
+					bits = mcp23017.readPort(MCP23017Port::A);		
 					paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
 					paddle_right_state = bits & (1 << paddle_right);  // mask right paddle
 					#ifdef FEATURE_STRAIGHT_KEY
@@ -18435,13 +18441,28 @@ void init_ESP32_GPIO_key_pins(void) {
 					#endif
 					//debug_serial_port->print(F("read_io_handler event = 0x")); debug_serial_port->println(bits, HEX);
 					bits = 0x00;
+					//mcp23017.clearInterrupts();
 				}
 		#ifdef HARDWARE_ESP32_DEV
 			}
 		#endif		
 	}
+	
+	//-------------------------------------------------------------------
 
-//-------------------------------------------------------------------
+	#ifdef HARDWARE_ESP32_DEV  // for ESP32 read_io_handler is run as a task polling paddle_irq.
+		void IRAM_ATTR paddle_intr_handler(void *arg) {
+			paddle_irq = 1;
+			portYIELD_FROM_ISR();
+		}
+	#else   // for other CPUs each interrupt queries the MCP pins
+		static void paddle_intr_handler(void) {
+			paddle_irq = 1;
+			read_io_handler();
+		}
+	#endif		
+
+	//-------------------------------------------------------------------
 
 	void init_MCP23017(void) {	
 		// Set the expander port A pins for the paddles to input with pullup
@@ -18449,7 +18470,7 @@ void init_ESP32_GPIO_key_pins(void) {
 		//debug_serial_port->println("MCP23107: Start setup");
 		mcp23017.init();
 		mcp23017.interruptMode(MCP23017InterruptMode::Or);  // MCP23017InterruptMode::Separated
-		mcp23017.interrupt(MCP23017Port::A, CHANGE);
+		mcp23017.interrupt(MCP23017Port::A, CHANGE);   // port A change only, not port B
 		mcp23017.pinMode(paddle_left, INPUT_PULLUP, false);
 		mcp23017.pinMode(paddle_right, INPUT_PULLUP, false);
 		#ifdef FEATURE_STRAIGHT_KEY
@@ -18474,17 +18495,17 @@ void init_ESP32_GPIO_key_pins(void) {
 			mcp23017.clearInterrupts();
 		#endif
 	
-		//debug_serial_port->println(F("MCP23107: Read from Port A to verify it works"));
+		debug_serial_port->println(F("MCP23107: Read from Port A to verify it works"));
 		uint16_t val;
 		val = mcp23017.readPort(MCP23017Port::A);
-		//debug_serial_port->print(F("MCP23107: Port A read:")); debug_serial_port->println(val, HEX);
+		debug_serial_port->print(F("MCP23107: Port A read:")); debug_serial_port->println(val, HEX);
 		mcp23017.clearInterrupts();
 
 		#ifdef HARDWARE_ESP32_DEV
 			BaseType_t xReturned;
 			//debug_serial_port->println(F("MCP23107: Setup read_io_handler"));
 			// create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.		
-			xReturned = xTaskCreate(read_io_handler, "read_io_handler", 1024, NULL, 6, NULL);
+			xReturned = xTaskCreate(read_io_handler, "read_io_handler", 2048, NULL, 6, NULL);
 			if (xReturned)
 				debug_serial_port->println(F("MCP23107: read_io_handler Setup Complete"));
 			else
@@ -19620,7 +19641,8 @@ void kb(void *cbdata, int key) {
 		inf.size = 8;  // fake the size to match the ESP32 bt_keyboard class string info to pass through the key value translation code
 		inf.state = state;
 		last_active_time = millis();   // reset backlight tomeout timer
-		static KeyModifier mod_key; 
+		static KeyModifier mod_key;
+		bool _end = false;
 
 		// Modifier key has been pressed.  Set hold key flag and bit mask and exit, then only process regular keys until modifier key is let up
 				switch (key) {
@@ -19659,10 +19681,10 @@ void kb(void *cbdata, int key) {
 					_holding = 1;
 					inf.modifier = (KeyModifier) mod_key;	
 					//debug_serial_port->printf("5 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
-					goto end;  // don't send this key thru
+					_end = 1;  // don't send this key thru
 				}
 				
-				if (state && _heldKey && _holding) {  // new modifier key was pressed															
+				if (state && _heldKey && _holding && !_end) {  // new modifier key was pressed															
 					inf.keys[0] =(uint8_t) mod_key;
 					inf.modifier = mod_key;
 					inf.keys[2] = key; 
@@ -19670,7 +19692,7 @@ void kb(void *cbdata, int key) {
 					goto end_kb;
 				}
 
-				if (!state && _heldKey && _holding) { // modifier was let up, clear it		
+				if (!state && _heldKey && _holding && !_end) { // modifier was let up, clear it		
 					if (key == _heldKey) {
 						_holding = 0;
 						_heldKey = 0;
@@ -19679,21 +19701,19 @@ void kb(void *cbdata, int key) {
 					inf.keys[2] = 0; 		
 					inf.modifier = (KeyModifier) 0;														
 					//debug_serial_port->printf("8 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
-					goto end;
+					_end = 1;
 				}
 
 				end_kb:
 				#ifdef DEBUG_BT_KEYBOARD
-					debug_serial_port->printf("kb2: state:%d  mod:0x%02x  keys[0]:0x%02x  keys[2]:0x%02x\n", state, inf.modifier, inf.keys[0], inf.keys[2]);					
+					if (!_end) debug_serial_port->printf("kb2: state:%d  mod:0x%02x  keys[0]:0x%02x  keys[2]:0x%02x\n", state, inf.modifier, inf.keys[0], inf.keys[2]);					
 				#endif
 				
-		if (state) bt_queueadd(inf);
+		if (state && !_end) bt_queueadd(inf);
 
 		#ifdef DEBUG_BT_KEYBOARD
-			if (state) debug_serial_port->printf("Kb (callback) out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
+			if (state && !_end) debug_serial_port->printf("Kb (callback) out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
 		#endif
-
-		end:
 }
 #endif
 
@@ -20174,9 +20194,9 @@ void initialize_buttons() {
 		int i, b;
 		int r = 0;
 
-		for (b = 0; b < button_array_size; b++) {
+		for (b = 0; b < b_array_size; b++) {
 			for (i=0; i < NUM_KEYS; i++) {
-				if (key[i].key_event == button_array[b]) {
+				if (key[i].key_event == b_array[b]) {
 					//debug_serial_port->printf("function=%s", key[i].text_off);
 					#ifdef TOUCH_BUTTON_16
 						key[i].btn_idx = b;  // row is always 0 which is default

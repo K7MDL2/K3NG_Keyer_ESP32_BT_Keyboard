@@ -25,7 +25,7 @@ message(STATUS "^^^TFT_eSPI: CONFIG_DISPLAY_TYPE=${CONFIG_DISPLAY_TYPE}")
 #if("${CONFIG_DISPLAY_TYPE_NAME}" STREQUAL "7") 
     idf_component_register(SRCS "TFT_eSPI.cpp"
                     INCLUDE_DIRS "." ${CMAKE_SOURCE_DIR}/components/TFT_eSPI/Fonts/GFXFF
-                    REQUIRES  arduino-esp32)
+                    REQUIRES  arduino-esp32 driver esp_driver_spi esp_driver_gpio esp_driver_i2c)
 
     #set(DISPLAY_TYPE_ "1" CACHE INTERNAL "DISPLAY_NAME" FORCE)
     #set(USE_TFT_eSPI "0" CACHE INTERNAL "DISPLAY_MODEL" FORCE)
