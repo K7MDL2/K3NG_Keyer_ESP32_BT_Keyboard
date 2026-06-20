@@ -19,7 +19,10 @@ message(STATUS "Main:  CONFIG_DISPLAY_TYPE: ${CONFIG_DISPLAY_TYPE}")
 
 idf_component_register(SRCS "main.cpp" ${app_sources}
     INCLUDE_DIRS "."  ${include_dirs}
-    REQUIRES nvs_flash bt_keyboard bt TFT_eSPI gt911-arduino LiquidCrystal_I2C arduino-esp32 TinyGPSPlus-ESP32 TimeLib IST8310 MCP23017 Goertzel espcoredump buttonarray driver esp_driver_i2c  esp_driver_spi  esp_driver_gpio)
+    REQUIRES nvs_flash bt_keyboard bt TFT_eSPI gt911-arduino LiquidCrystal_I2C arduino-esp32
+    TinyGPSPlus-ESP32 TimeLib IST8310 MCP23017 Goertzel espcoredump buttonarray
+    esp_driver_spi esp_driver_gpio esp_driver_i2c
+  )
 
 #  create precompiled files
 set(out_path "${CMAKE_SOURCE_DIR}/precompiled_images/${CONFIG_DISPLAY_TYPE}")
@@ -29,7 +32,7 @@ idf_build_get_property(elf_name EXECUTABLE_NAME GENERATOR_EXPRESSION)
 set(app_bin "${build_dir}/${elf_name}.bin")
 
 add_custom_command(OUTPUT "${out_path}/app.bin"
-#  POST_BUILD
+# POST_BUILD
   DEPENDS "${build_dir}/.bin_timestamp"
 #  DEPENDS "${app_bin}"
   COMMENT "Copying binary to precompiled_images/app.bin"

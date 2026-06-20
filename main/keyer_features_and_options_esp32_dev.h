@@ -11,7 +11,6 @@
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
-//  Use empty string ("") if there is no GPS active.  No grid will display on status row.
 #define FEATURE_BUTTONS
 #define FEATURE_COMMAND_MODE
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
@@ -21,7 +20,7 @@
 #define FEATURE_BEACON                // Go into beacon mode if paddle_left pin is LOW at boot up
 #define FEATURE_BEACON_SETTING        // Go into beacon mode at boot up if EEPROM setting is enabled (\_ CLI Command)
 #define FEATURE_TRAINING_COMMAND_LINE_INTERFACE
-////#define FEATURE_POTENTIOMETER         // do not enable unless you have a potentiometer connected, otherwise noise will falsely trigger wpm changes
+//#define FEATURE_POTENTIOMETER         // do not enable unless you have a potentiometer connected, otherwise noise will falsely trigger wpm changes
 // #define FEATURE_SIDETONE_SWITCH   // adds switch control for the sidetone output. requires an external toggle switch (assigned to an arduino pin - see keyer_pin_settings.h). 
 //#define FEATURE_SIDETONE_NEWTONE      // Use the NewTone library, ~1k smaller code size than the standard tone library. Uses timer1 (pins 9 or 10)  https://bitbucket.org/teckel12/arduino-new-tone/wiki/Home
 #define FEATURE_SERIAL_HELP
@@ -103,6 +102,7 @@
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
+    //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
     #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
     //#define OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR  // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder 
     //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  
@@ -130,6 +130,7 @@
     #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
@@ -158,7 +159,7 @@
     //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
     #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define USE_RES_TOUCH  // Enables touch with XPT2046
-    //#define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scannning (K380, Rii)
+    #define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scanning (K380, Rii)
     #define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
     #define USE_MAIN_TASK // runs main loop in a task
     #define USE_BT_TASK 
@@ -169,6 +170,7 @@
     #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.    
+    //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
     #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
@@ -197,6 +199,7 @@
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
     #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids   
@@ -226,6 +229,7 @@
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     //#define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
+    //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
