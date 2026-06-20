@@ -3,9 +3,11 @@ cmake_minimum_required(VERSION 3.16.0)
 # Now have a custom, versioned, binary name
 
 file(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/main/.
-                  ${CMAKE_SOURCE_DIR}/components/.)
+                  ${CMAKE_SOURCE_DIR}/components/.
+                  ${CMAKE_SOURCE_DIR}/main/lib/.)
 set(include_dirs ${CMAKE_SOURCE_DIR}/main
-                  ${CMAKE_SOURCE_DIR}/components)
+                  ${CMAKE_SOURCE_DIR}/components
+                  ${CMAKE_SOURCE_DIR}/main/lib/.)
 
 set(CMAKE_CXX_STANDARD "20")
 
@@ -20,7 +22,7 @@ message(STATUS "Main:  CONFIG_DISPLAY_TYPE: ${CONFIG_DISPLAY_TYPE}")
 idf_component_register(SRCS "main.cpp" ${app_sources}
     INCLUDE_DIRS "."  ${include_dirs}
     REQUIRES nvs_flash bt_keyboard bt TFT_eSPI gt911-arduino LiquidCrystal_I2C arduino-esp32
-    TinyGPSPlus-ESP32 TimeLib IST8310 MCP23017 Goertzel espcoredump buttonarray
+    TinyGPSPlus-ESP32 TimeLib IST8310 MCP23017 Goertzel espcoredump
     esp_driver_spi esp_driver_gpio esp_driver_i2c
   )
 

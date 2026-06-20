@@ -1615,7 +1615,9 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 #endif
 
 #if defined(FEATURE_BUTTONS)
-	#include "../components/buttonarray/buttonarray.h"
+	//#include "../components/buttonarray/buttonarray.h"
+	#include "lib/buttonarray/buttonarray.h"
+	#include "lib/buttonarray/buttonarray.cpp"
 #endif
 
 #if defined(FEATURE_SIDETONE_NEWTONE) && !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
@@ -19639,7 +19641,8 @@ void kb(void *cbdata, int key) {
 		inf.size = 8;  // fake the size to match the ESP32 bt_keyboard class string info to pass through the key value translation code
 		inf.state = state;
 		last_active_time = millis();   // reset backlight tomeout timer
-		static KeyModifier mod_key; 
+		static KeyModifier mod_key;
+		bool _end = false;
 
 		// Modifier key has been pressed.  Set hold key flag and bit mask and exit, then only process regular keys until modifier key is let up
 				switch (key) {
@@ -19678,10 +19681,10 @@ void kb(void *cbdata, int key) {
 					_holding = 1;
 					inf.modifier = (KeyModifier) mod_key;	
 					//debug_serial_port->printf("5 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
-					goto end;  // don't send this key thru
+					_end = 1;  // don't send this key thru
 				}
 				
-				if (state && _heldKey && _holding) {  // new modifier key was pressed															
+				if (state && _heldKey && _holding && !_end) {  // new modifier key was pressed															
 					inf.keys[0] =(uint8_t) mod_key;
 					inf.modifier = mod_key;
 					inf.keys[2] = key; 
@@ -19689,7 +19692,7 @@ void kb(void *cbdata, int key) {
 					goto end_kb;
 				}
 
-				if (!state && _heldKey && _holding) { // modifier was let up, clear it		
+				if (!state && _heldKey && _holding && !_end) { // modifier was let up, clear it		
 					if (key == _heldKey) {
 						_holding = 0;
 						_heldKey = 0;
@@ -19698,21 +19701,19 @@ void kb(void *cbdata, int key) {
 					inf.keys[2] = 0; 		
 					inf.modifier = (KeyModifier) 0;														
 					//debug_serial_port->printf("8 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
-					goto end;
+					_end = 1;
 				}
 
 				end_kb:
 				#ifdef DEBUG_BT_KEYBOARD
-					debug_serial_port->printf("kb2: state:%d  mod:0x%02x  keys[0]:0x%02x  keys[2]:0x%02x\n", state, inf.modifier, inf.keys[0], inf.keys[2]);					
+					if (!_end) debug_serial_port->printf("kb2: state:%d  mod:0x%02x  keys[0]:0x%02x  keys[2]:0x%02x\n", state, inf.modifier, inf.keys[0], inf.keys[2]);					
 				#endif
 				
-		if (state) bt_queueadd(inf);
+		if (state && !_end) bt_queueadd(inf);
 
 		#ifdef DEBUG_BT_KEYBOARD
-			if (state) debug_serial_port->printf("Kb (callback) out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
+			if (state && !_end) debug_serial_port->printf("Kb (callback) out: mod:0x%02x key:%c state: %s = '%c'\n", inf.modifier, inf.keys[2]+0x5D, state ? "DOWN" : "UP", state ? inf.keys[2]+0x5D : '-');
 		#endif
-
-		end:
 }
 #endif
 

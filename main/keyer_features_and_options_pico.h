@@ -72,19 +72,21 @@
     #define FEATURE_TFT_320x480_CAP_LCD    // 
     //#define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define FEATURE_TFT_DISPLAY
     #define LCD_ROTATION 3
     #define TFT_320_480
-    #define TOUCH_BUTTON_16
+    //#define TOUCH_BUTTON_16
     #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled.
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features
     #define TOUCH_GT911_BUTTONS // use GT911 touch controller for buttons
-    #define TOUCH_BUTTON_16
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
-    //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
+    #define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard  This is a Pico only setting.  ESP32 handles both.
+    //#define SCAN_ONCE  // Only look for keyboard at startup, do to try to do a blocking reconnect.  Undefine to always requires a keyboard to be connected.
+    #define USE_CORE1  // for Pico this moves GPS to run on Core 1 instead of Core 0.  IF USE_CONNECT_ON_CORE1 enabled, then shares idle time between BT scans
+    #define USE_CONNECT_ON_CORE1  // run ConnectOrPair on core 1 - allows connect and reconnect in the background
+    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
-    #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
+    #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids   
     #define DEFAULT_GRID "CN88ss"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
