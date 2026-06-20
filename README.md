@@ -1,15 +1,16 @@
 | Support Targets | ![ESP32-WROOM32][esp32] | ![Pico2W][Pico2W] | ![alt text][Has_Precompiled_Firmware_Images] |
 | --- | --- | --- | --- |
 
-| Dev Environment Used | ![alt text][ESP-IDF]| ![Arduino IDE][Arduino]|
-| --- | --- | --- |
+| Dev Environment Used | ![alt text][ESP-IDF] | ![alt text][ESP-IDF6] | ![Arduino IDE][Arduino]|
+| --- | --- | --- | --- |
 
 | BT Keyboards Tested | ![alt text][K380]|![alt text][K380s] | ![Rii i8+ mini][Rii_mini] |
 | --- | --- | --- | --- |
 
 [Pico2W]: https://img.shields.io/badge/Pico2W-green "ESP32"
 [ESP32]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
-[ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5.1-cyan "ESP-IDF v5.5.1"
+[ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5.4-cyan "ESP-IDF v5.5.4"
+[ESP-IDF6]: https://img.shields.io/badge/ESP--IDF--v6.0.1-cyan "ESP-IDF v6.0.1"
 [Arduino]: https://img.shields.io/badge/Arduino-cyan "Arduino v2.3.7"
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 [K380]: https://img.shields.io/badge/K380-violet "K380"
@@ -52,6 +53,8 @@ _____________________________________________
  - Backlight timeout with enable/disable to save battery. Configurable timeout. TFT displays are around 270ma, 100ma with backlight off. About 10ma less without BT keyboard feature.
  - User assignable buttons and number of button rows.
  - For ESP32, optionally run GPS, BT, Touch, and Main loop in task.  All but Main Loop can run on either Core 0 or Core 1 (as a group move).  Lets BT connections and GPS time to run uninterrupted, even during 13WPM and 50WPM keying rates.  For Pico GPS and BT connect/reconnect can run on Core 1 (no task requried).  When BT is on Core1 it allows connect and reconnect in the background.
+ - Compiles under ESP-IDF v5.5.4 and v6.0.1 as of June 2026.  Addresses several deprecated issues in some libraries.
+ - FEATURE_BUTTONS and COMMAND_MODE now working.
 
 Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
