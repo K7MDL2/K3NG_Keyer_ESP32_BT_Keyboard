@@ -18494,7 +18494,7 @@ void init_ESP32_GPIO_key_pins(void) {
 			BaseType_t xReturned;
 			//debug_serial_port->println(F("MCP23107: Setup read_io_handler"));
 			// create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.		
-			xReturned = xTaskCreate(read_io_handler, "read_io_handler", 1024, NULL, 6, NULL);
+			xReturned = xTaskCreate(read_io_handler, "read_io_handler", 2048, NULL, 6, NULL);
 			if (xReturned)
 				debug_serial_port->println(F("MCP23107: read_io_handler Setup Complete"));
 			else

@@ -166,7 +166,7 @@
     #define USE_GPS_TASK // Run Serial GPS in task. Can run in core 1 or 0 controlled by USE_CORE1
     #define SET_CAL  // apply cal parameters set in keyer_pin_settings_esp32_dev.h file
     //#define CAL_TOUCH  // uncomment only for calibrating the display at startup, then comment out to run normal program.
-    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
+    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.    
     #define GPS_BAUD_RATE 9600    // for the hardware serial port for GPS connection if used.
