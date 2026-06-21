@@ -34,7 +34,7 @@
     #define DMA_CHANNEL 1
     #ifdef USE_HSPI_PORT
       //spi_host_device_t spi_host = HSPI_HOST;
-      spi_host_device_t spi_host = SPI2_HOST
+      spi_host_device_t spi_host = SPI2_HOST;
     #elif defined(USE_FSPI_PORT)
       spi_host_device_t spi_host = SPI_HOST;
     #else // use VSPI port
