@@ -1608,11 +1608,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#include "esp32-hal-log.h"
 #endif
 
-#if !defined(HARDWARE_GENERIC_STM32F103C) && !defined(FEATURE_MCP23017_EXPANDER) // bypass when using mcp23017_write_io in place of digital write
-	#if (paddle_left == 0) || (paddle_right == 0)
-	#error "You cannot define paddle_left or paddle_right as 0 to disable"
-	#endif
-#endif
+//#if !defined(HARDWARE_GENERIC_STM32F103C) && !defined(FEATURE_MCP23017_EXPANDER) // bypass when using mcp23017_write_io in place of digital write
+	//#if (paddle_left == 0) || (paddle_right == 0)
+	//#error "You cannot define paddle_left or paddle_right as 0 to disable"
+	//#endif
+//#endif
 
 #if defined(FEATURE_BUTTONS)
 	//#include "../components/buttonarray/buttonarray.h"
