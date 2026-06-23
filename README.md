@@ -53,7 +53,7 @@ _____________________________________________
  - Backlight timeout with enable/disable to save battery. Configurable timeout. TFT displays are around 270ma, 100ma with backlight off. About 10ma less without BT keyboard feature.
  - User assignable buttons and number of button rows.
  - For ESP32, optionally run GPS, BT, Touch, and Main loop in task.  All but Main Loop can run on either Core 0 or Core 1 (as a group move).  Lets BT connections and GPS time to run uninterrupted, even during 13WPM and 50WPM keying rates.  For Pico GPS and BT connect/reconnect can run on Core 1 (no task requried).  When BT is on Core1 it allows connect and reconnect in the background.
- - Compiles under ESP-IDF v5.5.4 and v6.0.1 as of June 2026.  Addresses several deprecated issues in some libraries.
+ - Compiles under ESP-IDF v5.5.4 and v6.0.1 as of June 2026.  Addresses several deprecated issues in some libraries.  Review the Change Notes Wiki Page for some manual managed component library fixes required for v6.  Hopefully Espressif will catch these libs up.
  - FEATURE_BUTTONS and COMMAND_MODE now working.
 
 Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
