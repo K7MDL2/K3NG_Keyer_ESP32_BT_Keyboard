@@ -150,7 +150,7 @@
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-    ///#define FEATURE_STRAIGHT_KEY
+    //#define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY
     #define LCD_ROTATION 3

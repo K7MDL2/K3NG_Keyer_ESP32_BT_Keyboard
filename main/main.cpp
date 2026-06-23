@@ -3515,8 +3515,7 @@ void service_keypad(){
 		long decode_character = 0;
 		static byte space_sent = 0;
 		#if defined(FEATURE_COMMAND_LINE_INTERFACE) && defined(FEATURE_STRAIGHT_KEY_ECHO)
-			static byte screen_column = 0;
-			static int last_printed_decoder_wpm = 0;
+			static byte screen_column = 0;			
 		#endif
 
 		#if defined(FEATURE_CW_COMPUTER_KEYBOARD)
@@ -3636,6 +3635,7 @@ void service_keypad(){
 			} // NEW
 
 			#ifdef DEBUG_FEATURE_STRAIGHT_KEY_ECHO
+				static int last_printed_decoder_wpm = 0;
 				if (abs(decoder_wpm - last_printed_decoder_wpm) > 0.9) {
 					debug_serial_port->print(F("<"));
 					debug_serial_port->print(int(decoder_wpm));
@@ -9166,7 +9166,7 @@ void command_set_serial_number() {
 	for (character_count = 0; character_count < 4; character_count++) {
 		cw_char = get_cw_input_from_user(0);
 		number_sent = (convert_cw_number_to_ascii(cw_char) - 48);
-		if ((number_sent >= 0) && (number_sent < 10)) {
+		if (number_sent < 10) {
 			repeat_value = (repeat_value * 10) + number_sent;
 		} else { // we got a bad value
 			error_flag = 1;
@@ -18921,8 +18921,7 @@ void service_cw_decoder() {
 	long decode_character = 0;
 	static byte space_sent = 0;
 	#ifdef FEATURE_COMMAND_LINE_INTERFACE
-		static byte screen_column = 0;
-		static int last_printed_decoder_wpm = 0;
+		static byte screen_column = 0;		
 	#endif
 
 	if (cw_decoder_pin) cd_decoder_pin_state = digitalRead(cw_decoder_pin);
@@ -19065,6 +19064,7 @@ void service_cw_decoder() {
 		} // NEW
 
 		#ifdef DEBUG_CW_DECODER_WPM
+			static int last_printed_decoder_wpm = 0;
 			if (abs(decoder_wpm - last_printed_decoder_wpm) > 0.9) {
 				debug_serial_port->print(F("<"));
 				debug_serial_port->print(int(decoder_wpm));

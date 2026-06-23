@@ -107,6 +107,21 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #define I2CDEV_SCL_PIN  22
     #endif
 
+    #ifdef FEATURE_MCP23017_EXPANDER
+      #define MCP23X17_ADDR 0x27      
+      #define MCP23017_INTA_GPIO 21 // input only, no pullup on this pin
+      #define paddle_left     MCP23017_PIN0 // expander pin PA0
+      #define paddle_right    MCP23017_PIN1 // expander pin PA1
+      #ifdef FEATURE_STRAIGHT_KEY
+        #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
+      #endif //FEATURE_STRAIGHT_KEY
+    #else
+      #define paddle_left     25 //32 Must have pullup internal or external
+      #define paddle_right    26 //25 Must have pullup internal or external.
+      #ifdef FEATURE_STRAIGHT_KEY
+        #define pin_straight_key  27
+      #endif //FEATURE_STRAIGHT_KEY          
+    #endif
     #define paddle_left     25 // pin must have internal pullup
     #define paddle_right    26 // pin must have internal pullup
     #define tx_key_line_1   19 // (high = key down/tx on)
@@ -119,16 +134,12 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define ptt_tx_2         0  // Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0
     #define tx_pause_pin     0
-    #ifdef FEATURE_STRAIGHT_KEY
-      #define pin_straight_key 27
-    #endif //FEATURE_STRAIGHT_KEY
     // FEATURE_CW_DECODER & OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
     // See https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder for details
     //#define cw_decoder_pin    0            // This is for use with external decoding hardware
     //#define cw_decoder_audio_input_pin 35   // 0 // This is for audio detection decoding using OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR; this must be an analog pin!
     //define cw_decoder_indicator 33         // Output - goes HIGH when cw tone is detected by OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR
 
-    
     // following linbes are used for internal functions
     //#define LCD_H_RES      320
     //#define LCD_V_RES      240
@@ -183,9 +194,6 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define ptt_tx_2         0 //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 
     #define tx_pause_pin     0 
-    #ifdef FEATURE_STRAIGHT_KEY
-      #define pin_straight_key 39 //TXD0 - GREEN LED
-    #endif //FEATURE_STRAIGHT_KEY
     // 4 connectors for IO. | 23, 19, 18, 21 || 35, 39 || 32, 25, 3.3V, GND |
     // 25/32/3.3/GND and 39 used for I2C for port expander if used.  
     // 25/32 and 39 used for paddles and key if no port expander
