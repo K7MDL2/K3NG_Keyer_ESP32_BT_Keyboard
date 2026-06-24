@@ -5,14 +5,14 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "V:K7MDL-2026.6.19"
-#define eeprom_magic_number 42          // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "V:K7MDL-2026.6.23"
+#define eeprom_magic_number 43          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
-//#define FEATURE_BUTTONS
-//#define FEATURE_COMMAND_MODE
+#define FEATURE_BUTTONS
+#define FEATURE_COMMAND_MODE
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
 #define FEATURE_MEMORIES             // on the Arduino Due, you must have FEATURE_EEPROM_E24C1024 and E24C1024 EEPROM hardware in order to compile this
 #define FEATURE_MEMORY_MACROS
@@ -150,16 +150,16 @@
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)
     //#define CONFIG_DISPLAY_TYPE TFT_HOSYOND_320x480_LCD
     #define FEATURE_TFT_HOSYOND_320x480_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus
-    //#define FEATURE_STRAIGHT_KEY
+    #define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY
     #define LCD_ROTATION 3
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features 
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
-    //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
+    #define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
     #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define USE_RES_TOUCH  // Enables touch with XPT2046
-    #define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scanning (K380, Rii)
+    //#define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scanning (K380, Rii)
     #define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
     #define USE_MAIN_TASK // runs main loop in a task
     #define USE_BT_TASK 
@@ -269,7 +269,7 @@
 //#define FEATURE_INTERNET_LINK   // Details: https://github.com/k3ng/k3ng_cw_keyer/wiki/390-Feature:-Ethernet,-Web-Server,-and-Internet-Linking
 
 // #define FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT     // Activate the Command Line interface on the secondary serial port
-//#define OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION  // Use when activating both FEATURE_WINKEY_EMULATION and FEATURE_COMMAND_LINE_INTERFACE 
+#define OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION  // Use when activating both FEATURE_WINKEY_EMULATION and FEATURE_COMMAND_LINE_INTERFACE 
                                                              //    simultaneously.  This will make Winkey emulation be the default at boot up; 
                                                              //    hold command button down at boot up to activate CLI mode
 

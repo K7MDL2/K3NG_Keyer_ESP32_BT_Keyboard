@@ -336,7 +336,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #define potentiometer_enable_pin 0  // if defined, the potentiometer will be enabled only when this pin is held low; set to 0 to ignore this pin
 
 #ifdef FEATURE_BUTTONS
-  #define analog_buttons_pin 0 //A0 VP pin on the board Not all pins of ESP32 are available for ADC. See https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
+  #define analog_buttons_pin  35 //A0 VP pin on the board Not all pins of ESP32 are available for ADC. See https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
   #define command_mode_active_led 16 //for ESP32_DEV board On Board LED
 #endif //FEATURE_BUTTONS
 
