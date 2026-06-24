@@ -2169,6 +2169,7 @@ void check_potentiometer();
 byte pot_value_wpm();
 void command_speed_set(int wpm_set);
 void init_MCP23017(void);
+void command_mode();
 #ifdef USE_MAIN_TASK
 	void mainloop(void * pvParameters);
 #else
@@ -5200,6 +5201,20 @@ void check_ps2_keyboard()
 																		break;
 																#endif //OPTION_SAVE_MEMORY_NANOKEYER
 
+																case PS2_F_CTRL:
+																#ifdef FEATURE_COMMAND_MODE
+																		command_mode_disable_tx = !key_tx; //Added to sync the Command Mode entry state to actual key_tx state in case changed by CLI or keyboard (WD9DMP)
+																		key_tx = 0;
+																		command_mode();
+																		if (command_mode_disable_tx) {
+																			//key_tx = !store_key_tx; //Inverting pre-command mode state seems to cause Command Mode sync issues (WD9DMP)
+																			key_tx = 0; //Added this line to explicitly disable key_tx if command_mode_disable_tx is set after exiting Command Mode (WD9DMP)
+																		} else {
+																			key_tx = 1;
+																		}
+																#endif
+																break;
+
 																case PS2_G_CTRL :
 																configuration.keyer_mode = BUG;
 																#ifdef FEATURE_DISPLAY
@@ -8035,9 +8050,6 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
 		#endif
 
 	} //while (looping)
-
-
-
 
 	if (button_hit) {
 		#ifdef DEBUG_GET_CW_INPUT_FROM_USER
@@ -20430,9 +20442,9 @@ void process_buttons() { // (uint8_t button_ID) {
 			case BUTTON_SIDETONE_EN:  if (btn[key[key_ID].btn_idx].len >= 3) {  // long press
 																	BtnX_active = 0;  // Do not hold state on
 																	key[key_ID].hold = false;
-																	queueflush(); queueadd(PS2_L_CTRL); //  Toggle Sidetone On/Off
+																	queueflush(); queueadd(PS2_L_CTRL); //  Toggle Backlingt On/Off on Long press
 																} else {
-																	queueflush(); queueadd(PS2_O_CTRL); //  Toggle Sidetone On/Off
+																	queueflush(); queueadd(PS2_O_CTRL); //  Toggle Sidetone On/Off on short press
 																} break;
 			case BUTTON_POPUP_2:     generic_popup_key(key_ID, btn2_text); break;
 			case BUTTON_POPUP_3:     generic_popup_key(key_ID, btn3_text); break;
