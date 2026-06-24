@@ -20436,16 +20436,22 @@ void process_buttons() { // (uint8_t button_ID) {
 			case BUTTON_MEM_7: memX_key(key_ID, 7); break;  // Memory 7
 			case BUTTON_MEM_8: memX_key(key_ID, 8); break;  // Memory 8
 
-			case BUTTON_TX_SELECT:   TX_select_key(key_ID); break;
-			case BUTTON_TX_ENABLE:   TX_enable_key(key_ID); break; // TX_enable_key(key_ID); break;
+			case BUTTON_TX_SELECT:   	TX_select_key(key_ID); break;
+			case BUTTON_TX_ENABLE:   	if (btn[key[key_ID].btn_idx].len >= 3) {  // long press
+											BtnX_active = 0;  // Do not hold state on
+											key[key_ID].hold = false;
+											queueflush(); queueadd(PS2_F_CTRL); //  Enter Command Mode.  Send CW 'X' to exit
+										} else {
+											TX_enable_key(key_ID); //  Toggle Sidetone On/Off on short press
+										} break;  // TX_enable_key(key_ID); break;
 			case BUTTON_TUNE:        queueflush(); queueadd(PS2_T_CTRL); break;  // Toggle TUNE
-			case BUTTON_SIDETONE_EN:  if (btn[key[key_ID].btn_idx].len >= 3) {  // long press
-																	BtnX_active = 0;  // Do not hold state on
-																	key[key_ID].hold = false;
-																	queueflush(); queueadd(PS2_L_CTRL); //  Toggle Backlingt On/Off on Long press
-																} else {
-																	queueflush(); queueadd(PS2_O_CTRL); //  Toggle Sidetone On/Off on short press
-																} break;
+			case BUTTON_SIDETONE_EN:  	if (btn[key[key_ID].btn_idx].len >= 3) {  // long press
+											BtnX_active = 0;  // Do not hold state on
+											key[key_ID].hold = false;
+											queueflush(); queueadd(PS2_L_CTRL); //  Toggle Backlight On/Off on Long press
+										} else {
+											queueflush(); queueadd(PS2_O_CTRL); //  Toggle Sidetone On/Off on short press
+										} break;
 			case BUTTON_POPUP_2:     generic_popup_key(key_ID, btn2_text); break;
 			case BUTTON_POPUP_3:     generic_popup_key(key_ID, btn3_text); break;
 
