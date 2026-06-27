@@ -58,7 +58,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #define paddle_left      2 // Must have pullup internal or external
       #define paddle_right     3 // Must have pullup internal or external.
       #ifdef FEATURE_STRAIGHT_KEY
-        #define pin_straight_key  22
+        #define pin_straight_key  4
       #endif //FEATURE_STRAIGHT_KEY          
     #endif
     
@@ -71,7 +71,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_BITS      (0x05) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
     #define potentiometer   26 // ADC0 = Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
     #define tx_key_line_1    6 // (high = key down/tx on)
-    #define tx_key_line_2   14 
+    #define tx_key_line_2   14  
     #define sidetone_line   42 // 18  //26 connect a passive buzzer for sidetone   42 is RP2350B
     #define audio_enable     0  // audio amp enable = LOW for this display (only?)
     #define ptt_tx_1        19  // 22 for PTT ("push to talk") lines, GPIO22 is RED LED
@@ -130,9 +130,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define tx_inhibit_pin    0
   #define tx_pause_pin      0
   #ifdef FEATURE_STRAIGHT_KEY
-    #define pin_straight_key 27 //TXD0
+    #define pin_straight_key 4 //TXD0
   #endif //FEATURE_STRAIGHT_KEY
   #define GPS_RX_PIN        35 // will conflict with NCP23017 if used     
+  #define GPS_TX_PIN        -1   //4 Note: -1 free up pin fo other GPIO use - requires arduino-pico lib 5.6.1+
 #endif
 
 //  common pins
