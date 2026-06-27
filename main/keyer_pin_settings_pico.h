@@ -62,8 +62,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
       #endif //FEATURE_STRAIGHT_KEY          
     #endif
     
-    #define GPS_RX_PIN       5   // UART1 TX = 4   UART1 RX = 5
-    #define GPS_TX_PIN       4   // 4
+    #define GPS_RX_PIN      5   // UART1 TX = 4   UART1 RX = 5
+    #define GPS_TX_PIN      -1   //4 Note: -1 free up pin fo other GPIO use - requires arduino-pico lib 5.6.1+
     #define TOUCH_X         4400 //304 //4400     // x  300 default
     #define TOUCH_X1        3550    // x1 3600 default
     #define TOUCH_Y         4300 // 204 //4300     // y  300 default

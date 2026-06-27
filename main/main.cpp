@@ -19411,9 +19411,9 @@ void initialize_gps_port(void) {
 				gps_serial_port_baud_rate = GPS_SERIAL_PORT_BAUD;
 				gps_serial_port.setFIFOSize(1024);  // default was too small.
 				gps_serial_port.setRX(GPS_RX_PIN);
-				//gps_serial_port.setTX(GPS_TX_PIN);
+				gps_serial_port.setTX(GPS_TX_PIN);
 				gps_serial_port.setInvertRX(GPS_SERIAL_INVERT);
-				//gps_serial_port.setInvertTX(GPS_SERIAL_INVERT);
+				gps_serial_port.setInvertTX(GPS_SERIAL_INVERT);
 
 				gps_serial_port.begin(gps_serial_port_baud_rate, SERIAL_8N1);
 

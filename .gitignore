@@ -78,7 +78,6 @@ components/LiquidCrystal_I2C/.hgsub_
 components/LiquidCrystal_I2C/.hgtags
 components/LiquidCrystal_I2C/.piopm
 components/LiquidCrystal_I2C/bitbucket-pipelines.yml
-sdkconfig
 sdkconfig.old
 
 .devcontainer/devcontainer.json
