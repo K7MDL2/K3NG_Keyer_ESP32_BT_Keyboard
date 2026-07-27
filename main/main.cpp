@@ -21942,7 +21942,46 @@ int paddle_pin_read(int pin_to_read) {
 		if (read_capacitive_pin(pin_to_read) > capacitance_threshold) return LOW;
 		else return HIGH;
 #elif defined(FEATURE_TOUCH_PADDLE_PINS) //SP5IOU 20220131
-		if (touchRead(pin_to_read) < touch_threshold) return LOW;
+		// Smoothed touch read: use a small IIR filter (EMA) + hysteresis to reduce jitter
+		// This keeps latency low while avoiding false triggers.
+		{
+			static int touch_filtered_left = 4096;  // initialized high (no touch)
+			static int touch_filtered_right = 4096;
+			static int touch_state_left = HIGH;
+			static int touch_state_right = HIGH;
+			int reading = touchRead(pin_to_read);
+			int *pf = NULL;
+			int *ps = NULL;
+			if (pin_to_read == paddle_left) {
+				// EMA: new_filtered = (3*old + new)/4 -> alpha = 0.25
+				touch_filtered_left = ((touch_filtered_left * 3) + reading) >> 2;
+				pf = &touch_filtered_left;
+				ps = &touch_state_left;
+			} else if (pin_to_read == paddle_right) {
+				touch_filtered_right = ((touch_filtered_right * 3) + reading) >> 2;
+				pf = &touch_filtered_right;
+				ps = &touch_state_right;
+			} else {
+				// fallback for non-paddle touch pins: simple compare (maintain original behavior)
+				if (reading < touch_threshold) return LOW;
+				return HIGH;
+			}
+
+			// hysteresis: separate thresholds for on/off to avoid bouncing around the threshold
+			int on_threshold = touch_threshold - 6;   // tuned: smaller value = more sensitive
+			int off_threshold = touch_threshold + 6;  // tuned: larger value = more stable release
+
+			if ((*pf) < on_threshold) {
+				*ps = LOW;
+				return LOW;
+			} else if ((*pf) > off_threshold) {
+				*ps = HIGH;
+				return HIGH;
+			} else {
+				// in hysteresis band: return last stable state
+				return *ps;
+			}
+		}
 		else return HIGH;
 #endif                                                      // FEATURE_TOUCH_PADDLE_PINS
 
