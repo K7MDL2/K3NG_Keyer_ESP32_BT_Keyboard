@@ -1415,6 +1415,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 //#define eeprom_magic_number 56            // moved also
 #include <Arduino.h>
 #include <stdio.h>
+#include <exception>
 #include "keyer_hardware.h"
 
 #if defined(ARDUINO_SAM_DUE)
@@ -2150,6 +2151,99 @@ void tft_backlight(int state);  // toggles the backlight GPIO pin on and off fro
 void setup_1();
 void loop_1();
 void core1_run();
+
+#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK) && defined(HARDWARE_ESP32_DEV)
+void check_bt_keyboard(void * pvParameters);
+#endif
+
+#if defined(FEATURE_GPS) && defined(USE_GPS_TASK) && defined(HARDWARE_ESP32_DEV)
+void check_gps(void * pvParameters);
+#endif
+
+#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK) && defined(HARDWARE_ESP32_DEV)
+void check_touch_buttons(void * pvParameters);
+#endif
+
+#if defined(USE_MAIN_TASK) && defined(HARDWARE_ESP32_DEV)
+void mainloop(void * pvParameters);
+#endif
+
+#if defined(FEATURE_MCP23017_EXPANDER) && defined(HARDWARE_ESP32_DEV)
+void read_io_handler(void * pvParameters);
+#endif
+
+extern PRIMARY_SERIAL_CLS * debug_serial_port;
+
+static void log_task_exception(const char *task_name, const char *message, const std::exception &ex)
+{
+    if (debug_serial_port) {
+        debug_serial_port->printf("Exception in %s: %s: %s\n", task_name, message, ex.what());
+    } else {
+        Serial.printf("Exception in %s: %s: %s\n", task_name, message, ex.what());
+    }
+}
+
+static void log_task_exception(const char *task_name, const char *message)
+{
+    if (debug_serial_port) {
+        debug_serial_port->printf("Exception in %s: %s\n", task_name, message);
+    } else {
+        Serial.printf("Exception in %s: %s\n", task_name, message);
+    }
+}
+
+static void task_entry_loop(void (*task_func)(void *), const char *task_name, void *pvParameters)
+{
+    for (;;) {
+        try {
+            task_func(pvParameters);
+        }
+        catch (const std::exception &ex) {
+            log_task_exception(task_name, "std::exception", ex);
+        }
+        catch (...) {
+            log_task_exception(task_name, "unknown exception");
+        }
+
+        myDelay(100);
+    }
+}
+
+#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK) && defined(HARDWARE_ESP32_DEV)
+static void check_bt_keyboard_task(void *pvParameters)
+{
+    task_entry_loop(check_bt_keyboard, "check_bt_keyboard", pvParameters);
+}
+#endif
+
+#if defined(FEATURE_GPS) && defined(USE_GPS_TASK) && defined(HARDWARE_ESP32_DEV)
+static void check_gps_task(void *pvParameters)
+{
+    task_entry_loop(check_gps, "check_gps", pvParameters);
+}
+#endif
+
+#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_TOUCH_TASK) && defined(HARDWARE_ESP32_DEV)
+static void check_touch_buttons_task(void *pvParameters)
+{
+    task_entry_loop(check_touch_buttons, "check_touch_buttons", pvParameters);
+}
+#endif
+
+#if defined(USE_MAIN_TASK) && defined(HARDWARE_ESP32_DEV)
+static void mainloop_task(void *pvParameters)
+{
+    task_entry_loop(mainloop, "mainloop", pvParameters);
+}
+#endif
+
+#if defined(FEATURE_MCP23017_EXPANDER) && defined(HARDWARE_ESP32_DEV)
+IRAM_ATTR static void read_io_handler_task(void *pvParameters)
+{
+    task_entry_loop(read_io_handler, "read_io_handler", pvParameters);
+}
+#endif
+
 void check_the_memory_buttons();
 byte analogbuttonread(byte button_number);
 void command_sidetone_freq_adj();
@@ -18533,8 +18627,7 @@ void init_ESP32_GPIO_key_pins(void) {
 		#ifdef HARDWARE_ESP32_DEV
 			BaseType_t xReturned;
 			//debug_serial_port->println(F("MCP23107: Setup read_io_handler"));
-			// create task that sets the global variable for paddle pin state when interrupt event arrives for our watched pins.		
-			xReturned = xTaskCreate(read_io_handler, "read_io_handler", 2048, NULL, 6, NULL);
+			xReturned = xTaskCreate(read_io_handler_task, "read_io_handler", 2048, NULL, 6, NULL);
 			if (xReturned)
 			{
 				;//debug_serial_port->println(F("MCP23107: read_io_handler Setup Complete"));
@@ -19918,16 +20011,21 @@ void queueflush()
 
 void myDelay(uint32_t _ms)
 {
-	//const uint32_t t_ms 3000;
-	//if (_ms > t_ms) {
-	//	_ms = t_ms;
-	//}
+	// Use the RTOS-safe millisecond translation for ESP32 builds.
+	// Use Arduino's delay() for sketches and non-RTOS builds.
 	#ifdef PROJECT_ESP32_COMPILER
-		vTaskDelay(portTICK_PERIOD_MS * _ms);
+		if (_ms == 0) {
+			taskYIELD();
+		} else {
+			vTaskDelay(pdMS_TO_TICKS(_ms));
+		}
 	#else
-		delay(_ms);
+		if (_ms == 0) {
+			yield();
+		} else {
+			delay(_ms);
+		}
 	#endif
-	//vTaskDelay(portTICK_PERIOD_MS * 2);
 }
 
 //---------------------------------------------------------------------
@@ -27024,7 +27122,7 @@ void setup_esp()
 		#if !defined(USE_CORE1)
 			//Serial.println("Starting GPS Task on Core 0");
 			xReturned = xTaskCreate(
-				check_gps,      /* Function that implements the task. */
+				check_gps_task,      /* Function that implements the task. */
 				"Chk_GPS",          /* Text name for the task. */
 				2000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
@@ -27034,7 +27132,7 @@ void setup_esp()
 		#if defined(USE_CORE1)
 			//Serial.println("Starting GPS Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
-				check_gps,      /* Function that implements the task. */
+				check_gps_task,      /* Function that implements the task. */
 				"Chk_GPS",          /* Text name for the task. */
 				2000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
@@ -27050,7 +27148,7 @@ void setup_esp()
 		#if !defined(USE_CORE1)
 			//Serial.println("Starting Touch Task on Core 0");
 			xReturned = xTaskCreate(
-				check_touch_buttons,      /* Function that implements the task. */
+				check_touch_buttons_task,      /* Function that implements the task. */
 				"Chk_Touch",          /* Text name for the task. */
 				2000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
@@ -27060,7 +27158,7 @@ void setup_esp()
 		#if defined(USE_CORE1)
 			//Serial.println("Starting Touch Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
-				check_touch_buttons,      /* Function that implements the task. */
+				check_touch_buttons_task,      /* Function that implements the task. */
 				"Chk_Touch",          /* Text name for the task. */
 				2000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
@@ -27080,7 +27178,7 @@ void setup_esp()
 		#if !defined(USE_CORE1)
 			//Serial.println("Starting Check BT Keyboard Task on Core 0");
 			xReturned = xTaskCreate(
-				check_bt_keyboard,       /* Function that implements the task. */
+				check_bt_keyboard_task,       /* Function that implements the task. */
 				"ChkBTKeys",          /* Text name for the task. */
 				8000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
@@ -27090,7 +27188,7 @@ void setup_esp()
 		#if defined(USE_CORE1)  // keep bt on core 0, too many interactions with TFT_eSPI and such
 			//Serial.println("Starting Check BT Keyboard Task on Core 1");
 			xReturned = xTaskCreatePinnedToCore(
-				check_bt_keyboard,       /* Function that implements the task. */
+				check_bt_keyboard_task,       /* Function that implements the task. */
 				"ChkBTKeys",          /* Text name for the task. */
 				8000,      /* Stack size in words, not bytes. */
 				( void * ) 1,    /* Parameter passed into the task. */
@@ -27112,7 +27210,7 @@ void setup_esp()
 	#if defined(USE_MAIN_TASK)  && defined(HARDWARE_ESP32_DEV) // Run on Core 0
 		//Serial.println("Starting Main Loop Task on Core 0");
 		xReturned = xTaskCreate(
-			mainloop,       /* Function that implements the task. */			
+			mainloop_task,       /* Function that implements the task. */			
 			"MainLoop",     /* Text name for the task. */
 			8000,           /* Stack size in words, not bytes. */
 			NULL, //( void * ) 1,    /* Parameter passed into the task. */
