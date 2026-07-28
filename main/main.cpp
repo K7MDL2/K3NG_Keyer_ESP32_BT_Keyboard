@@ -2195,15 +2195,19 @@ static void log_task_exception(const char *task_name, const char *message)
 static void task_entry_loop(void (*task_func)(void *), const char *task_name, void *pvParameters)
 {
     for (;;) {
-        try {
-            task_func(pvParameters);
-        }
-        catch (const std::exception &ex) {
-            log_task_exception(task_name, "std::exception", ex);
-        }
-        catch (...) {
-            log_task_exception(task_name, "unknown exception");
-        }
+		#ifdef PROJECT_ESP32_COMPILER
+			try {
+				task_func(pvParameters);
+			}
+			catch (const std::exception &ex) {
+				log_task_exception(task_name, "std::exception", ex);
+			}
+			catch (...) {
+				log_task_exception(task_name, "unknown exception");
+			}
+		#else
+			task_func(pvParameters);
+		#endif
 
         myDelay(100);
     }
@@ -4321,7 +4325,7 @@ int bt_keyboard_available() {
 int touch_key_read() {  // if touch_button_available then there is a non-zero touch key value set in button_active
 	#if defined(FEATURE_TOUCH_DISPLAY)
 		#ifndef USE_TOUCH_TASK
-			//check_touch_buttons();
+			check_touch_buttons();
 		#endif
 		myDelay(1);
 		#if defined(DEBUG_TOUCH)
@@ -4338,7 +4342,7 @@ int touch_key_read() {  // if touch_button_available then there is a non-zero to
 int touch_button_available() {
 	#if defined(FEATURE_TOUCH_DISPLAY)
 		#ifndef USE_TOUCH_TASK
-			//check_touch_buttons();
+			check_touch_buttons();
 		#endif
 		#if defined(DEBUG_TOUCH_X)
 			debug_serial_port->print(F("Check if Touch Event is Waiting: "));
@@ -20622,7 +20626,9 @@ void process_buttons() { // (uint8_t button_ID) {
 				static uint32_t tpTime = millis();
 				uint32_t duration = 0;
 				bool pressed = false;
-				uint16_t threshold = 320;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also
+				#ifdef USE_RES_TOUCH
+					uint16_t threshold = 320;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also
+				#endif
 
 					// Scan buttons every 50ms at most when not sending out cw
 					if (millis() - scanTime >= 50) {  // check every 50ms for any activity
@@ -27344,8 +27350,10 @@ extern "C" { void app_main (void)
 void app_main(void)
 #endif
 {
+	#ifndef TASK_PROCESS_STATUS
 	const uint32_t ps_time = 5000;  // time in ms to report task status
 	static uint32_t last_ps_time = 0;
+	#endif
 	const uint32_t task_start_time = 100;
 	static uint32_t last_task_start_time = 0;
 

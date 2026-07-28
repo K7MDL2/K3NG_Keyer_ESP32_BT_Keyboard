@@ -5,14 +5,14 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "V:K7MDL-2026.6.23"
+#define CODE_VERSION "V:K7MDL-2026.7.27"
 #define eeprom_magic_number 43          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
-#define FEATURE_BUTTONS
-#define FEATURE_COMMAND_MODE
+//#define FEATURE_BUTTONS   // enabling this you must have a valid GPIO pin assigned and pulled up to 3.3V.
+//#define FEATURE_COMMAND_MODE  // Long pres on teh TxEN or command mode GPIO button ender command mode where the key can set params.
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
 #define FEATURE_MEMORIES             // on the Arduino Due, you must have FEATURE_EEPROM_E24C1024 and E24C1024 EEPROM hardware in order to compile this
 #define FEATURE_MEMORY_MACROS
@@ -65,9 +65,9 @@
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
+#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
-#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 //#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
@@ -113,7 +113,7 @@
     #define FEATURE_TFT7789_3_2inch_240x320_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
     #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
-    #define FEATURE_STRAIGHT_KEY
+    //#define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define LCD_ROTATION 3
@@ -127,7 +127,7 @@
     //#define FEATURE_SINEWAVE_SIDETONE
     //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     #define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
-    #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
+    //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
