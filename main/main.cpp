@@ -1911,12 +1911,18 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		MCP23017 mcp23017 = MCP23017(MCP23X17_ADDR, Wire);
 	#endif
 	volatile bool paddle_irq = 0;
-	#ifndef HARDWARE_ESP32_DEV
+	
+#endif
+
+#if defined(FEATURE_MCP23017_EXPANDER)
+	#if defined(HARDWARE_ESP32_DEV)
+		void read_io_handler(void * pvParameters);
+	#else
 		void read_io_handler();
 	#endif
 #endif
 
-#if (defined(HARDWARE_ESP32_DEV) || defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)) && (!defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(ARDUINO_RASPBERRY_PI_PICO))
+#if (defined(HARDWARE_ESP32_DEV) && (defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)))
 	#include <freertos/event_groups.h>
 	//#include "freertos/semphr.h"
 	#include <freertos/task.h>
@@ -2166,10 +2172,6 @@ void check_touch_buttons(void * pvParameters);
 
 #if defined(USE_MAIN_TASK) && defined(HARDWARE_ESP32_DEV)
 void mainloop(void * pvParameters);
-#endif
-
-#if defined(FEATURE_MCP23017_EXPANDER) && defined(HARDWARE_ESP32_DEV)
-void read_io_handler(void * pvParameters);
 #endif
 
 extern PRIMARY_SERIAL_CLS * debug_serial_port;
@@ -3271,7 +3273,7 @@ unsigned long millis_rollover = 0;
 				}
 
 				//pinMode(bt_keyboard_LED, OUTPUT);
-				debug_serial_port->println("Entering pairing mode.  Set the peripheral to pair state");
+				debug_serial_port->println(F("Entering pairing mode.  Set the peripheral to pair state"));
 				bt_keyboard.clearPairing();
 				bzero(configuration.addr, 6);
 				configuration.addrType = 0;
@@ -3279,11 +3281,15 @@ unsigned long millis_rollover = 0;
 
 				do {
 					myDelay(10);
-					debug_serial_port->println("Scanning for New BT Keyboard Connection");
-					if (use_BLE) bt_keyboard.connectBLE();
-					else bt_keyboard.connectKeyboard();
+					debug_serial_port->println(F("Scanning for New BT Keyboard Connection"));
+					if (use_BLE) {
+						bt_keyboard.connectBLE();
+					}	else {
+						debug_serial_port->println(F("Calling connectKeyboard() for BT Classic keyboard"));
+						bt_keyboard.connectKeyboard();						
+					}
 					myDelay(2000);
-					debug_serial_port->println("Waiting to connect");
+					debug_serial_port->println(F("Waiting to connect"));
 				} while (!bt_keyboard.connected());
 
 				if (bt_keyboard.connected()) {
@@ -4289,7 +4295,7 @@ void lcd_scroll_box_clear() {
 			//if (TFT_VIEWPORT_EXISTS) {
 			//    debug_serial_port->println(F("Close Viewport"));
 					lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
-					myDelay(1);
+					myDelay(0);
 			//    lcd.resetViewport();
 			//}
 			//else {
@@ -4307,7 +4313,7 @@ void lcd_scroll_box_clear() {
 
 char bt_keyboard_read() {
 	#if !defined(USE_BT_TASK) && defined(FEATURE_BT_KEYBOARD)
-		myDelay(1);
+		myDelay(0);
 		check_bt_keyboard();
 	#endif
 	if (queue_available()) return queuepop();
@@ -4316,7 +4322,7 @@ char bt_keyboard_read() {
 
 int bt_keyboard_available() {
 	#if !defined(USE_BT_TASK) && defined(FEATURE_BT_KEYBOARD)
-		myDelay(1);
+		myDelay(0);
 		check_bt_keyboard();
 	#endif
 	return queue_available();
@@ -4327,7 +4333,7 @@ int touch_key_read() {  // if touch_button_available then there is a non-zero to
 		#ifndef USE_TOUCH_TASK
 			check_touch_buttons();
 		#endif
-		myDelay(1);
+		myDelay(0);
 		#if defined(DEBUG_TOUCH)
 			debug_serial_port->print(F("Read Touch"));
 		#endif //DEBUG_TOUCH
@@ -4648,7 +4654,7 @@ void service_display() {
 			lcd_status = lcd_previous_status;
 			switch (lcd_status) {
 				case LCD_CLEAR:
-						myDelay(1);
+						myDelay(0);
 						lcd_scroll_box_clear();
 						break;
 				case LCD_SCROLL_MSG:   // this is called after a timed message clears the display and the buffer has to be redrawn onscreen.  Also at start of Pause
@@ -5813,13 +5819,13 @@ void ps2_keyboard_program_memory(byte memory_number)
 	#endif
 	repeat_memory = 255;
 	while (looping) {
-		myDelay(1);  // whem running in a task
+		myDelay(0);  // whem running in a task
 		#ifdef FEATURE_PS2_KEYBOARD
 		while (keyboard.available() == 0) {
 		#endif
 		#if defined(FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 		while (bt_keyboard_available() == 0) {
-			myDelay(1);
+			myDelay(0);
 		#endif
 			if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
 				check_paddles();
@@ -5926,7 +5932,7 @@ int ps2_keyboard_get_number_input(byte places,int lower_limit, int upper_limit)
 	#endif
 
 	while (looping) {
-			myDelay(1);
+			myDelay(0);
 		#ifdef FEATURE_PS2_KEYBOARD
 		if (keyboard.available() == 0) {        // wait for the next keystroke
 		#endif
@@ -6063,7 +6069,7 @@ void debug_capture ()
 	byte serial_byte_in;
 	int x = 1022;
 
-	while (primary_serial_port->available() == 0) {myDelay(1);}  // wait for first byte
+	while (primary_serial_port->available() == 0) {myDelay(0);}  // wait for first byte
 	serial_byte_in = primary_serial_port->read();
 	primary_serial_port->write(serial_byte_in);
 	//if ((serial_byte_in > 47) or (serial_byte_in = 20)) { primary_serial_port->write(serial_byte_in); }  // echo back
@@ -6074,7 +6080,7 @@ void debug_capture ()
 		EEPROM.write(x,serial_byte_in);
 		x--;
 		while ( x > 400) {
-			myDelay(1);
+			myDelay(0);
 			if (primary_serial_port->available() > 0) {
 				serial_byte_in = primary_serial_port->read();
 				EEPROM.write(x,serial_byte_in);
@@ -6087,7 +6093,7 @@ void debug_capture ()
 		}
 		close_w_eeprom();
 	}
-	while (1) {myDelay(1);}
+	while (1) {myDelay(0);}
 }
 #endif
 
@@ -6120,7 +6126,7 @@ void debug_capture_dump()
 	}
 	close_r_eeprom();
 
-	while (1) {myDelay(1);}
+	while (1) {myDelay(0);}
 
 }
 #endif
@@ -6473,7 +6479,7 @@ void check_paddles()
 
 	static byte last_closure = NO_CLOSURE;
 
-	myDelay(1);
+	myDelay(0);
 	check_dit_paddle();
 	check_dah_paddle();
 
@@ -6753,7 +6759,7 @@ void ptt_key(){
 		#endif
 
 		while (!all_delays_satisfied){
-			myDelay(1);
+			myDelay(0);
 			#ifdef FEATURE_SEQUENCER
 				if (sequencer_1_pin){
 					if (((millis() - ptt_activation_time) >= configuration.ptt_active_to_sequencer_active_time[0]) || sequencer_1_active){
@@ -7330,7 +7336,7 @@ void check_dit_paddle()
 				repeat_memory = 255;
 				#ifdef OPTION_DIT_PADDLE_NO_SEND_ON_MEM_RPT
 					dit_buffer = 0;
-					while (!paddle_pin_read(dit_paddle)) {myDelay(1);};
+					while (!paddle_pin_read(dit_paddle)) {myDelay(0);};
 					memory_rpt_interrupt_flag = 1;
 				#endif
 			}
@@ -7790,7 +7796,8 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
 		#endif //FEATURE_SERIAL
 
 		#if defined(DEBUG_LOOP_ELEMENT_LENGTHS)
-			debug_serial_port->println(F("loop_element_lengths: enter"));
+			uint32_t d_start_time = millis();
+			debug_serial_port->println(F("loop_element_lengths: enter"));			
 		#endif
 
 
@@ -7833,7 +7840,7 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
 		#else
 		while (((micros() - start) < ticks) && (service_tx_inhibit_and_pause() == 0)){
 		#endif
-			myDelay(1);
+			myDelay(0);
 			check_ptt_tail();
 
 			#if defined(FEATURE_SERIAL) && !defined(OPTION_DISABLE_SERIAL_PORT_CHECKING_WHILE_SENDING_CW)
@@ -8001,7 +8008,9 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
 		}
 
 		#if defined(DEBUG_LOOP_ELEMENT_LENGTHS)
-			debug_serial_port->println(F("loop_element_lengths: exit"));
+			uint32_t d_end_time = millis();
+			debug_serial_port->print(F("loop_element_lengths: exit "));
+			debug_serial_port->println(d_end_time-d_start_time);
 		#endif
 
 
@@ -8107,7 +8116,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
 	unsigned long entry_time = millis();
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		#ifdef OPTION_WATCHDOG_TIMER
 			wdt_reset();
 		#endif  //OPTION_WATCHDOG_TIMER
@@ -8153,7 +8162,7 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds) {
 
 		#ifdef FEATURE_BUTTONS
 			while (analogbuttonread(0)) {    // hit the button to get out of command mode if no paddle was hit
-				myDelay(1);
+				myDelay(0);
 				looping = 0;
 				button_hit = 1;
 			}
@@ -8245,11 +8254,11 @@ void command_mode() {
 	#endif
 
 	while (stay_in_command_mode) {
-		myDelay(1);
+		myDelay(0);
 		cw_char = 0;
 		looping = 1;
 		while (looping) {
-			myDelay(1);
+			myDelay(0);
 			int8_t button_temp = button_array.Pressed();
 
 					#ifdef FEATURE_DISPLAY
@@ -8295,7 +8304,7 @@ void command_mode() {
 				cw_char = 9;
 				myDelay(50);
 				button_that_was_pressed = button_temp;
-				while (button_array.Held(button_that_was_pressed)) {myDelay(1);}
+				while (button_array.Held(button_that_was_pressed)) {myDelay(0);}
 			}
 
 			#if defined(FEATURE_SERIAL)
@@ -9078,7 +9087,7 @@ void command_progressive_5_char_echo_practice() {
 	#endif
 
 	while (loop1) {
-		myDelay(1);
+		myDelay(0);
 		// if (practice_mode_called == ECHO_MIXED){
 		//   practice_mode = random(ECHO_2_CHAR_WORDS,ECHO_QSO_WORDS+1);
 		// } else {
@@ -9131,7 +9140,7 @@ void command_progressive_5_char_echo_practice() {
 
 		loop2 = 1;
 		while (loop2) {
-			myDelay(1);
+			myDelay(0);
 			user_send_loop = 1;
 			user_sent_cw = "";
 			cw_char = 0;
@@ -9139,7 +9148,7 @@ void command_progressive_5_char_echo_practice() {
 
 			// send the CW to the user
 			while ((x < (cw_to_send_to_user.length())) && (x < progressive_step_counter)) {
-				myDelay(1);
+				myDelay(0);
 				send_char(cw_to_send_to_user[x],KEYER_NORMAL);
 				// test
 				// port_to_use->print(cw_to_send_to_user[x]);
@@ -9149,7 +9158,7 @@ void command_progressive_5_char_echo_practice() {
 			//port_to_use->println();
 
 			while (user_send_loop) {
-				myDelay(1);
+				myDelay(0);
 				// get their paddle input
 
 				#ifdef FEATURE_DISPLAY
@@ -9206,7 +9215,7 @@ void command_progressive_5_char_echo_practice() {
 
 				// does the user want to exit?
 				while (analogbuttonread(0)) {
-					myDelay(1);
+					myDelay(0);
 					user_send_loop = 0;
 					loop1 = 0;
 					loop2 = 0;
@@ -9380,7 +9389,7 @@ void command_keying_compensation_adjust() {
 	#endif
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		send_dit();
 		send_dah();
 		if (paddle_pin_read(paddle_left) == LOW) {
@@ -9394,7 +9403,7 @@ void command_keying_compensation_adjust() {
 			}
 		}
 		while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-			myDelay(1);
+			myDelay(0);
 			looping = 0;
 		}
 
@@ -9404,7 +9413,7 @@ void command_keying_compensation_adjust() {
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
-	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
+	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(0);}  // wait for all lines to go high
 	dit_buffer = 0;
 	dah_buffer = 0;
 	config_dirty = 1;
@@ -9428,7 +9437,7 @@ void command_dah_to_dit_ratio_adjust() {
 	#endif
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		send_dit();
 		send_dah();
 		if (paddle_pin_read(paddle_left) == LOW) {
@@ -9438,7 +9447,7 @@ void command_dah_to_dit_ratio_adjust() {
 			adjust_dah_to_dit_ratio(-10);
 		}
 		while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-			myDelay(1);
+			myDelay(0);
 			looping = 0;
 		}
 
@@ -9448,7 +9457,7 @@ void command_dah_to_dit_ratio_adjust() {
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
-	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
+	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(0);}  // wait for all lines to go high
 	dit_buffer = 0;
 	dah_buffer = 0;
 }
@@ -9470,7 +9479,7 @@ void command_weighting_adjust() {
 	#endif
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		send_dit();
 		send_dah();
 		if (paddle_pin_read(paddle_left) == LOW) {
@@ -9482,7 +9491,7 @@ void command_weighting_adjust() {
 			if (configuration.weighting < 10){configuration.weighting = 10;}
 		}
 		while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-			myDelay(1);
+			myDelay(0);
 			looping = 0;
 		}
 
@@ -9491,7 +9500,7 @@ void command_weighting_adjust() {
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
-	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
+	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(0);}  // wait for all lines to go high
 	dit_buffer = 0;
 	dah_buffer = 0;
 }
@@ -9523,7 +9532,7 @@ void command_tuning_mode() {
 
 	key_tx = 1;
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		#ifdef OPTION_WATCHDOG_TIMER
 			wdt_reset();
 		#endif  //OPTION_WATCHDOG_TIMER
@@ -9568,7 +9577,7 @@ void command_tuning_mode() {
 	sending_mode = MANUAL_SENDING;
 	tx_and_sidetone_key(0);
 	ptt_unkey();
-	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
+	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(0);}  // wait for all lines to go high
 	key_tx = 0;
 	send_dit();
 	dit_buffer = 0;
@@ -9609,7 +9618,7 @@ void command_sidetone_freq_adj() {
 	#endif
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		s_tone(sidetone_line, configuration.hz_sidetone, 0);
 		if (paddle_pin_read(paddle_left) == LOW) {
 			#ifdef FEATURE_DISPLAY
@@ -9654,7 +9663,7 @@ void command_sidetone_freq_adj() {
 			myDelay(10);
 		}
 		while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) { // if paddles are squeezed or button0 pressed - exit
-			myDelay(1);
+			myDelay(0);
 			looping = 0;
 		}
 
@@ -9663,7 +9672,7 @@ void command_sidetone_freq_adj() {
 		#endif  //OPTION_WATCHDOG_TIMER
 
 	}
-	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
+	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(0);}  // wait for all lines to go high
 		s_noTone(sidetone_line);
 }
 #endif                                                        //FEATURE_COMMAND_MODE
@@ -9698,7 +9707,7 @@ void command_speed_mode(byte mode) {
 	}
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		send_dit();
 		if ((paddle_pin_read(paddle_left) == LOW)) {
 			if (mode == COMMAND_SPEED_MODE_KEYER_WPM) {
@@ -9732,7 +9741,7 @@ void command_speed_mode(byte mode) {
 		}
 		while ((paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0) ))  // if paddles are squeezed or button0 pressed - exit
 		{
-			myDelay(1);
+			myDelay(0);
 			looping = 0;
 		}
 
@@ -9747,7 +9756,7 @@ void command_speed_mode(byte mode) {
 	dit_buffer = 0;
 	dah_buffer = 0;
 
-	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(1);}  // wait for all lines to go high
+	while (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || analogbuttonread(0) ) {myDelay(0);}  // wait for all lines to go high
 	#ifndef FEATURE_DISPLAY
 		// announce speed in CW
 		if (mode == COMMAND_SPEED_MODE_KEYER_WPM){
@@ -9903,7 +9912,7 @@ void check_buttons() {
 	button_depress_time = button_array.last_pressed_ms;
 
 	while (button_array.Held(analogbuttontemp, button_depress_time + 1000)) {
-		myDelay(1);
+		myDelay(0);
 		if ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
 			button_depress_time = 1001;  // if button 0 is held and a paddle gets hit, assume we have a hold and shortcut out
 		}
@@ -9966,7 +9975,7 @@ void check_buttons() {
 				key_tx = 0;
 				// do stuff if this is a command button hold down
 				while (button_array.Held(analogbuttontemp)) {
-					myDelay(1);
+					myDelay(0);
 					if (paddle_pin_read(paddle_left) == LOW) {
  						#ifdef OPTION_SWAP_PADDLE_PARAMETER_CHANGE_DIRECTION
 							speed_change(-1);                                           // left paddle decrease speed
@@ -10030,7 +10039,7 @@ void check_buttons() {
 			}  // (analogbuttontemp == 0)
 			if ((analogbuttontemp > 0) && (analogbuttontemp < analog_buttons_number_of_buttons)) {
 				while (button_array.Held(analogbuttontemp)) {
-					myDelay(1);
+					myDelay(0);
 					if (((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) && (analogbuttontemp < (number_of_memories + 1))){
 						#ifdef FEATURE_MEMORIES
 							repeat_memory = analogbuttontemp - 1;
@@ -10624,7 +10633,7 @@ void serial_qrss_mode()
 	byte error =0;
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		if (primary_serial_port->available() == 0) {        // wait for the next keystroke
 			if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
 				check_paddles();
@@ -10661,7 +10670,7 @@ void serial_qrss_mode()
 	if (error) {
 		primary_serial_port->println(F("Error..."));
 		while (primary_serial_port->available() > 0) {
-			myDelay(1);
+			myDelay(0);
 			incoming_serial_byte = primary_serial_port->read();
 		}  // clear out buffer
 		return;
@@ -11915,7 +11924,7 @@ void service_winkey(byte action) {
 		if (!winkey_discard_bytes_init_done) {
 			if (primary_serial_port->available()) {
 				for (int z = winkey_discard_bytes_startup;z > 0;z--) {
-					while (primary_serial_port->available() == 0) {myDelay(1);}
+					while (primary_serial_port->available() == 0) {myDelay(0);}
 					primary_serial_port->read();
 				}
 				winkey_discard_bytes_init_done = 1;
@@ -13141,7 +13150,7 @@ void check_serial(){
 	#endif
 
 	while (primary_serial_port->available() > 0) {
-		myDelay(1);
+		myDelay(0);
 		incoming_serial_byte = primary_serial_port->read();
 		#ifdef FEATURE_SLEEP
 			last_activity_time = millis();
@@ -13192,7 +13201,7 @@ void check_serial(){
 
 	#ifdef FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
 		while (secondary_serial_port->available() > 0) {
-			myDelay(1);
+			myDelay(0);
 			incoming_serial_byte = secondary_serial_port->read();
 			#ifdef FEATURE_SLEEP
 				last_activity_time = millis();
@@ -13234,8 +13243,8 @@ void serial_page_pause(PRIMARY_SERIAL_CLS * port_to_use,byte seconds_timeout){
 	unsigned long pause_start_time = millis();
 
 	port_to_use->println(F("\r\nPress enter..."));
-	while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){myDelay(1);}
-	while (port_to_use->available()){myDelay(1); port_to_use->read();}
+	while ((!port_to_use->available()) && (((millis()-pause_start_time)/1000) < seconds_timeout)){myDelay(0);}
+	while (port_to_use->available()){myDelay(0); port_to_use->read();}
 
 }
 #endif //defined(FEATURE_SERIAL_HELP) && defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE)
@@ -13768,7 +13777,7 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 	String userinput = "";
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		if (port_to_use->available() == 0) {        // wait for the next keystroke
 			if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
 				check_paddles();
@@ -14022,7 +14031,7 @@ void cli_sd_ls_command(PRIMARY_SERIAL_CLS * port_to_use,String directory){
 	File dir = SD.open(directory);
 
 	while (true) {
-		myDelay(1);
+		myDelay(0);
 		File entry =  dir.openNextFile();
 		if (! entry) {
 			// no more files
@@ -14200,8 +14209,8 @@ void cli_eeprom_dump(PRIMARY_SERIAL_CLS * port_to_use){
 			w++;
 			if (w > EEPROM_DUMP_LINES){
 				port_to_use->println(F("\r\nPress enter..."));
-				while(!port_to_use->available()){myDelay(1);}
-				while(port_to_use->available()){port_to_use->read(); myDelay(1);}
+				while(!port_to_use->available()){myDelay(0);}
+				while(port_to_use->available()){port_to_use->read(); myDelay(0);}
 				w = 0;
 			}
 		}
@@ -14659,7 +14668,7 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit,PRIMARY
 	int numbers[6];
 
 	while (looping) {
-		myDelay(1);
+		myDelay(0);
 		if (port_to_use->available() == 0) {        // wait for the next keystroke
 			if (keyer_machine_mode == KEYER_NORMAL) {          // might as well do something while we're waiting
 				check_paddles();
@@ -14702,7 +14711,7 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit,PRIMARY
 		if (raise_error_message == RAISE_ERROR_MSG){
 			port_to_use->println(F("Error..."));
 		}
-		while (port_to_use->available() > 0) { myDelay(1); incoming_serial_byte = port_to_use->read();}  // clear out buffer
+		while (port_to_use->available() > 0) { myDelay(0); incoming_serial_byte = port_to_use->read();}  // clear out buffer
 		return(-1);
 	} else {
 		int y = 1;
@@ -14883,7 +14892,7 @@ void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
 
 	myDelay(100);
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		incoming = port_to_use->read();
 	}
 
@@ -14891,12 +14900,12 @@ void serial_tune_command (PRIMARY_SERIAL_CLS * port_to_use) {
 	tx_and_sidetone_key(1);
 	port_to_use->println(F("\r\nKeying tx - press a key to unkey"));
 	#ifdef FEATURE_BUTTONS
-		while ((port_to_use->available() == 0) && (!analogbuttonread(0))) {myDelay(1);}  // keystroke or button0 hit gets us out of here
+		while ((port_to_use->available() == 0) && (!analogbuttonread(0))) {myDelay(0);}  // keystroke or button0 hit gets us out of here
 	#else
-		while (port_to_use->available() == 0) {myDelay(1);}
+		while (port_to_use->available() == 0) {myDelay(0);}
 	#endif
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		incoming = port_to_use->read();
 	}
 	tx_and_sidetone_key(0);
@@ -15027,7 +15036,7 @@ String generate_callsign(byte callsign_mode) {
 //   int caller_wpm_delta = 0;
 
 //   while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-//   myDelay(1);
+//   myDelay(0);
 //     port_to_use->read();
 //   }
 
@@ -15045,7 +15054,7 @@ String generate_callsign(byte callsign_mode) {
 //   term.println(F("-------- ---- -------\n\n"));
 
 //   while (loop1){
-//      myDelay(1);
+//      myDelay(0);
 //     // get user keyboard input
 //     if (port_to_use->available()){
 //       user_input_buffer[user_input_buffer_characters] = toupper(port_to_use->read());
@@ -15240,7 +15249,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
 	while(menu_loop){
 
 		while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-			myDelay(1);
+			myDelay(0);
 			port_to_use->read();
 		}
 
@@ -15256,7 +15265,7 @@ void serial_cw_practice(PRIMARY_SERIAL_CLS * port_to_use) {
 		menu_loop2 = 1;
 
 		while (menu_loop2) {
-			myDelay(1);
+			myDelay(0);
 			if (port_to_use->available()){
 				incoming_char = port_to_use->read();
 				if ((incoming_char != 10) && (incoming_char != 13)){
@@ -15299,7 +15308,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use) {
 	while(menu_loop) {
 
 		while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-			myDelay(1);
+			myDelay(0);
 			port_to_use->read();
 		}
 
@@ -15320,7 +15329,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use) {
 		menu_loop2 = 1;
 
 		while (menu_loop2) {
-			myDelay(1);
+			myDelay(0);
 			if (port_to_use->available()){
 				incoming_char = port_to_use->read();
 				if ((incoming_char != 10) && (incoming_char != 13)) {
@@ -15403,20 +15412,20 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 	port_to_use->println(F("Receive / Transmit Echo Practice\r\n\r\nCopy the code and send it back using the paddle."));
 	port_to_use->println(F("Enter a blackslash \\ to exit.\r\n"));
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		incoming_char = port_to_use->read();
 	}
 	port_to_use->print(F("Press enter to start...\r\n"));
 	while (port_to_use->available() == 0) {
-		myDelay(1);
+		myDelay(0);
 	}
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		incoming_char = port_to_use->read();
 	}
 
 	while (loop1) {
-		myDelay(1);
+		myDelay(0);
 		if (practice_mode_called == ECHO_MIXED){
 			practice_mode = random(ECHO_2_CHAR_WORDS,ECHO_QSO_WORDS+1);
 		} else {
@@ -15466,7 +15475,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 		loop2 = 1;
 
 		while (loop2){
-			myDelay(1);
+			myDelay(0);
 			user_send_loop = 1;
 			user_sent_cw = "";
 			cw_char = 0;
@@ -15474,7 +15483,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 
 			// send the CW to the user
 			while ((x < (cw_to_send_to_user.length())) && (x < progressive_step_counter)) {
-				myDelay(1);
+				myDelay(0);
 				send_char(cw_to_send_to_user[x],KEYER_NORMAL);
 				// test
 				port_to_use->print(cw_to_send_to_user[x]);
@@ -15485,7 +15494,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 
 			while (user_send_loop) {
 				// get their paddle input
-				myDelay(1);
+				myDelay(0);
 				#ifdef FEATURE_DISPLAY
 					service_display();
 				#endif
@@ -15569,7 +15578,7 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 				}
 				#ifdef FEATURE_BUTTONS
 					while (analogbuttonread(0)) {                                                 // can exit by pressing the Command Mode button
-						myDelay(1);
+						myDelay(0);
 						user_send_loop = 0;
 						loop1 = 0;
 						loop2 = 0;
@@ -15644,7 +15653,7 @@ void serial_receive_practice_menu(PRIMARY_SERIAL_CLS * port_to_use,byte practice
 	while(menu_loop) {
 
 		while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-			myDelay(1);
+			myDelay(0);
 			port_to_use->read();
 		}
 
@@ -15667,7 +15676,7 @@ void serial_receive_practice_menu(PRIMARY_SERIAL_CLS * port_to_use,byte practice
 		menu_loop2 = 1;
 
 		while (menu_loop2){
-			myDelay(1);
+			myDelay(0);
 			if (port_to_use->available()){
 				incoming_char = port_to_use->read();
 				if ((incoming_char != 10) && (incoming_char != 13)){
@@ -15729,7 +15738,7 @@ void serial_set_wordspace_parameters(PRIMARY_SERIAL_CLS * port_to_use,byte mode_
 	while(menu_loop){
 
 		while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-			myDelay(1);
+			myDelay(0);
 			port_to_use->read();
 		}
 
@@ -15744,7 +15753,7 @@ void serial_set_wordspace_parameters(PRIMARY_SERIAL_CLS * port_to_use,byte mode_
 		temp_value = 0;
 
 		while (menu_loop2){
-			myDelay(1);
+			myDelay(0);
 			if (port_to_use->available()){
 				incoming_char = port_to_use->read();
 				if ((incoming_char > 47) && (incoming_char < 58)){
@@ -15800,7 +15809,7 @@ void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use){
 	while(menu_loop){
 
 		while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-			myDelay(1);
+			myDelay(0);
 			port_to_use->read();
 		}
 
@@ -15813,7 +15822,7 @@ void serial_random_menu(PRIMARY_SERIAL_CLS * port_to_use){
 		menu_loop2 = 1;
 
 		while (menu_loop2){
-			myDelay(1);
+			myDelay(0);
 			if (port_to_use->available()){
 				incoming_char = port_to_use->read();
 				if ((incoming_char != 10) && (incoming_char != 13)){
@@ -15867,12 +15876,12 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
 	#endif
 
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		incoming_char = port_to_use->read();
 	}
 
 	while (loop1){
-		myDelay(1);
+		myDelay(0);
 		switch(random_mode){
 			case RANDOM_LETTER_GROUPS: random_character = random(65,91); break;
 			case RANDOM_NUMBER_GROUPS: random_character = random(48,58); break;
@@ -15919,7 +15928,7 @@ void random_practice(PRIMARY_SERIAL_CLS * port_to_use,byte random_mode,byte grou
 			}
 		#else
 			while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-				myDelay(1);
+				myDelay(0);
 				loop1 = 0;
 			}
 		#endif //FEATURE_BUTTONS
@@ -15943,7 +15952,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
 	while(menu_loop){
 
 		while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-			myDelay(1);
+			myDelay(0);
 			port_to_use->read();
 		}
 
@@ -15971,7 +15980,7 @@ void serial_wordsworth_menu(PRIMARY_SERIAL_CLS * port_to_use){
 		menu_loop2 = 1;
 
 		while (menu_loop2){
-			myDelay(1);
+			myDelay(0);
 			if (port_to_use->available()){
 				incoming_char = port_to_use->read();
 				if ((incoming_char != 10) && (incoming_char != 13)){
@@ -16042,13 +16051,13 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
 	#endif
 
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		port_to_use->read();
 	}
 
 
 	while (loop1){
-		myDelay(1);
+		myDelay(0);
 		if (practice_type_called == WORDSWORTH_MIXED){
 			practice_type = random(WORDSWORTH_2_CHAR_WORDS,WORDSWORTH_QSO_WORDS+1);
 		} else {
@@ -16089,12 +16098,12 @@ void wordsworth_practice(PRIMARY_SERIAL_CLS * port_to_use,byte practice_type)
 		repetitions = 0;
 
 		while ((loop3) && (repetitions < configuration.wordsworth_repetition)){ // word sending loop
-			myDelay(1);
+			myDelay(0);
 			loop2 = 1;
 			x = 0;
 
 			while (loop2){ //character sending loop
-				myDelay(1);
+				myDelay(0);
 				#if defined(DEBUG_WORDSWORTH)
 					debug_serial_port->print(F("wordsworth_practice: send_char:"));
 					debug_serial_port->print(word_buffer[x]);
@@ -16212,20 +16221,20 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
 	port_to_use->println(F("If you are using the Arduino serial monitor, select \"Carriage Return\" line ending."));
 	port_to_use->println(F("Enter a blackslash \\ to exit.\r\n"));
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		incoming_char = port_to_use->read();
 	}
 	port_to_use->print(F("Press enter to start...\r\n"));
 	while (port_to_use->available() == 0) {
-		myDelay(1);
+		myDelay(0);
 	}
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		incoming_char = port_to_use->read();
 	}
 
 	while (loop1){
-		myDelay(1);
+		myDelay(0);
 		if (practice_type_called == PRACTICE_MIXED){
 			practice_type = random(PRACTICE_2_CHAR_WORDS,PRACTICE_QSO_WORDS+1);
 		} else {
@@ -16279,7 +16288,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
 		loop2 = 1;
 
 		while (loop2){
-			myDelay(1);
+			myDelay(0);
 			#if defined(DEBUG_CALLSIGN_PRACTICE_SHOW_CALLSIGN)
 				port_to_use->println(callsign);
 			#endif
@@ -16288,7 +16297,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
 			user_entered_cw = "";
 			x = 0;
 			while (serialwaitloop) {
-				myDelay(1);
+				myDelay(0);
 				if(x < (cw_to_send_to_user.length())){
 					send_char(cw_to_send_to_user[x],KEYER_NORMAL);
 					#ifdef FEATURE_DISPLAY
@@ -16299,7 +16308,7 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
 				}
 
 				while(port_to_use->available() > 0) {
-					myDelay(1);
+					myDelay(0);
 					incoming_char = port_to_use->read();
 					incoming_char = toUpperCase(incoming_char);
 					port_to_use->print(incoming_char);
@@ -16345,13 +16354,13 @@ void serial_practice_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte practice_
 
 			#ifdef FEATURE_BUTTONS
 				while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
-					myDelay(1);
+					myDelay(0);
 					loop1 = 0;
 					loop2 = 0;
 				}
 			#else
 				while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-					myDelay(1);
+					myDelay(0);
 					loop1 = 0;
 					loop2 = 0;
 				}
@@ -16398,14 +16407,14 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
 	port_to_use->println(F("Callsign receive practice\r\n"));
 
 	while (port_to_use->available() > 0) {  // clear out the buffer if anything is there
-		myDelay(1);
+		myDelay(0);
 		incoming_char = port_to_use->read();
 	}
 
 
 
 	while (loop1){
-		myDelay(1);
+		myDelay(0);
 		if (practice_type_called == PRACTICE_MIXED){
 			practice_type = random(PRACTICE_2_CHAR_WORDS,PRACTICE_QSO_WORDS+1);
 		} else {
@@ -16464,7 +16473,7 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
 		x = 0;
 
 		while ((loop2) && (x < (cw_to_send_to_user.length()))) {
-			myDelay(1);
+			myDelay(0);
 			send_char(cw_to_send_to_user[x],KEYER_NORMAL);
 			#ifdef FEATURE_DISPLAY
 				display_scroll_print_char(cw_to_send_to_user[x]);
@@ -16481,14 +16490,14 @@ void serial_practice_non_interactive(PRIMARY_SERIAL_CLS * port_to_use,byte pract
 
 			#ifdef FEATURE_BUTTONS
 				while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW) || (analogbuttonread(0))) {
-					myDelay(1);
+					myDelay(0);
 					loop1 = 0;
 					loop2 = 0;
 					x = 99;
 				}
 			#else
 				while ((paddle_pin_read(paddle_left) == LOW) || (paddle_pin_read(paddle_right) == LOW)) {
-					myDelay(1);
+					myDelay(0);
 					loop1 = 0;
 					loop2 = 0;
 					x = 99;
@@ -17242,7 +17251,7 @@ byte memory_nonblocking_delay(unsigned long delaytime)
 	unsigned long starttime = millis();
 
 	while ((millis() - starttime) < delaytime) {
-		myDelay(1);
+		myDelay(0);
 		check_paddles();
 		#ifdef FEATURE_BUTTONS
 			if (((dit_buffer) || (dah_buffer) || (analogbuttonread(0))) && (keyer_machine_mode != BEACON)) {   // exit if the paddle or button0 was hit
@@ -17252,7 +17261,7 @@ byte memory_nonblocking_delay(unsigned long delaytime)
 			dit_buffer = 0;
 			dah_buffer = 0;
 			#ifdef FEATURE_BUTTONS
-				while (analogbuttonread(0)) {myDelay(1);}
+				while (analogbuttonread(0)) {myDelay(0);}
 			#endif
 			return 1;
 		}
@@ -17921,7 +17930,7 @@ byte play_memory(byte memory_number) {
 							button0_buffer = 0;
 							repeat_memory = 255;
 							#ifdef FEATURE_BUTTONS
-								while (analogbuttonread(0)) {myDelay(1);}
+								while (analogbuttonread(0)) {myDelay(0);}
 							#endif
 							return 0;
 						}
@@ -17932,7 +17941,7 @@ byte play_memory(byte memory_number) {
 							button0_buffer = 0;
 							repeat_memory = 255;
 							#ifdef FEATURE_BUTTONS
-								while (analogbuttonread(0)) {myDelay(1);}
+								while (analogbuttonread(0)) {myDelay(0);}
 							#endif
 							return 0;
 						}
@@ -18066,19 +18075,19 @@ void program_memory(int memory_number)
 	dah_buffer = 0;
 
 	#if defined(FEATURE_BUTTONS) && !defined(FEATURE_STRAIGHT_KEY)
-		while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0))) {myDelay(1); }  // loop until user starts sending or hits the button
+		while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0))) {myDelay(0); }  // loop until user starts sending or hits the button
 	#endif
 
 	#if defined(FEATURE_BUTTONS) && defined(FEATURE_STRAIGHT_KEY)
 		#if defined(USE_KEY_PIN_INTERRUPTS)
-			while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { myDelay(1);}  // loop until user starts sending or hits the button
+			while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (straight_key_state == HIGH)) { myDelay(0);}  // loop until user starts sending or hits the button
 		#else
-			while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { myDelay(1);}  // loop until user starts sending or hits the button
+			while ((paddle_pin_read(paddle_left) == HIGH) && (paddle_pin_read(paddle_right) == HIGH) && (!analogbuttonread(0)) && (digitalRead(pin_straight_key) == HIGH)) { myDelay(0);}  // loop until user starts sending or hits the button
 		#endif
 	#endif
 
 	while (loop2) {
-		myDelay(1);
+		myDelay(0);
 		#ifdef DEBUG_MEMORY_WRITE
 			debug_serial_port->println(F("program_memory: entering loop2\r"));
 		#endif
@@ -18088,7 +18097,7 @@ void program_memory(int memory_number)
 		loop1 = 1;
 
 		while (loop1) {
-			 myDelay(1);
+			 myDelay(0);
 			 check_paddles();
 			 if (dit_buffer) {
 				 sending_mode = MANUAL_SENDING;
@@ -18149,7 +18158,7 @@ void program_memory(int memory_number)
 
 			 #ifdef FEATURE_BUTTONS
 				 while (analogbuttonread(0)) {    // hit the button to get out of command mode if no paddle was hit
-					 myDelay(1);
+					 myDelay(0);
 					 loop1 = 0;
 					 loop2 = 0;
 				 }
@@ -18258,20 +18267,20 @@ void initialize_i2c(void) {
 			Wire1.setSDA(I2CDEV_SDA_PIN);
 			Wire1.setSCL(I2CDEV_SCL_PIN);
 			Wire1.begin();   // Touch has 1 instance set in library so we get 2nd
-			//debug_serial_port->printf("Intialized I2C Bus on Bus 1 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
+			debug_serial_port->printf("Intialized I2C Bus on Bus 1 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
 		#else  // for i2c0 bus pins
 			Wire.setSDA(I2CDEV_SDA_PIN);
 			Wire.setSCL(I2CDEV_SCL_PIN);
 			Wire.begin();   // Touch has 1 instance set in library so we get 2nd
-			//debug_serial_port->printf("Intialized I2C Bus on Bus 0 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
+			debug_serial_port->printf("Intialized I2C Bus on Bus 0 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
 		#endif
 	#else  // ESP32 and maybe others
 		#ifdef USE_WIRE1
 			Wire1.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
-			//debug_serial_port->printf("Intialized I2C Bus on Bus 1 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
+			debug_serial_port->printf("Intialized I2C Bus on Bus 1 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
 		#else
 			Wire.begin(I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);   // Touch has 1 instance set in library so we get 2nd
-			//debug_serial_port->printf("Intialized I2C Bus on Bus 0 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
+			debug_serial_port->printf("Intialized I2C Bus on Bus 0 using Pins: SDA:%d  SCL:%d\n", I2CDEV_SDA_PIN, I2CDEV_SCL_PIN);
 		#endif
 	#endif
 }
@@ -18344,10 +18353,14 @@ void initialize_i2c(void) {
 				//debug_serial_port->print(F("Final declination = ")); debug_serial_port->println(declination);
 			} else {  // if not a user entered memeory and we have a value in the EEPROM, use it
 				declination = configuration.declination;
-				//debug_serial_port->print(F("Declination stored in structure not 0 so use it = ")); debug_serial_port->println(declination);
+				#ifdef DEBUG_COMPASS
+					debug_serial_port->print(F("Declination stored in structure not 0 so use it = ")); debug_serial_port->println(declination);
+				#endif
 			}
 			sprintf(declination_str, "%3.3f", declination);
-			debug_serial_port->print(F("Declination = "));debug_serial_port->println(declination_str);
+			#ifdef DEBUG_COMPASS
+				debug_serial_port->print(F("Declination = "));debug_serial_port->println(declination_str);
+			#endif
 			uint8_t dec_len =  strlen(declination_str);
 			#ifdef FEATURE_MEMORIES
 				open_eeprom();
@@ -18373,7 +18386,9 @@ void initialize_i2c(void) {
 	}  // end memories changed
 
 	void initialize_compass() {
-		debug_serial_port->println(F("Trying to setup IST8310"));
+		#ifdef DEBUG_COMPASS
+			debug_serial_port->println(F("Trying to setup IST8310"));
+		#endif
 		#ifdef USE_WIRE1
 			bool success = ist8310.setup(&Wire1, debug_serial_port);
 		#else
@@ -18387,7 +18402,9 @@ void initialize_i2c(void) {
 		if (!success) {
 				debug_serial_port->println(F("Failed to calibrate IST8310"));
 		} else {
-			debug_serial_port->println(F("Sucessfully calibrated IST8310"));
+			#ifdef DEBUG_COMPASS
+				debug_serial_port->println(F("Sucessfully calibrated IST8310"));
+			#endif
 		}
 
 		ist8310.set_flip_x_y(false);
@@ -18433,7 +18450,7 @@ void initialize_i2c(void) {
 
 // if the compass and tft is enabled, allow button or keyboard to pop up a window to show heading and declination
 void display_heading(void) {
-	#if defined(FEATURE_COMPASS)
+	#if defined(FEATURE_COMPASS) && defined(FEATURE_TFT_DISPLAY)
 		static char last_heading[LCD_COLUMNS] = {};
 		static char last_dec[LCD_COLUMNS] = {};
 		char h_str[LCD_COLUMNS+1];
@@ -18467,82 +18484,82 @@ void display_heading(void) {
 
 // Non-ESP32 local pin interrupt setup
 #if defined(USE_KEY_PIN_INTERRUPTS) && !defined(FEATURE_MCP23017_EXPANDER) && (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO))
-//---------------------------------------------------------------------
-static void left_paddle_intr_handler()
-{
-		paddle_left_state = digitalRead(paddle_left);
-}
-
-//---------------------------------------------------------------------
-static void right_paddle_intr_handler()
-{
-		paddle_right_state = digitalRead(paddle_right);
-}
-
-//---------------------------------------------------------------------
-#ifdef FEATURE_STRAIGHT_KEY
-	static void straight_key_intr_handler()
+	//---------------------------------------------------------------------
+	static void left_paddle_intr_handler()
 	{
-			straight_key_state = digitalRead(pin_straight_key);
+			paddle_left_state = digitalRead(paddle_left);
 	}
-#endif
 
-void init_GPIO_key_pins(void) {   // standard Arduino method
-		pinMode (paddle_left, INPUT_PULLUP);
-		pinMode (paddle_right, INPUT_PULLUP);
-		attachInterrupt(paddle_left, left_paddle_intr_handler, CHANGE);
-		attachInterrupt(paddle_right, right_paddle_intr_handler, CHANGE);
-		#ifdef FEATURE_STRAIGHT_KEY
-			attachInterrupt(pin_straight_key, straight_key_intr_handler, CHANGE);
-		#endif
-}
+	//---------------------------------------------------------------------
+	static void right_paddle_intr_handler()
+	{
+			paddle_right_state = digitalRead(paddle_right);
+	}
+
+	//---------------------------------------------------------------------
+	#ifdef FEATURE_STRAIGHT_KEY
+		static void straight_key_intr_handler()
+		{
+				straight_key_state = digitalRead(pin_straight_key);
+		}
+	#endif
+
+	void init_GPIO_key_pins(void) {   // standard Arduino method
+			pinMode (paddle_left, INPUT_PULLUP);
+			pinMode (paddle_right, INPUT_PULLUP);
+			attachInterrupt(paddle_left, left_paddle_intr_handler, CHANGE);
+			attachInterrupt(paddle_right, right_paddle_intr_handler, CHANGE);
+			#ifdef FEATURE_STRAIGHT_KEY
+				attachInterrupt(pin_straight_key, straight_key_intr_handler, CHANGE);
+			#endif
+	}
 #endif // non ESP32 local pin interrupt setup
 
 // ESP32 local pin interrupt setup
 #if defined(USE_KEY_PIN_INTERRUPTS) && !defined(FEATURE_MCP23017_EXPANDER) && defined(HARDWARE_ESP32_DEV)
-//---------------------------------------------------------------------
-static void IRAM_ATTR left_paddle_intr_handler(void *arg)
-{
-		paddle_left_state = gpio_get_level((gpio_num_t) paddle_left);
-}
-
-//---------------------------------------------------------------------
-static void IRAM_ATTR right_paddle_intr_handler(void *arg)
-{
-		paddle_right_state = gpio_get_level((gpio_num_t) paddle_right);
-}
-
-//---------------------------------------------------------------------
-#ifdef FEATURE_STRAIGHT_KEY
-	static void IRAM_ATTR straight_key_intr_handler(void *arg)
+	//---------------------------------------------------------------------
+	static void IRAM_ATTR left_paddle_intr_handler(void *arg)
 	{
-			straight_key_state = gpio_get_level((gpio_num_t) pin_straight_key);
+			paddle_left_state = gpio_get_level((gpio_num_t) paddle_left);
 	}
-#endif
 
-//---------------------------------------------------------------------
-void init_ESP32_GPIO_key_pins(void) {
-		// Setup CPU side GPIO interrupts for paddle pins
-		gpio_install_isr_service(0);
-		gpio_set_direction((gpio_num_t) paddle_left, GPIO_MODE_INPUT);
-		gpio_set_pull_mode((gpio_num_t) paddle_left, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
-		gpio_set_intr_type((gpio_num_t) paddle_left, GPIO_INTR_ANYEDGE);
-		gpio_isr_handler_add((gpio_num_t) paddle_left, left_paddle_intr_handler, (void *)(gpio_num_t) paddle_left);
+	//---------------------------------------------------------------------
+	static void IRAM_ATTR right_paddle_intr_handler(void *arg)
+	{
+			paddle_right_state = gpio_get_level((gpio_num_t) paddle_right);
+	}
 
-		gpio_set_direction((gpio_num_t) paddle_right, GPIO_MODE_INPUT);
-		gpio_set_pull_mode((gpio_num_t) paddle_right, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
-		gpio_set_intr_type((gpio_num_t) paddle_right, GPIO_INTR_ANYEDGE);
-		gpio_isr_handler_add((gpio_num_t) paddle_right, right_paddle_intr_handler, (void *)(gpio_num_t) paddle_right);
+	//---------------------------------------------------------------------
+	#ifdef FEATURE_STRAIGHT_KEY
+		static void IRAM_ATTR straight_key_intr_handler(void *arg)
+		{
+				straight_key_state = gpio_get_level((gpio_num_t) pin_straight_key);
+		}
+	#endif
 
-		#ifdef FEATURE_STRAIGHT_KEY
-			// Setup CPU side GPIO interrupt for straight key
-			gpio_set_direction((gpio_num_t) pin_straight_key, GPIO_MODE_INPUT);
-			gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);  // no pullup on pin 35
-			gpio_set_intr_type((gpio_num_t) pin_straight_key, GPIO_INTR_ANYEDGE);
-			gpio_isr_handler_add((gpio_num_t) pin_straight_key, straight_key_intr_handler, (void *)(gpio_num_t) pin_straight_key);
-		#endif
-		// Now any pin state change will call the handler.
-}
+	//---------------------------------------------------------------------
+	void init_ESP32_GPIO_key_pins(void) {
+			// Setup CPU side GPIO interrupts for paddle pins
+			gpio_install_isr_service(0);
+			gpio_set_direction((gpio_num_t) paddle_left, GPIO_MODE_INPUT);
+			gpio_set_pull_mode((gpio_num_t) paddle_left, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
+			gpio_set_intr_type((gpio_num_t) paddle_left, GPIO_INTR_ANYEDGE);
+			gpio_isr_handler_add((gpio_num_t) paddle_left, left_paddle_intr_handler, (void *)(gpio_num_t) paddle_left);
+
+			gpio_set_direction((gpio_num_t) paddle_right, GPIO_MODE_INPUT);
+			gpio_set_pull_mode((gpio_num_t) paddle_right, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
+			gpio_set_intr_type((gpio_num_t) paddle_right, GPIO_INTR_ANYEDGE);
+			gpio_isr_handler_add((gpio_num_t) paddle_right, right_paddle_intr_handler, (void *)(gpio_num_t) paddle_right);
+
+			#ifdef FEATURE_STRAIGHT_KEY
+				// Setup CPU side GPIO interrupt for straight key
+				gpio_set_direction((gpio_num_t) pin_straight_key, GPIO_MODE_INPUT);
+				gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);  // no pullup on pin 35
+				gpio_set_intr_type((gpio_num_t) pin_straight_key, GPIO_INTR_ANYEDGE);
+				gpio_isr_handler_add((gpio_num_t) pin_straight_key, straight_key_intr_handler, (void *)(gpio_num_t) pin_straight_key);
+			#endif
+			// Now any pin state change will call the handler.
+	}
 #endif
 
 //---------------------------------------------------------------------
@@ -18553,7 +18570,7 @@ void init_ESP32_GPIO_key_pins(void) {
 	#ifdef HARDWARE_ESP32_DEV   // runs as a task
 		IRAM_ATTR void read_io_handler(void *pvParameters) {
 			while (1) {
-				myDelay(1);
+				myDelay(0);
 	 #else
 		void read_io_handler(void) {  // otherwise called from an interrrupt
 	 #endif	
@@ -18586,6 +18603,7 @@ void init_ESP32_GPIO_key_pins(void) {
 		static void paddle_intr_handler(void) {
 			paddle_irq = 1;
 			read_io_handler();
+			yield();
 		}
 	#endif		
 
@@ -18648,7 +18666,7 @@ void init_ESP32_GPIO_key_pins(void) {
 
 void initialize_pins() {
 #if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-	#ifdef FEATURE_MCP23017_EXPANDER
+	#if defined(FEATURE_MCP23017_EXPANDER)
 		init_MCP23017();  // pin interrupts used on the expander, not local io pins.
 	#elif (defined(HARDWARE_ESP32_DEV) && defined(USE_KEY_PIN_INTERRUPTS))
 		init_ESP32_GPIO_key_pins();
@@ -19450,7 +19468,7 @@ void check_eeprom_for_initialization(){
 
 	// do an eeprom reset to defaults if paddles are squeezed
 	if (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {
-		while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {myDelay(1);}
+		while (paddle_pin_read(paddle_left) == LOW && paddle_pin_read(paddle_right) == LOW) {myDelay(0);}
 		initialize_eeprom();
 	}
 
@@ -19529,8 +19547,9 @@ void initialize_gps_port(void) {
 				gps_serial_port.setInvertTX(GPS_SERIAL_INVERT);
 
 				gps_serial_port.begin(gps_serial_port_baud_rate, SERIAL_8N1);
-
-				debug_serial_port->print(F("Intialized GPS Serial Port on Pin ")); debug_serial_port->println(GPS_RX_PIN);
+				#ifdef DEBUG_GPS
+					debug_serial_port->print(F("Intialized GPS Serial Port on Pin ")); debug_serial_port->println(GPS_RX_PIN);
+				#endif
 			#else
 				gps_serial_port.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
 			#endif
@@ -19577,7 +19596,7 @@ void initialize_serial_ports(){
 						primary_serial_port_baud_rate = PRIMARY_SERIAL_PORT_BAUD;
 					#endif  //ifndef OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION
 				}
-				while (analogbuttonread(0)) {myDelay(1);}
+				while (analogbuttonread(0)) {myDelay(0);}
 			#else //FEATURE_BUTTONS
 				#ifdef OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION
 					primary_serial_port_mode = SERIAL_WINKEY_EMULATION;
@@ -19786,15 +19805,17 @@ void kb(void *cbdata, int key) {
 				}
 				inf.keys[2] = key;
 
-				#ifndef DEBUG_BT_KEYBOARD
-					//debug_serial_port->printf("\nkb1: state:%d  mod:0x%02x  keys[0]:0x%02x  keys[2]:0x%02x\n", state, inf.modifier, inf.keys[0], inf.keys[2]);					
+				#ifdef DEBUG_BT_KEYBOARD
+					debug_serial_port->printf("\nkb1: state:%d  mod:0x%02x  keys[0]:0x%02x  keys[2]:0x%02x\n", state, inf.modifier, inf.keys[0], inf.keys[2]);					
 				#endif
 
 				if (state && !_heldKey && !_holding) {  // && !_heldKey) {
 					inf.keys[2] = key;  // redundant but emulates the ESP32 class bt_keyboard behavior.
 					inf.modifier = (KeyModifier) 0;	
 					inf.keys[0] = 0;
-					//debug_serial_port->printf("1 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 					
+					#ifdef DEBUG_BT_KEYBOARD
+						debug_serial_port->printf("1 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 					
+					#endif
 					goto end_kb;
 				}
 
@@ -19802,7 +19823,9 @@ void kb(void *cbdata, int key) {
 					inf.keys[2] = 0; 
 					inf.modifier = (KeyModifier) 0;	
 					inf.keys[0] = 0;
-					//debug_serial_port->printf("2 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
+					#ifdef DEBUG_BT_KEYBOARD
+						debug_serial_port->printf("2 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
+					#endif
 					goto end_kb;
 				}
 				
@@ -19810,7 +19833,9 @@ void kb(void *cbdata, int key) {
 					inf.keys[0] =(uint8_t) mod_key;
 					_holding = 1;
 					inf.modifier = (KeyModifier) mod_key;	
-					//debug_serial_port->printf("5 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
+					#ifdef DEBUG_BT_KEYBOARD
+						debug_serial_port->printf("5 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
+					#endif
 					_end = 1;  // don't send this key thru
 				}
 				
@@ -19818,7 +19843,9 @@ void kb(void *cbdata, int key) {
 					inf.keys[0] =(uint8_t) mod_key;
 					inf.modifier = mod_key;
 					inf.keys[2] = key; 
-					//debug_serial_port->printf("7 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
+					#ifdef DEBUG_BT_KEYBOARD
+						debug_serial_port->printf("7 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
+					#endif
 					goto end_kb;
 				}
 
@@ -19830,7 +19857,9 @@ void kb(void *cbdata, int key) {
 					inf.keys[0] = 0; 		
 					inf.keys[2] = 0; 		
 					inf.modifier = (KeyModifier) 0;														
-					//debug_serial_port->printf("8 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
+					#ifdef DEBUG_BT_KEYBOARD
+						debug_serial_port->printf("8 - state:%d  Hold:%d  heldKey:0x%02x  Key:0x%02x\n", state, _holding, _heldKey, key); 
+					#endif
 					_end = 1;
 				}
 
@@ -19926,7 +19955,9 @@ void bt_queueadd(KeyInfo ch)
 {
 	bt_queue[bt_qtail++] = ch;
 	bt_qtail &= QUEUEMASK;
-	//debug_serial_port->printf("bt_queueadd: Adding to queue: modifier 0x%02x and keystroke 0x%02x\n", ch.keys[0], ch.keys[2]);
+	#ifdef DEBUG_BT_KEYBOARD
+		debug_serial_port->printf("bt_queueadd: Adding to queue: modifier 0x%02x and keystroke 0x%02x\n", ch.keys[0], ch.keys[2]);
+	#endif
 }
 
 KeyInfo bt_queuepop()
@@ -19934,7 +19965,9 @@ KeyInfo bt_queuepop()
 	KeyInfo ch;
 	ch = (bt_queue[bt_qhead++]);
 	bt_qhead &= QUEUEMASK;
-	//debug_serial_port->printf("bt_QueuePop: Removing from queue: modifier 0x%02x and keystroke 0x%02x\n", ch.keys[0], ch.keys[2]);
+	#ifdef DEBUG_BT_KEYBOARD
+		debug_serial_port->printf("bt_QueuePop: Removing from queue: modifier 0x%02x and keystroke 0x%02x\n", ch.keys[0], ch.keys[2]);
+	#endif
 	return ch;
 }
 
@@ -20630,108 +20663,113 @@ void process_buttons() { // (uint8_t button_ID) {
 					uint16_t threshold = 320;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also
 				#endif
 
-					// Scan buttons every 50ms at most when not sending out cw
-					if (millis() - scanTime >= 50) {  // check every 50ms for any activity
-						scanTime = millis();
+				// Skip if paddle or stright key operating to proterct timing.
+				if (dit_buffer || dah_buffer || async_eeprom_write || (paddle_pin_read(paddle_left) == LOW) ||(paddle_pin_read(paddle_right) == LOW)) {
+					return;
+				}
 
-						#ifdef TOUCH_GT911_BUTTONS
-							tp.read();
-							pressed = tp.isTouched;
-							if (pressed) {
-								t_x = tp.points[0].x;
-								t_y = tp.points[0].y;
-							}
-							if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);
-						#endif
+				// Scan buttons every 50ms at most when not sending out cw
+				if (millis() - scanTime >= 50) {  // check every 50ms for any activity
+					scanTime = millis();
 
-						#ifdef USE_RES_TOUCH
-							//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex							
-							//uint16_t threshold = 20;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also
-							#ifdef DEBUG_TOUCH
-								debug_serial_port->print(F("GetTouch1: Check for pressed - "));
-							#endif
-
-							pressed = lcd.getTouch(&t_x, &t_y, threshold);
-							
-							#ifdef DEBUG_TOUCH
-								int z = lcd.getTouchRawZ();
-								debug_serial_port->printf("GetTouch2: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, z, pressed);
-							#endif
-							//  xSemaphoreGive (xMutex);  // release the mutex
-							//}
-						#endif
-
+					#ifdef TOUCH_GT911_BUTTONS
+						tp.read();
+						pressed = tp.isTouched;
 						if (pressed) {
-							//button_active = false;     // set active flag if any valid button triggered on
-							for (uint8_t b = 0; b < buttonCount; b++) {
-								btn[b].p_btn.press(false);
-								duration = 0;
-								btn[b].len = 0;  // 0, 1=short, 2=long, 3=very_long press time duration
-								btn[b].duration = 0;
+							t_x = tp.points[0].x;
+							t_y = tp.points[0].y;
+						}
+						if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);
+					#endif
 
-								if (btn[b].p_btn.contains(t_x, t_y)) {
-									// look for just pressed
-									tpTime = millis();
-									while (pressed) {  // measure duration of button press
-										myDelay(20);
+					#ifdef USE_RES_TOUCH
+						//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex							
+						//uint16_t threshold = 20;  // 20-1000 pressure level for resistive screen.  TFT_eSPI has a Z param also
+						#ifdef DEBUG_TOUCH
+							debug_serial_port->print(F("GetTouch1: Check for pressed - "));
+						#endif
 
-										#ifdef TOUCH_GT911_BUTTONS
-											tp.read();
-											pressed = tp.isTouched;
-										#endif
+						pressed = lcd.getTouch(&t_x, &t_y, threshold);
+						
+						#ifdef DEBUG_TOUCH
+							int z = lcd.getTouchRawZ();
+							debug_serial_port->printf("GetTouch2: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, z, pressed);
+						#endif
+						//  xSemaphoreGive (xMutex);  // release the mutex
+						//}
+					#endif
 
-										#ifdef USE_RES_TOUCH
-											//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
-											pressed = lcd.getTouch(&t_x, &t_y, threshold);
-											#ifdef DEBUG_TOUCH
-												debug_serial_port->printf("GetTouch3: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed);
-											#endif
-											//  xSemaphoreGive (xMutex);  // release the mutex
-											//}
-										#endif
+					if (pressed) {
+						//button_active = false;     // set active flag if any valid button triggered on
+						for (uint8_t b = 0; b < buttonCount; b++) {
+							btn[b].p_btn.press(false);
+							duration = 0;
+							btn[b].len = 0;  // 0, 1=short, 2=long, 3=very_long press time duration
+							btn[b].duration = 0;
 
-										duration += (millis() - tpTime);      // add each touch to total duration
+							if (btn[b].p_btn.contains(t_x, t_y)) {
+								// look for just pressed
+								tpTime = millis();
+								while (pressed) {  // measure duration of button press
+									myDelay(20);
 
-										//debug_serial_port->printf("Touch Event: x:%d y:%d pressed:%d  duration:%lu\n", t_x, t_y, pressed, duration);
-
-										if (duration >= 100 && duration < 1000) {
-											//debug_serial_port->print(F("*Short duration = ")); debug_serial_port->println(duration);
-											btn[b].len = 1;
-											btn[b].duration = duration;
-										}
-										if (duration >= 1000 && duration < 2200) {  // using medium length zone as a buffer band, not used for keys
-											//debug_serial_port->print(F("**Long duration = ")); debug_serial_port->println(duration);
-											btn[b].len = 2;
-											btn[b].duration = duration;
-										}
-										if (duration >= 2200) {
-											//debug_serial_port->print(F("***Very Long duration = ")); debug_serial_port->println(duration);
-											btn[b].len = 3;
-											btn[b].duration = duration;
-										}
-										if (btn[b].len == 0)
-											btn[b].duration = duration;
-									}
-
-									if (btn[b].len == 0) {  // skip - press duration too short or in middle guard band
-										btn[b].p_btn.press(false);
-										break;
-									}
-									#ifdef DEBUG_TOUCH
-										debug_serial_port->print(F("Button Active Flag Set"));
+									#ifdef TOUCH_GT911_BUTTONS
+										tp.read();
+										pressed = tp.isTouched;
 									#endif
-									btn[b].p_btn.press(true); // record state info for valid button. - process_buttons() will pick up event and add it to the ch queue)
-									button_active = true;     // set active flag if any valid button triggered on
-								} else {
-									btn[b].p_btn.press(false); // touch landed outside current button hot spot, set to false
+
+									#ifdef USE_RES_TOUCH
+										//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
+										pressed = lcd.getTouch(&t_x, &t_y, threshold);
+										#ifdef DEBUG_TOUCH
+											debug_serial_port->printf("GetTouch3: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed);
+										#endif
+										//  xSemaphoreGive (xMutex);  // release the mutex
+										//}
+									#endif
+
+									duration += (millis() - tpTime);      // add each touch to total duration
+
+									//debug_serial_port->printf("Touch Event: x:%d y:%d pressed:%d  duration:%lu\n", t_x, t_y, pressed, duration);
+
+									if (duration >= 100 && duration < 1000) {
+										//debug_serial_port->print(F("*Short duration = ")); debug_serial_port->println(duration);
+										btn[b].len = 1;
+										btn[b].duration = duration;
+									}
+									if (duration >= 1000 && duration < 2200) {  // using medium length zone as a buffer band, not used for keys
+										//debug_serial_port->print(F("**Long duration = ")); debug_serial_port->println(duration);
+										btn[b].len = 2;
+										btn[b].duration = duration;
+									}
+									if (duration >= 2200) {
+										//debug_serial_port->print(F("***Very Long duration = ")); debug_serial_port->println(duration);
+										btn[b].len = 3;
+										btn[b].duration = duration;
+									}
+									if (btn[b].len == 0)
+										btn[b].duration = duration;
 								}
-							}   // loop through button list and update state for each
-						}   // touched
-					}   // end of scan period
-					myDelay(10);
+
+								if (btn[b].len == 0) {  // skip - press duration too short or in middle guard band
+									btn[b].p_btn.press(false);
+									break;
+								}
+								#ifdef DEBUG_TOUCH
+									debug_serial_port->print(F("Button Active Flag Set"));
+								#endif
+								btn[b].p_btn.press(true); // record state info for valid button. - process_buttons() will pick up event and add it to the ch queue)
+								button_active = true;     // set active flag if any valid button triggered on
+							} else {
+								btn[b].p_btn.press(false); // touch landed outside current button hot spot, set to false
+							}
+						}   // loop through button list and update state for each
+					}   // touched
+				}   // end of scan period
+				myDelay(0);
 			} // end of while loop for task mode
 			//debug_serial_port->println("Error: Exited Check Buttons Task Loop");
-		}
+		} // end of check_touch_buttons()
 #endif
 
 //-------------------------------------------------------------------------------------------------------
@@ -21582,7 +21620,7 @@ void initialize_usb()
 		#if defined(FEATURE_USB_KEYBOARD) || defined(FEATURE_USB_MOUSE)
 		unsigned long start_init = millis();
 		while ((millis() - start_init) < 2000){
-			myDelay(1);
+			myDelay(0);
 			Usb.Task();
 		}
 		#ifdef DEBUG_USB
@@ -21702,7 +21740,7 @@ uint8_t read_capacitive_pin(int pinToMeasure) {
 	// Discharge the pin first by setting it low and output
 	*port &= ~(bitmask);
 	*ddr  |= bitmask;
-	myDelay(1);
+	myDelay(0);
 	// Prevent the timer IRQ from disturbing our measurement
 	noInterrupts();
 	// Make the pin an input with the internal pull-up on
@@ -21876,6 +21914,7 @@ void update_led_ring(){
 int paddle_pin_read(int pin_to_read) {
 
 	// Updated code provided by Fred, VK2EFL
+	// Modified to read memory var updated by IO interrupt reads by K7MDL. When Pin_interrupts or MCP23017 is enabled.
 	//
 	// Note on OPTION_DIRECT_PADDLE_PIN_READS_MEGA, OPTION_DIRECT_PADDLE_PIN_READS_UNO, OPTION_SAVE_MEMORY_NANOKEYER
 	// For Mega2560 and Uno/Nano speed up paddle pin reads by direct read of the register
@@ -22029,7 +22068,7 @@ void command_alphabet_send_practice(){
 
 	do
 	{
-		myDelay(1);
+		myDelay(0);
 		cw_char = get_cw_input_from_user(0);
 		if (letter == (char)(convert_cw_number_to_ascii(cw_char))){
 			if (correct_answer_led) {
@@ -22312,7 +22351,7 @@ void service_web_server() {
 		valid_request = 0;
 
 		while (client.connected()){
-			myDelay(1);
+			myDelay(0);
 			if (client.available()){
 				char c = client.read();
 
@@ -22398,7 +22437,7 @@ void service_web_server() {
 						web_print_page_404(client);
 					}
 
-					myDelay(1);
+					myDelay(0);
 					client.stop();
 					web_server_incoming_string = "";
 				 }
@@ -25323,7 +25362,7 @@ void tft_backlight(int state) {
 	#if !defined(USE_BT_TASK)
 		void check_bt_keyboard(void) {
 
-			#if defined(ARDUINO_RASPBERRY_PI_PICO_W_X)
+			#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
 					if (!bt_keyboard.connected()) {
 						connectOrPair();
 					}
@@ -25331,7 +25370,9 @@ void tft_backlight(int state) {
 
 			static bool done = 0;
 			if (!done) {
-				//debug_serial_port->println("Running Check BT Keyboard (not in a Task)");
+				#ifdef DEBUG_BT_KEYBOARD
+					debug_serial_port->println("Running Check BT Keyboard (not in a Task)");
+				#endif
 				done = 1;
 			}
 			
@@ -25500,7 +25541,7 @@ void tft_backlight(int state) {
 
 								if (1) // (inf.state != 0) // will only get a new key so much of the above is not required.
 								{
-									#ifdef DEBUG_BT_KEYBOARD_B  // change #ifdef to #ifndef to use
+									#ifdef DEBUG_BT_KEYBOARD  // change #ifdef to #ifndef to use
 										debug_serial_port->print(F("[size="));
 										debug_serial_port->print((uint8_t) inf.size);
 										debug_serial_port->print(F("-"));
@@ -25516,7 +25557,7 @@ void tft_backlight(int state) {
 										debug_serial_port->println(F(")] "));
 									#endif
 
-									#ifdef DEBUG_BT_KEYBOARD_A
+									#ifdef DEBUG_BT_KEYBOARD
 										debug_serial_port->print(F("-0x"));
 										debug_serial_port->print(ch,HEX);  // print our valid char
 										debug_serial_port->print('-');
@@ -25710,7 +25751,7 @@ void tft_backlight(int state) {
 
 									#endif // WORKING CODE
 
-									#ifdef DEBUG_BT_KEYBOARD_B
+									#ifdef DEBUG_BT_KEYBOARD
 										debug_serial_port->print(' ');
 										debug_serial_port->print(ch);  // print our valid char
 										debug_serial_port->print('\n');
@@ -25770,7 +25811,7 @@ void tft_backlight(int state) {
 									*/
 
 									if (ch != 0) queueadd(ch);   // add char to the queue
-									#ifdef DEBUG_BT_KEYBOARD_A
+									#ifdef DEBUG_BT_KEYBOARD
 										debug_serial_port->print(F("["));
 										if (queuefull())
 												debug_serial_port->print(F("Q Full"));
@@ -26053,7 +26094,7 @@ static void listSPIFFS(char * path) {
 	DIR* dir = opendir(path);
 	assert(dir != NULL);
 	while (true) {
-		myDelay(1);
+		myDelay(0);
 		struct dirent*pe = readdir(dir);
 		if (!pe) break;
 		ESP_LOGI(__FUNCTION__,"d_name=%s d_ino=%d d_type=%x", pe->d_name,pe->d_ino, pe->d_type);
@@ -26747,7 +26788,9 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 
 		if (update_flag) {
 			config_dirty = 1;
-			debug_serial_port->print(F("*Process_gps: New Source (0 file, 1 EEPROM, 2 memory) = ")); debug_serial_port->println(configuration.GridSq_source);
+			#ifdef DEBUG_GPS
+				debug_serial_port->print(F("*Process_gps: New Source (0 file, 1 EEPROM, 2 memory) = ")); debug_serial_port->println(configuration.GridSq_source);
+			#endif
 		}
 
 		// use the current source to update the global grid value
@@ -26777,7 +26820,9 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 		// Store grid square into the designated memory location
 		//if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || force_update) {  // grid or digits changed, store new value
 		if (strcmp(grid_sq_str, last_grid_sq_str) != 0 || g->force) {  // grid or digits changed, store new value
-			debug_serial_port->print(F("*Process_gps: Updated Grid = ")); debug_serial_port->println(grid_sq_str);
+			#ifdef DEBUG_GPS
+				debug_serial_port->print(F("*Process_gps: Updated Grid = ")); debug_serial_port->println(grid_sq_str);
+			#endif
 			store_Grid(grid_sq_str);
 			strcpy(last_grid_sq_str, grid_sq_str);
 		}
@@ -26794,8 +26839,10 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 
 		#if defined (FEATURE_MEMORIES)
 		//strncpy(configuration.GridSq, grid_sq_str, configuration.grid_digits);  // strip down to configured length
-		debug_serial_port->print(F("Storing Grid ")); debug_serial_port->print(grid);
-		debug_serial_port->print(F(" into Memory ")); debug_serial_port->println(GRID_MEMORY);
+		#ifdef DEBUG_GPS
+			debug_serial_port->print(F("Storing Grid ")); debug_serial_port->print(grid);
+			debug_serial_port->print(F(" into Memory ")); debug_serial_port->println(GRID_MEMORY);
+		#endif
 		open_eeprom();
 		for (x = 0; x < configuration.grid_digits; x++) {  // write to memory
 			EEPROM.write((memory_start(memory_number)+x), (byte) uppercase(grid[x]));
@@ -26804,7 +26851,9 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 			}
 		}
 		EEPROM.write((memory_start(memory_number)+x),255);   // write terminating 255
-		debug_serial_port->print(F("Wrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+		#ifdef DEBUG_GPS
+			debug_serial_port->print(F("Wrote GPS Location to Keyboard Memory ")); debug_serial_port->println(memory_number+1);
+		#endif
 		close_w_eeprom();
 		update_icons();
 		//beep();
@@ -26834,7 +26883,7 @@ void mainloop(void)
 	if (1) {
 #endif		
 		//debug_serial_port->print(F("."));
-		myDelay(1);
+		myDelay(0);
 
 		#ifdef OPTION_WATCHDOG_TIMER
 			wdt_reset();
@@ -26843,13 +26892,13 @@ void mainloop(void)
 		//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
 			#if defined(FEATURE_BEACON) && defined(FEATURE_MEMORIES)
 				if (keyer_machine_mode == BEACON) {
-					myDelay(1);                                                                 // an odd duration delay before we enter BEACON mode
+					myDelay(0);                                                                 // an odd duration delay before we enter BEACON mode
 					#ifdef OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
 							unsigned int time_to_delay = configuration.memory_repeat_time - configuration.ptt_tail_time[configuration.current_tx - 1];
 					#endif                                                                        // OPTION_BEACON_MODE_MEMORY_REPEAT_TIME
 
 					while (keyer_machine_mode == BEACON) {                                        // if we're in beacon mode, just keep playing memory 1
-						myDelay(1);
+						myDelay(0);
 						if (!send_buffer_bytes) {
 							add_to_send_buffer(SERIAL_SEND_BUFFER_MEMORY_NUMBER);
 							add_to_send_buffer(0);
@@ -27315,7 +27364,7 @@ void loop_1() {
 				last_free_check = millis();
 				int getFreeHeap = rp2040.getFreeHeap();
 				//debug_serial_port->print(F("Loop 1 Free Heap check every 5 minutes:")); debug_serial_port->println(getFreeHeap);
-				printFreeMemory();
+				//printFreeMemory();
 			}
 		}
 	#else
@@ -27376,7 +27425,7 @@ void app_main(void)
 
 	for(;;)
 	{
-		myDelay(1);
+		myDelay(0);
 		
 		uint32_t current_time = millis();
 
