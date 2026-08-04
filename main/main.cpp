@@ -15442,7 +15442,8 @@ void receive_transmit_echo_practice(PRIMARY_SERIAL_CLS * port_to_use, byte pract
 				cw_to_send_to_user = generate_callsign(practice_mode);
 				break;
 			case ECHO_PROGRESSIVE_5:
-				cw_to_send_to_user = (char)random(65,91);
+				cw_to_send_to_user = "";
+				cw_to_send_to_user.concat((char)random(65,91));
 				cw_to_send_to_user.concat((char)random(65,91));
 				cw_to_send_to_user.concat((char)random(65,91));
 				cw_to_send_to_user.concat((char)random(65,91));

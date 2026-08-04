@@ -135,3 +135,9 @@ ${sourceDir}/build/toolchain/ldflags
 ${sourceDir}/build/toolchain/toolchain-esp32.cmake
 libraries/LiquidCrystal/examples/HelloWorld_byVac/.vscode/HelloWorld_byVac/HelloWorld_byVac.ino
 libraries/LiquidCrystal/examples/HelloWorld_byVac/.vscode/HelloWorld_byVac/.vscode/HelloWorld_byVac/HelloWorld_byVac.ino
+components/IST8310/examples/IST8310_get_heading/.vscode/IST8310_get_heading/IST8310_get_heading.ino
+components/IST8310/examples/IST8310_get_heading/.vscode/IST8310_get_heading/IST8310.h
+components/IST8310/examples/IST8310_get_heading/.vscode/IST8310_get_heading/.vscode/IST8310_get_heading/IST8310_get_heading.ino
+components/IST8310/examples/IST8310_get_heading/.vscode/IST8310_get_heading/.vscode/IST8310_get_heading/IST8310.h
+components/IST8310/examples/IST8310_get_mag_vector/.vscode/IST8310_get_mag_vector/IST8310_get_mag_vector.ino
+components/IST8310/examples/IST8310_get_mag_vector/.vscode/IST8310_get_mag_vector/IST8310.h
