@@ -2157,6 +2157,7 @@ void tft_backlight(int state);  // toggles the backlight GPIO pin on and off fro
 void setup_1();
 void loop_1();
 void core1_run();
+void update_icons(void);
 
 #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK) && defined(HARDWARE_ESP32_DEV)
 void check_bt_keyboard(void * pvParameters);
@@ -2475,6 +2476,7 @@ int queueempty();
 int queue_available();
 void queueflush();
 int queuefull();
+bool last_BT_Connected = 0;
 
 #if defined(ARDUINO_RASPBERRY_PI_PICO_W ) && defined(FEATURE_BT_KEYBOARD)
 // queue for passing BT callback info to keystroke processing
@@ -3239,6 +3241,16 @@ unsigned long millis_rollover = 0;
 						debug_serial_port->printf("\nAttempting to reconnect to BT Classic keyboard at address %s", macToString(configuration.addr, configuration.addrType));														
 					#endif
 					
+					if (!bt_keyboard.connected()) {
+						BT_Keyboard_Lost = 1;
+						Keyboard_Disconnected_signal = 1;
+						Keyboard_Connected_signal = 0;	
+						//if (last_BT_Connected) {
+						//	lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+						//	lcd.drawChar('B', ICON_ANCHOR+(4*ICON_SPACING), STATUS_BAR_Y_CURSOR);
+						//}
+					}
+
 					while (!bt_keyboard.connected() && !BOOTSEL) {     // reconnect after loss										
 						myDelay(10);					
 						if (use_BLE) bt_keyboard.connectBLE(configuration.addr, configuration.addrType);
@@ -3247,7 +3259,7 @@ unsigned long millis_rollover = 0;
 							core1_run();	// give some core 1 workloads run time between scans				
 						#endif
 						myDelay(1000);
-						//debug_serial_port->println(F("Attempting to connect"));
+						debug_serial_port->println(F("Attempting to connect"));
 						//debug_serial_port->print(F("*"));
 					}
 					
@@ -3257,7 +3269,6 @@ unsigned long millis_rollover = 0;
 						BT_Keyboard_Lost = 0;
 						Keyboard_Disconnected_signal = 0;
 						Keyboard_Connected_signal = 1;
-
 						return;
 					} else {
 						debug_serial_port->println(F("Keyboard disconnected!\n"));
@@ -4519,7 +4530,6 @@ void update_icons(void) {
 		}
 
 		#if defined(FEATURE_BT_KEYBOARD)
-		static bool last_BT_Connected = 0;
 			if (last_BT_Connected != bt_keyboard.is_connected())
 			{
 				if (bt_keyboard.is_connected()) {
@@ -20051,9 +20061,10 @@ void myDelay(uint32_t _ms)
 {
 	// Use the RTOS-safe millisecond translation for ESP32 builds.
 	// Use Arduino's delay() for sketches and non-RTOS builds.
-	#ifdef PROJECT_ESP32_COMPILER
+	#ifdef HARDWARE_ESP32_DEV
 		if (_ms == 0) {
-			taskYIELD();
+			//taskYIELD();
+			vTaskDelay(1);
 		} else {
 			vTaskDelay(pdMS_TO_TICKS(_ms));
 		}
@@ -26334,6 +26345,7 @@ void initialize_st7789_lcd()
 				//debug_serial_port->println(F("Lost BT Keyboard Connection"));
 				#ifdef FEATURE_DISPLAY
 					lcd_center_print_timed("Lost Connection", 1, 3000);
+					update_icons();
 				#endif
 				Keyboard_Disconnected_signal = false;
 			}
