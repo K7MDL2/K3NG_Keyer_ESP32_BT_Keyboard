@@ -65,9 +65,9 @@
 //#define DISPLAY_TYPE NO_DISPLAY
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
-#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
+//#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 //#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
-//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 //#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 
@@ -156,7 +156,7 @@
     #define LCD_ROTATION 3
     #define FEATURE_TOUCH_DISPLAY  // Enable Touch features 
     #define TFT_320_480   // use 320x480 layout (vs default 240x320)
-    #define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
+    //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
     #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define USE_RES_TOUCH  // Enables touch with XPT2046
     //#define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scanning (K380, Rii)
@@ -269,7 +269,7 @@
 //#define FEATURE_INTERNET_LINK   // Details: https://github.com/k3ng/k3ng_cw_keyer/wiki/390-Feature:-Ethernet,-Web-Server,-and-Internet-Linking
 
 // #define FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT     // Activate the Command Line interface on the secondary serial port
-#define OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION  // Use when activating both FEATURE_WINKEY_EMULATION and FEATURE_COMMAND_LINE_INTERFACE 
+//#define OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION  // Use when activating both FEATURE_WINKEY_EMULATION and FEATURE_COMMAND_LINE_INTERFACE 
                                                              //    simultaneously.  This will make Winkey emulation be the default at boot up; 
                                                              //    hold command button down at boot up to activate CLI mode
 

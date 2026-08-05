@@ -3245,10 +3245,6 @@ unsigned long millis_rollover = 0;
 						BT_Keyboard_Lost = 1;
 						Keyboard_Disconnected_signal = 1;
 						Keyboard_Connected_signal = 0;	
-						//if (last_BT_Connected) {
-						//	lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-						//	lcd.drawChar('B', ICON_ANCHOR+(4*ICON_SPACING), STATUS_BAR_Y_CURSOR);
-						//}
 					}
 
 					while (!bt_keyboard.connected() && !BOOTSEL) {     // reconnect after loss										
@@ -3258,8 +3254,8 @@ unsigned long millis_rollover = 0;
 						#if defined(USE_CORE1) && defined(USE_CONNECT_ON_CORE1)
 							core1_run();	// give some core 1 workloads run time between scans				
 						#endif
-						myDelay(1000);
-						debug_serial_port->println(F("Attempting to connect"));
+						//myDelay(1000);
+						//debug_serial_port->println(F("Attempting to connect"));
 						//debug_serial_port->print(F("*"));
 					}
 					
