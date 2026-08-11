@@ -10,5 +10,6 @@
     "parity": "none",
     "stopBits": "one"
   },
-  "optimize_for_debug": false
+  "optimize_for_debug": false,
+  "schemaVersion": 1
 }
