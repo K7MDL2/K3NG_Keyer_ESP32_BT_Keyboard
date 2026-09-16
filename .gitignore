@@ -141,3 +141,6 @@ components/IST8310/examples/IST8310_get_heading/.vscode/IST8310_get_heading/.vsc
 components/IST8310/examples/IST8310_get_heading/.vscode/IST8310_get_heading/.vscode/IST8310_get_heading/IST8310.h
 components/IST8310/examples/IST8310_get_mag_vector/.vscode/IST8310_get_mag_vector/IST8310_get_mag_vector.ino
 components/IST8310/examples/IST8310_get_mag_vector/.vscode/IST8310_get_mag_vector/IST8310.h
+libraries/USB_Host_Shield/examples/max_LCD/.vscode
+libraries/USB_Host_Shield/examples/HID/USBHIDBootKbdAndMouse/.vscode/
+

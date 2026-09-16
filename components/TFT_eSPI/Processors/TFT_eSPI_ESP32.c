@@ -803,6 +803,7 @@ bool TFT_eSPI::initDMA(bool ctrl_cs)
     //#endif
     .data_io_default_level = 0,
     .max_transfer_sz = TFT_WIDTH * TFT_HEIGHT * 2 + 8, // TFT screen size
+    .dma_burst_size = 0,
     .flags = 0,
     .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO,
     .intr_flags = 0

@@ -2222,7 +2222,6 @@ static void check_bt_keyboard_task(void *pvParameters)
     task_entry_loop(check_bt_keyboard, "check_bt_keyboard", pvParameters);
 }
 #endif
-
 #if defined(FEATURE_GPS) && defined(USE_GPS_TASK) && defined(HARDWARE_ESP32_DEV)
 static void check_gps_task(void *pvParameters)
 {
@@ -2578,6 +2577,62 @@ bool popup_active = false;
 volatile uint8_t start_core1 = 0; // signal that init is done, used when tasks are waiting to run on Core 1
 volatile uint8_t start_task = 0; // Tasks start when this number matches their priority number.  Incremented in app_main
 uint8_t in_pairing_mode = 0;
+
+
+// devices_scan() blocks for several seconds (BLE scan + BT Classic inquiry) and
+// only checks is_connected() at entry, so a scan already in flight when a
+// reconnect completes keeps running to completion regardless. Running it in
+// its own task (instead of inline in check_bt_keyboard()'s loop) keeps it from
+// delaying keystroke-to-audio latency -- event_queue_ is a FreeRTOS queue, so
+// consuming it from check_bt_keyboard_task while this task scans is safe.
+#if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK) && defined(HARDWARE_ESP32_DEV)
+static void bt_reconnect_scan_task(void *pvParameters)
+{
+    (void)pvParameters;
+    #ifdef SCAN_ONCE
+        static bool scanned = false;
+    #endif
+    
+    for (;;) {
+        if (!bt_keyboard.is_connected() || BT_Keyboard_Lost) {
+            #ifdef USE_BLE
+                // A bonded BLE device's reconnect advertisement often omits the
+                // appearance/UUID fields devices_scan() matches on, and uses a
+                // rotating private address -- so scan-based discovery can never
+                // find it even while it's actively advertising. Connect directly
+                // to the bonded identity address instead and let the controller's
+                // own address resolution handle the rest; only fall back to
+                // scanning if there is no bonded device yet (first-time pairing).
+				static uint32_t next_bonded_attempt_ms = 0;
+                if (millis() > next_bonded_attempt_ms) {
+                    if (!bt_keyboard.reconnect_bonded_ble()) {
+                        #ifdef SCAN_ONCE
+                            if (!scanned) bt_keyboard.devices_scan();
+                            scanned = true;
+                        #else
+                            bt_keyboard.devices_scan();
+                        #endif
+                    }
+                    next_bonded_attempt_ms = millis() + 3000;  // avoid spamming esp_hidh_dev_open()
+                }
+            #else
+                #ifdef SCAN_ONCE
+                    if (!scanned) bt_keyboard.devices_scan();
+                    scanned = true;
+                #else
+                    bt_keyboard.devices_scan();
+                #endif
+            #endif
+            BT_Keyboard_Lost = false;
+        } else {
+            #ifdef SCAN_ONCE
+                scanned = false;  // re-arm for the next disconnect
+            #endif
+        }
+        myDelay(100);
+    }
+}
+#endif
 
 #ifdef FEATURE_GPS
 	#include <TimeLib.h>
@@ -3208,110 +3263,253 @@ unsigned long millis_rollover = 0;
 		}
 	}
 
+	// Called by the BT stack during long blocking connect/scan waits so the rest
+	// of the system (GPS on core1, etc.) keeps running instead of freezing.
+	void bt_idle_fcn(void *idle_data) {
+		(void)idle_data;
+		#if defined(USE_CORE1) && defined(USE_CONNECT_ON_CORE1)
+			core1_run();
+		#endif
+	}
+
 	//---------------------  Connect or Pair --------------------------------------------------------------
+
+	// BOOTSEL is sampled on core0 (in app_main's loop) because reading it from
+	// core1 calls rp2040.idleOtherCore(), which stalls when core0 is busy in the
+	// main loop. connectOrPair() runs on core1, so it reads this shared flag.
+	volatile bool bootsel_pressed = 0;
 
 	void connectOrPair() {		
 		static bool scan_once= 0;  // set to 1 after initial connection
 		static bool last_scan_once = 0;
+		static uint8_t reconnect_tries = 0;
+		static bool pairing_mode = 0;
+		static uint8_t pairing_scan_count = 0;
+		static uint32_t next_pairing_scan_ms = 0;
+		static uint32_t next_reconnect_ms = 0;
+		static uint32_t bootsel_press_start = 0;
+		static bool bootsel_pairing_triggered = 0;
+		static bool kb_connected_state = 0;
+		// connect() for Classic is asynchronous -- it returns as soon as the
+		// page request is submitted, but the underlying page process has been
+		// observed to take 10-15+s to resolve on this hardware. These track an
+		// outstanding attempt so we wait for it to actually resolve instead of
+		// firing overlapping attempts every 2s.
+		static bool classic_attempt_pending = false;
+		static uint32_t classic_attempt_deadline_ms = 0;
 
-		if (1) {
-			StartOfLoop:
-			if (!bt_keyboard.connected()) {
-				if (scan_once) {
-					if (!last_scan_once) {	// limit to one message 				
-						last_scan_once = 1;	
-						BT_Keyboard_Lost = 1;
-						Keyboard_Disconnected_signal = 1;
-						Keyboard_Connected_signal = 0;				
-					}
-					#ifdef SCAN_ONCE
-						if(scan_once) return;   // do not reconnect						
-					#endif			
+		if (bt_keyboard.connected()) {
+			// Once-per-connection transition. BLE connections can complete
+			// asynchronously after connectBLE() returns, so the pairing-branch
+			// save can be missed; persist the address here on the transition.
+			if (!kb_connected_state) {
+				kb_connected_state = 1;
+				debug_serial_port->println(F("\nKeyboard is Connected, Update system status"));
+				const uint8_t *la = bt_keyboard.lastConnectedAddress();
+				uint8_t addr_nonzero = 0;
+				for (int i = 0; i < 6; i++) { addr_nonzero |= la[i]; }
+				if (addr_nonzero && memcmp(configuration.addr, la, sizeof(configuration.addr)) != 0) {
+					debug_serial_port->printf("Saving keyboard address: %s\n", macToString(bt_keyboard.lastConnectedAddress(), bt_keyboard.lastConnectedAddressType()));
+					memcpy(configuration.addr, la, sizeof(configuration.addr));
+					configuration.addrType = bt_keyboard.lastConnectedAddressType();
+					config_dirty = 1;
+					check_for_dirty_configuration();
 				}
-				uint8_t x = 0;
-				for (int i = 0; i < 6; i++) {
-						x |= configuration.addr[i];
-				}				
-				
-				if (x) {
-					// There's a valid address, attempt to reconnect forever until connect or BOOTSEL
-					#ifdef USE_BLE
-						debug_serial_port->printf("\nAttempting to reconnect to BLE keyboard at address %s", macToString(configuration.addr, configuration.addrType));														
-					#else
-						debug_serial_port->printf("\nAttempting to reconnect to BT Classic keyboard at address %s", macToString(configuration.addr, configuration.addrType));														
-					#endif
-					
-					if (!bt_keyboard.connected()) {
-						BT_Keyboard_Lost = 1;
-						Keyboard_Disconnected_signal = 1;
-						Keyboard_Connected_signal = 0;	
-					}
+				BT_Keyboard_Lost = 0;
+				Keyboard_Disconnected_signal = 0;
+				keyboard_connected_handler();  // sets Keyboard_Connected_signal, LED, in_pairing_mode
+			}
+			scan_once = 1;
+			last_scan_once = 0;
+			reconnect_tries = 0;
+			pairing_mode = 0;
+			pairing_scan_count = 0;
+			bootsel_press_start = 0;
+			bootsel_pairing_triggered = 0;
+			classic_attempt_pending = false;
+			return;
+		}
 
-					while (!bt_keyboard.connected() && !BOOTSEL) {     // reconnect after loss										
-						myDelay(10);					
-						if (use_BLE) bt_keyboard.connectBLE(configuration.addr, configuration.addrType);
-						else bt_keyboard.connect(configuration.addr);
-						#if defined(USE_CORE1) && defined(USE_CONNECT_ON_CORE1)
-							core1_run();	// give some core 1 workloads run time between scans				
-						#endif
-						//myDelay(1000);
-						//debug_serial_port->println(F("Attempting to connect"));
-						//debug_serial_port->print(F("*"));
-					}
-					
-					if (bt_keyboard.connected()) {											
-						debug_serial_port->println(F("\nKeyboard is Reconnected, Update system status"));
-						scan_once = 1;
-						BT_Keyboard_Lost = 0;
-						Keyboard_Disconnected_signal = 0;
-						Keyboard_Connected_signal = 1;
-						return;
-					} else {
-						debug_serial_port->println(F("Keyboard disconnected!\n"));
-						BT_Keyboard_Lost = 1;
-						Keyboard_Disconnected_signal = 1;
-						Keyboard_Connected_signal = 0;				
-					}					
-					// Fall through to pair
-				}
-				
-				if (!BOOTSEL) {
-					if (last_scan_once) return;
-				}
+		kb_connected_state = 0;
 
-				//pinMode(bt_keyboard_LED, OUTPUT);
-				debug_serial_port->println(F("Entering pairing mode.  Set the peripheral to pair state"));
+		// Disconnected. One short attempt per call so loop_1() keeps running GPS on
+		// core1 and yields the shared BT async_context so core0 touch keeps working.
+		if (scan_once && !last_scan_once) {
+			last_scan_once = 1;
+			BT_Keyboard_Lost = 1;
+			Keyboard_Disconnected_signal = 1;
+			Keyboard_Connected_signal = 0;
+			// Give the peripheral a moment to finish tearing down its side of the
+			// old link before we try again; an immediate retry can hit it while
+			// it's still busy and get refused (L2CAP status 0x67) or knock its
+			// baseband connection down entirely.
+			next_reconnect_ms = millis() + 1000;
+		}
+		#ifdef SCAN_ONCE
+			if (scan_once) return;   // do not reconnect
+		#endif
+
+		// Hold BOOTSEL for ~2s to clear the last bond and enter pairing mode.
+		// Once triggered, stay in the pairing loop until a keyboard connects.
+		// bootsel_pressed is sampled on core0; reading BOOTSEL directly here (core1)
+		// would call rp2040.idleOtherCore() and stall.
+		if (bootsel_pressed) {
+			if (!bootsel_press_start) {
+				bootsel_press_start = millis();
+			}
+			if (!bootsel_pairing_triggered && (millis() - bootsel_press_start >= 2000)) {
+				bootsel_pairing_triggered = 1;
+				debug_serial_port->println(F("BOOTSEL held: clearing bond and entering pairing mode.  Set the peripheral to pair state"));
 				bt_keyboard.clearPairing();
 				bzero(configuration.addr, 6);
 				configuration.addrType = 0;
 				config_dirty = 1;
+				pairing_mode = 1;
+				reconnect_tries = 0;
+				pairing_scan_count = 0;
+				next_pairing_scan_ms = 0;
+				last_scan_once = 0;
+				classic_attempt_pending = false;
+			}
+		} else {
+			bootsel_press_start = 0;
+			bootsel_pairing_triggered = 0;
+		}
 
-				do {
-					myDelay(10);
-					debug_serial_port->println(F("Scanning for New BT Keyboard Connection"));
-					if (use_BLE) {
-						bt_keyboard.connectBLE();
-					}	else {
-						debug_serial_port->println(F("Calling connectKeyboard() for BT Classic keyboard"));
-						bt_keyboard.connectKeyboard();						
+		if (!pairing_mode) {
+			uint8_t x = 0;
+			for (int i = 0; i < 6; i++) {
+				x |= configuration.addr[i];
+			}
+			if (x && use_BLE) {
+				// Throttled reconnect: one attempt, then wait so the radio and
+				// the rest of the system (touch on core0) are not starved.
+				if (millis() < next_reconnect_ms) {
+					return;
+				}
+				if (reconnect_tries == 0) {
+					debug_serial_port->printf("\nAttempting to reconnect to BLE keyboard at address %s", macToString(configuration.addr, configuration.addrType));
+				}
+				reconnect_tries++;
+				bt_keyboard.connectBLE(configuration.addr, configuration.addrType, bt_idle_fcn, nullptr);
+				next_reconnect_ms = millis() + 2000;  // pause between attempts
+				if (!bt_keyboard.connected() && reconnect_tries >= 3) {
+					debug_serial_port->println(F("Reconnect attempts exhausted; press BOOTSEL to pair a new keyboard"));
+					reconnect_tries = 0;
+					next_reconnect_ms = millis() + 10000;  // longer backoff before next retry burst
+				}
+				return;  // let loop_1() service core1_run() / yield BT context
+			}
+
+			if (x && !use_BLE) {
+				// connect() only submits the page request and returns immediately;
+				// the actual page process resolves later (observed 5-24s on this
+				// hardware, apparently gated by the K380's own page-scan duty
+				// cycle). Wait for that outstanding attempt to actually resolve
+				// (success is caught by the bt_keyboard.connected() branch above)
+				// before treating it as a failed try, instead of firing a new
+				// overlapping attempt every 2s.
+				if (classic_attempt_pending) {
+					if (millis() < classic_attempt_deadline_ms) {
+						return;  // still waiting on the outstanding attempt
 					}
-					myDelay(2000);
-					debug_serial_port->println(F("Waiting to connect"));
-				} while (!bt_keyboard.connected());
-
-				if (bt_keyboard.connected()) {
-					debug_serial_port->printf("Connected to device: %s\n", macToString(bt_keyboard.lastConnectedAddress(), bt_keyboard.lastConnectedAddressType()));
-					memcpy(configuration.addr, bt_keyboard.lastConnectedAddress(), sizeof(configuration.addr));
-					configuration.addrType = bt_keyboard.lastConnectedAddressType();
-					config_dirty = 1;    // EEPROM will be udpated on a schedule.
-					keyboard_connected_handler();
-					scan_once = 1;
+					classic_attempt_pending = false;
+					reconnect_tries++;
+					// Never give up: this keyboard's own page-scan timing is slow
+					// and inconsistent (observed needing up to 3 attempts, ~50s,
+					// to succeed), so just keep retrying instead of stopping and
+					// requiring BOOTSEL to resume.
+					if ((reconnect_tries % 3) == 0) {
+						debug_serial_port->println(F("Still trying to reconnect to Classic keyboard; press BOOTSEL to pair a new one instead"));
+					}
+					return;
 				}
+				if (millis() < next_reconnect_ms) {
+					return;
+				}
+				if (reconnect_tries == 0) {
+					debug_serial_port->printf("\nAttempting to reconnect to Classic keyboard at address %s", macToString(configuration.addr, configuration.addrType));
+				}
+				// A previously-bonded keyboard is typically page-scannable (will
+				// answer a direct connect()) even when it is NOT inquiry-scannable
+				// (discoverable) -- gating connect() on "seen in an inquiry scan"
+				// was found to never fire at all during a slot-switch reconnect
+				// (18+s of continuous scanning, zero hits), even though a plain
+				// blind connect() succeeds once the peripheral is actually paging.
+				// So: scan briefly to prime the radio (as the working pairing path
+				// does), but always attempt connect() afterward regardless of scan
+				// results.
+				// KNOWN LIMITATION: even with page_timeout maxed (see
+				// gap_set_page_timeout(0xFFFF) in initialize_bt_keyboard()) and this
+				// loop retrying forever, reconnecting a Classic device (e.g. a K380)
+				// after it was switched to a different host slot and back is
+				// unreliable on this BTstack/CYW43439 combo -- it can take many
+				// minutes or never succeed, even though the identical device
+				// reconnects instantly via ESP32/Bluedroid. Root-caused to BTstack's
+				// Create_Connection always sending Clock_Offset=0 (blind paging),
+				// which appears to be a controller/BTstack-level limitation, not
+				// something fixable from this code. For reliable reconnect-after-
+				// slot-switch, recommend BLE mode instead; Classic should be treated
+				// as "re-pair each time" on the Pico.
+				bt_keyboard.scan(BluetoothHIDMaster::any_cod, 2);
+				bt_keyboard.connect(configuration.addr);
+				classic_attempt_pending = true;
+				classic_attempt_deadline_ms = millis() + 42000;  // longer than the 0xFFFF (~40.9s) HCI page timeout set at startup
+				return;  // let loop_1() service core1_run() / yield BT context
+			}
+			pairing_mode = 1;  // no saved address (first boot) -> pair automatically
+		}
 
+		if (pairing_mode) {
+			// Throttle pairing scans. connectBLE() blocks for a multi-second scan;
+			// running it every loop starves core0 touch.
+			if (millis() < next_pairing_scan_ms) {
+				return;  // not time to scan yet; let loop_1() run other work
+			}
+			if (!last_scan_once) {
+				debug_serial_port->println(F("Entering pairing mode.  Set the peripheral to pair state"));
+			}
+			if (use_BLE) {
+				debug_serial_port->println(F("Scanning for New BT Keyboard Connection"));
+				bt_keyboard.connectBLE(bt_idle_fcn, nullptr);
+			} else {
+				debug_serial_port->println(F("Calling connectKeyboard() for BT Classic keyboard"));
+				bt_keyboard.connectKeyboard();
+			}
+			next_pairing_scan_ms = millis() + 3000;  // throttle scans so touch isn't starved
+			pairing_scan_count++;
+
+			// Only persist a real address. A failed connectBLE() zeroes
+			// lastConnectedAddress(); saving that would corrupt the saved bond.
+			const uint8_t *la = bt_keyboard.lastConnectedAddress();
+			uint8_t addr_nonzero = 0;
+			for (int i = 0; i < 6; i++) { addr_nonzero |= la[i]; }
+			if (bt_keyboard.connected() && addr_nonzero) {
+				debug_serial_port->printf("Connected to device: %s\n", macToString(bt_keyboard.lastConnectedAddress(), bt_keyboard.lastConnectedAddressType()));
+				memcpy(configuration.addr, bt_keyboard.lastConnectedAddress(), sizeof(configuration.addr));
+				configuration.addrType = bt_keyboard.lastConnectedAddressType();
+				config_dirty = 1;    // EEPROM will be udpated on a schedule.
+				kb_connected_state = 1;  // transition work done here; connected branch will skip it
+				keyboard_connected_handler();
+				scan_once = 1;
+				last_scan_once = 0;
+				pairing_mode = 0;
+				reconnect_tries = 0;
+				pairing_scan_count = 0;
+				bootsel_press_start = 0;
+				bootsel_pairing_triggered = 0;
 				if (config_dirty) {
-					check_for_dirty_configuration();					
+					check_for_dirty_configuration();
 				}
-			}			
+			} else if (pairing_scan_count >= 5) {
+				// Stay in the pairing loop. Pairing is only entered via BOOTSEL hold
+				// (which clears the saved address) or when no address is saved, so
+				// there is nothing to reconnect to. Slow the scan rate so the radio
+				// and core0 touch are not starved.
+				pairing_scan_count = 0;
+				next_pairing_scan_ms = millis() + 10000;  // slow idle pairing retry
+			}
+			return;  // always return; loop_1() will call again next pass
 		}
 	}
 
@@ -19752,6 +19950,21 @@ void pairing_handler(uint32_t pid) {
 
 #endif
 
+//---------------------------------------------------------------------
+#if defined(FEATURE_BT_KEYBOARD) && (defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO))
+
+void bt_pairing_passkey_handler(uint32_t passkey) {
+		myDelay(5);
+		char pass[28];
+		clear_display_row(1);
+		in_pairing_mode = 1;
+		sprintf(pass, "Pairing Code %lu", (unsigned long)passkey);
+		lcd_center_print_timed(pass, 1, 15000);
+}
+
+#endif
+
+
 #ifdef FEATURE_BT_KEYBOARD  // these are used by both ESP32 and Pico
 void keyboard_lost_connection_handler() {
 		//debug_serial_port->println(F("\n====> Lost connection with keyboard <===="));
@@ -19766,6 +19979,9 @@ void keyboard_connected_handler() {
 		if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_active_state);
 		Keyboard_Connected_signal = true;
 		in_pairing_mode = 0;
+		#if defined(HARDWARE_ESP32_DEV)
+			bt_keyboard.prune_bonded_devices(3);  // repeated pairing/testing otherwise grows this list forever
+		#endif
 }
 #endif
 
@@ -19914,6 +20130,17 @@ void initialize_bt_keyboard(){  // init the BT 4.2 stack for ESP32-WROOM-32 for 
 				__attribute__((unused)) esp_bt_controller_config_t cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 				cfg.mode = BT_MODE_BTDM;
   				ESP_LOGI("BLE", " Config - mode: %d, controller task stack: %d\n", cfg.mode, cfg.controller_task_stack_size);
+				#ifdef DEBUG_BT_KEYBOARD
+					debug_serial_port->println(F("bt_keyboard.setup complete"));
+				#endif
+				// Scanning both BLE and Classic every cycle roughly doubles reconnect
+				// scan latency (each transport is scanned sequentially). Restrict to
+				// whichever transport is actually configured.
+				#ifdef USE_BLE
+					bt_keyboard.set_scan_transports(true, false);
+				#else
+					bt_keyboard.set_scan_transports(false, true);
+				#endif
 				#ifndef USE_BT_TASK  // let the check_bt_keyboard task handle it.
 					bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds
 				#endif
@@ -19930,9 +20157,18 @@ void initialize_bt_keyboard(){  // init the BT 4.2 stack for ESP32-WROOM-32 for 
 			bt_keyboard.onConsumerKeyDown(ckb, (void *)true);
 			bt_keyboard.onConsumerKeyUp(ckb, (void *)false);
 			check_last_bt_addr_in_EEPROM(); // See about reconnecting
+			bt_keyboard.setPasskeyCB(bt_pairing_passkey_handler);
 			if (use_BLE) bt_keyboard.begin(true);   // BLE
 			else bt_keyboard.begin();  // BT Classic
-			
+
+			// BTstack's default page timeout (0x6000, ~15.4s) is too short for a
+			// blind reconnect (no clock offset from inquiry, since a bonded K380
+			// is page-scannable but not inquiry-discoverable): the K380's own
+			// page-scan window frequently doesn't line up within 15s, forcing
+			// many retries. Raise it to the HCI max (~40.9s) to give each single
+			// connect() attempt a much better chance of catching that window.
+			if (!use_BLE) gap_set_page_timeout(0xFFFF);
+
 			if (!bt_keyboard.is_connected()) {
 					debug_serial_port->println(F("No BT Keyboards found"));
 					#ifdef FEATURE_DISPLAY
@@ -25370,7 +25606,9 @@ void tft_backlight(int state) {
 	#if !defined(USE_BT_TASK)
 		void check_bt_keyboard(void) {
 
-			#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
+			#if defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(USE_CONNECT_ON_CORE1)
+					// When USE_CONNECT_ON_CORE1 is set, loop_1() on core1 owns
+					// connectOrPair(); running it here too would block both cores.
 					if (!bt_keyboard.connected()) {
 						connectOrPair();
 					}
@@ -25439,7 +25677,6 @@ void tft_backlight(int state) {
 					bool ret = 0;
 					bool keyDN = false;
 					bool keyUP = false;
-					static bool scanned = 0; 
 					//static bool CMD_KEY = false;
 					//static bool last_key = true;
 					uint8_t modifier = 0;
@@ -25461,28 +25698,9 @@ void tft_backlight(int state) {
 							//ret = wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
 							ret = bt_queue_available();						
 						#else
-							#if defined(HARDWARE_ESP32_DEV) && defined(USE_BT_TASK)  // rescan on loss of connection unless SCAN_ONCE is set
-								duration = 1;
-								ret = 0;								
-								do {									
-									myDelay(100);
-									if (!bt_keyboard.is_connected() || BT_Keyboard_Lost) {
-										#ifdef SCAN_ONCE
-											if (!scanned) bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds										
-											scanned = 1;
-										#else
-											bt_keyboard.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds.devices_scan(); // Required to discover new keyboards and for pairing. Default duration is 5 seconds										
-										#endif
-										if (!scanned) {
-											; //debug_serial_port->println(F(" *** BT Device Scan Complete ***"));
-										}
-									}
-									BT_Keyboard_Lost = false;
-									ret = bt_keyboard.wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.																			
-								} while (!ret);								
-							#else								
-							ret = bt_keyboard.wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.								
-							#endif
+							ret = bt_keyboard.wait_for_low_event(inf, duration);  // 2nd argument is time to wait for chars.  When in own tasks can wait forever, else use 1.
+							// Reconnect scanning runs in its own task (bt_reconnect_scan_task) so a
+							// multi-second devices_scan() never delays keystroke-to-audio latency here.
 						#endif
 						//bt_keyboard.get_ascii_char();
 						
@@ -27106,6 +27324,7 @@ void mainloop(void)
 #endif
 #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK)
 	TaskHandle_t xHandle_BT = NULL;
+	TaskHandle_t xHandle_BT_Scan = NULL;
 #endif
 #if defined(USE_MAIN_TASK)
 	TaskHandle_t xHandle_MAIN = NULL;
@@ -27287,6 +27506,13 @@ void setup_esp()
 				( void * ) 1,    /* Parameter passed into the task. */
 				4,/* Priority at which the task is created. */
 				&xHandle_BT); //use core 0
+			xReturned = xTaskCreate(
+				bt_reconnect_scan_task,       /* Function that implements the task. */
+				"BTReconnScan",          /* Text name for the task. */
+				4000,      /* Stack size in words, not bytes. */
+				( void * ) 1,    /* Parameter passed into the task. */
+				2,/* Lower priority than ChkBTKeys so it never starves keystroke forwarding. */
+				&xHandle_BT_Scan); //use core 0
 		#endif
 		#if defined(USE_CORE1)  // keep bt on core 0, too many interactions with TFT_eSPI and such
 			//Serial.println("Starting Check BT Keyboard Task on Core 1");
@@ -27297,6 +27523,14 @@ void setup_esp()
 				( void * ) 1,    /* Parameter passed into the task. */
 				4,/* Priority at which the task is created. */
 				&xHandle_BT,
+				1);  // use core 1
+			xReturned = xTaskCreatePinnedToCore(
+				bt_reconnect_scan_task,       /* Function that implements the task. */
+				"BTReconnScan",          /* Text name for the task. */
+				4000,      /* Stack size in words, not bytes. */
+				( void * ) 1,    /* Parameter passed into the task. */
+				2,/* Lower priority than ChkBTKeys so it never starves keystroke forwarding. */
+				&xHandle_BT_Scan,
 				1);  // use core 1
 		#endif
 	#endif
@@ -27362,9 +27596,7 @@ void loop_1() {
 		for (;;) {
 
 			#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && defined(USE_CONNECT_ON_CORE1)
-				if (!bt_keyboard.connected() && ! BOOTSEL) {
-					connectOrPair();
-				}
+				connectOrPair();  // runs every pass; handles connect/reconnect/pairing state
 			#endif
 			
 			core1_run();  // run other core 1 workloads. This is also called between ConnectoOrPair BT scans.
@@ -27435,7 +27667,11 @@ void app_main(void)
 	for(;;)
 	{
 		myDelay(0);
-		
+
+		#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+			bootsel_pressed = BOOTSEL;  // sample on core0; core1 reads the flag
+		#endif
+
 		uint32_t current_time = millis();
 
 		#ifndef TASK_PROCESS_STATUS
@@ -27467,9 +27703,7 @@ void app_main(void)
 		#endif
 
 		#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && !defined(USE_CONNECT_ON_CORE1)
-			if (!bt_keyboard.connected() && ! BOOTSEL) {
-				connectOrPair();
-			}
+			connectOrPair();
 		#endif
 		
 	} // end loop

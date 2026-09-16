@@ -111,6 +111,23 @@ public:
              LostConnectionHandler *lost_connection_handler = nullptr);
   void devices_scan(int seconds_wait_time = 5);
 
+  // Reconnect advertisements from a bonded device often omit appearance/UUID
+  // (and use a rotating private address), so devices_scan()'s content-based
+  // matching can never find them even though the peer is actively
+  // advertising. Open a direct connection to the bonded identity address
+  // instead and let the controller's own address resolution handle the
+  // rest. Returns true if a connection attempt was submitted (not whether
+  // it has completed -- watch is_connected()/the connection handlers).
+  bool reconnect_bonded_ble();
+
+  // Scanning both BLE and Classic every cycle roughly doubles scan latency
+  // (each transport is scanned sequentially). Call this once at startup to
+  // restrict devices_scan() to only the transport actually in use.
+  inline void set_scan_transports(bool enable_ble, bool enable_classic) {
+    ble_scan_enabled_     = enable_ble;
+    classic_scan_enabled_ = enable_classic;
+  }
+
   inline uint8_t get_battery_level() { return battery_level_; }
   inline bool    is_connected() { return connected_; }
   inline bool    wait_for_low_event(KeyInfo &inf, TickType_t duration = portMAX_DELAY) {
@@ -121,6 +138,13 @@ public:
   inline char get_ascii_char() { return wait_for_ascii_char(false); }
   void        show_bonded_devices();
   void        remove_all_bonded_devices();
+
+  // Each fresh pairing adds a new bond entry that is never automatically
+  // removed, so the bond list grows unbounded over repeated testing/pairing
+  // cycles. Call periodically (e.g. after a successful connection) to keep
+  // only the `max_keep` most recent bonds; the currently-connected device is
+  // never removed even if it would otherwise be pruned.
+  void        prune_bonded_devices(int max_keep);
 
 private:
   static constexpr char const *TAG          = "BTKeyboard";
@@ -178,6 +202,8 @@ private:
   char          last_ch_;
   TickType_t    repeat_period_;
   bool          caps_lock_;
+  bool          ble_scan_enabled_     = true;
+  bool          classic_scan_enabled_ = true;
 
   static const char *gap_bt_prop_type_names_[];
   static const char *ble_gap_evt_names_[];

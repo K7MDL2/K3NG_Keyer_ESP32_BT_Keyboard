@@ -5,14 +5,14 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "V:K7MDL-2026.7.27"
-#define eeprom_magic_number 43          // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "V:K7MDL-2026.9.15"
+#define eeprom_magic_number 44          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
 //#define FEATURE_BUTTONS   // enabling this you must have a valid GPIO pin assigned and pulled up to 3.3V.
-//#define FEATURE_COMMAND_MODE  // Long pres on teh TxEN or command mode GPIO button ender command mode where the key can set params.
+//#define FEATURE_COMMAND_MODE  // Long press on the TxEN or command mode GPIO button ender command mode where the key can set params.
 #define FEATURE_COMMAND_LINE_INTERFACE  // Command Line Interface functionality
 #define FEATURE_MEMORIES             // on the Arduino Due, you must have FEATURE_EEPROM_E24C1024 and E24C1024 EEPROM hardware in order to compile this
 #define FEATURE_MEMORY_MACROS
@@ -29,6 +29,7 @@
 ////// #define FEATURE_USB_KEYBOARD          // Use a USB keyboard to send code - Uncomment three lines in k3ng_keyer.ino (search for note_usb_uncomment_lines)
 
 #define FEATURE_BT_KEYBOARD  // ESP32-WROOM-32  BT 4.2 BLE and BT Classic Bluetooth using a BT Keyboard class library AND  Pico 2W boards
+// #define USE_BLE          // ESP32: use BLE HID keyboard; leave commented for Classic Bluetooth
 
 // #define FEATURE_CW_COMPUTER_KEYBOARD  // Have an Arduino Due or Leonardo act as a USB HID (Human Interface Device) keyboard and use the paddle to "type" characters on the computer -- uncomment this line in ino file: #include <Keyboard.h>
 #define FEATURE_DEAD_OP_WATCHDOG
@@ -159,6 +160,7 @@
     //#define TOUCH_BUTTON_16  // Put up a single panel of 16 button vs cycling though 4 rows of 4 buttons each.  Must have FEATURE_TOUCH_DISPLAY enabled.
     #define BUTTON_ROWS 2 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define USE_RES_TOUCH  // Enables touch with XPT2046
+    //#define USE_BLE
     //#define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scanning (K380, Rii)
     #define USE_CORE1  // for Pico and ESP32, this moves some features (like GPS and BT Keyboard) to run on Core 1 instead of Core 0.
     #define USE_MAIN_TASK // runs main loop in a task
@@ -276,15 +278,15 @@
 // #define OPTION_SUPPRESS_SERIAL_BOOT_MSG
 ///#define OPTION_INCLUDE_PTT_TAIL_FOR_MANUAL_SENDING
 ///#define OPTION_EXCLUDE_PTT_HANG_TIME_FOR_MANUAL_SENDING
-/// #define OPTION_WINKEY_DISCARD_BYTES_AT_STARTUP     // if ASR is not disabled, you may need this to discard errant serial port bytes at startup
- #define OPTION_WINKEY_STRICT_EEPROM_WRITES_MAY_WEAR_OUT_EEPROM // with this activated the unit will write non-volatile settings to EEPROM when set by Winkey commands
+#define OPTION_WINKEY_DISCARD_BYTES_AT_STARTUP     // if ASR is not disabled, you may need this to discard errant serial port bytes at startup
+#define OPTION_WINKEY_STRICT_EEPROM_WRITES_MAY_WEAR_OUT_EEPROM // with this activated the unit will write non-volatile settings to EEPROM when set by Winkey commands
 // #define OPTION_WINKEY_SEND_WORDSPACE_AT_END_OF_BUFFER
 //#define OPTION_WINKEY_STRICT_HOST_OPEN               // require an admin host open Winkey command before doing any other commands
 #define OPTION_WINKEY_2_SUPPORT                      // comment out to revert to Winkey version 1 emulation
 #define OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE
 #define OPTION_WINKEY_INTERRUPTS_MEMORY_REPEAT
 //#define OPTION_WINKEY_UCXLOG_9600_BAUD              // use this only with UCXLog configured for Winkey 9600 baud mode
-//#define OPTION_WINKEY_2_HOST_CLOSE_NO_SERIAL_PORT_RESET  // (Required for Win-Test to function)
+#define OPTION_WINKEY_2_HOST_CLOSE_NO_SERIAL_PORT_RESET  // (Required for Win-Test to function)
 // #define OPTION_WINKEY_FREQUENT_STATUS_REPORT         // activate this to make Winkey emulation play better with RUMlog and RUMped
 // #define OPTION_WINKEY_IGNORE_LOWERCASE               // Enable for typical K1EL Winkeyer behavior (use for SkookumLogger version 1.10.14 and prior to workaround "r" bug)
 // #define OPTION_WINKEY_BLINK_PTT_ON_HOST_OPEN

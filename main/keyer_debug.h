@@ -61,8 +61,10 @@
 // #define DEBUG_EEPROM_READ_SETTINGS
 // #define DEBUG_LOOP_ELEMENT_LENGTHS
 // #define DEBUG_BT_KEYBOARD
+// #define DEBUG_PICO_BT_RECONNECT
 // #define DEBUG_GPS
 // #define DEBUG_TOUCH
+// #define DEBUG_TOUCH_EVENTS
 // #define DEBUG_COMPASS
 // #define TASK_HIGH_WATER_MONITOR  // use to check status of runnign FreeRTOS tasks
 // #define TASK_PROCESS_STATUS     // used to check run status of all tasks on both CPUs

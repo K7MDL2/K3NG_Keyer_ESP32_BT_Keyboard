@@ -365,7 +365,8 @@ bool BTKeyboard::setup(PairingHandler        *pairing_handler,
     return false;
   }
 
-  esp_log_level_set(TAG, ESP_LOG_ERROR);
+  //esp_log_level_set(TAG, ESP_LOG_DEBUG);
+  esp_log_level_set(TAG, ESP_LOG_NONE);
 
   esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 
@@ -499,6 +500,22 @@ esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t)
     ESP_LOGE(TAG, "esp_ble_gap_register_callback failed: %d", ret);
     return false;
   }
+
+  // A bonded peripheral's reconnect advertisements use a rotating private
+  // address (RPA), not a stable one. Without local privacy enabled, the
+  // controller has no way to recognize that a new RPA belongs to an
+  // existing bond, so every reconnect looked like an unknown device --
+  // requiring a full fresh pairing (and a new bond entry) every single
+  // time. Enabling local privacy lets the controller resolve a peer's RPA
+  // against the IRK captured during the original bonding (SMP key
+  // exchange), so both scanning and direct-connect-to-bonded-address
+  // (reconnect_bonded_ble()) can recognize/reach the same physical device
+  // across address rotations.
+  if ((ret = esp_ble_gap_config_local_privacy(true)) != ESP_OK) {
+    ESP_LOGE(TAG, "esp_ble_gap_config_local_privacy failed: %d", ret);
+    return false;
+  }
+  WAIT_BLE_CB();
 
   ESP_ERROR_CHECK(esp_ble_gattc_register_callback(esp_hidh_gattc_event_handler));
   esp_hidh_config_t config = {
@@ -996,6 +1013,13 @@ void BTKeyboard::ble_gap_event_handler(esp_gap_ble_cb_event_t  event,
         break;
       }
 
+    case ESP_GAP_BLE_SET_LOCAL_PRIVACY_COMPLETE_EVT:
+      {
+        ESP_LOGD(TAG, "BLE GAP EVENT SET_LOCAL_PRIVACY_COMPLETE status=%d", param->local_privacy_cmpl.status);
+        SEND_BLE_CB();
+        break;
+      }
+
       // ADVERTISEMENT
 
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
@@ -1142,16 +1166,20 @@ esp_err_t BTKeyboard::esp_hid_scan(uint32_t seconds, size_t *num_results, ScanRe
     return ESP_FAIL;
   }
 
-  if (start_ble_scan(seconds) == ESP_OK) {
-    WAIT_BLE_CB();
-  } else {
-    return ESP_FAIL;
+  if (ble_scan_enabled_) {
+    if (start_ble_scan(seconds) == ESP_OK) {
+      WAIT_BLE_CB();
+    } else {
+      return ESP_FAIL;
+    }
   }
 
-  if (start_bt_scan(seconds) == ESP_OK) {
-    WAIT_BT_CB();
-  } else {
-    return ESP_FAIL;
+  if (classic_scan_enabled_) {
+    if (start_bt_scan(seconds) == ESP_OK) {
+      WAIT_BT_CB();
+    } else {
+      return ESP_FAIL;
+    }
   }
 
   *num_results = num_bt_scan_results_ + num_ble_scan_results_;
@@ -1410,25 +1438,16 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
         if (bda) {
           ESP_LOGD(TAG, ESP_BD_ADDR_STR " CLOSE: %s", ESP_BD_ADDR_HEX(bda),
                    esp_hidh_dev_name_get(param->close.dev));
+          // Reconnect is handled entirely by the app-level scan/retry loop
+          // (BTKeyboard::devices_scan(), driven from main.cpp's reconnect
+          // task) -- a prior direct esp_hidh_dev_open() attempt here left
+          // `reconnecting` stuck true forever whenever it failed (only ever
+          // reset in the OPEN_EVENT success path below), and it hardcoded
+          // ESP_HID_TRANSPORT_BLE regardless of the original transport.
+          // That left the BLE stack unable to find the device via any
+          // subsequent scan at all -- observed as permanent "0 results".
+          reconnecting = false;
           bt_keyboard_->set_connected(false);
-          
-          if (has_last_device && !reconnecting) {
-                reconnecting = true;                
-                esp_hidh_dev_open(last_device_addr, ESP_HID_TRANSPORT_BLE, 1);
-                ESP_LOGI(TAG, ESP_BD_ADDR_STR "Set Flag to Reconnect...%s", ESP_BD_ADDR_HEX(bda));
-                uint8_t btaddr[14] = {bda[0],':',bda[1],':',bda[2],':',bda[3],':',bda[4],':',bda[5],':',bda[6],'\0'};
-                #ifdef DEBUG_BT
-                std::cout << "Set Flag to Reconnect..." << std::hex << btaddr << std::endl;
-                #endif
-          } else {
-                //bt_keyboard_->devices_scan(5);  // anydevice
-                bt_keyboard_->retrieve_bonded_devices(); // last device                
-                ESP_LOGI(TAG, "Maybe Choose to Restart Scanning on CLOSE? ...");
-                #ifdef DEBUG_BT
-                std::cout << "Maybe Choose to Restart Scanning on CLOSE? ..." << std::endl;
-                #endif
-                bt_keyboard_->set_connected(false);
-          }
         }
         break;
       }
@@ -1593,4 +1612,44 @@ void BTKeyboard::remove_all_bonded_devices() {
   for (int i = 0; i < dev_count; i++) {
     esp_ble_remove_bond_device(dev_list[i].bd_addr);
   }
+}
+
+void BTKeyboard::prune_bonded_devices(int max_keep) {
+  auto [dev_list, dev_count] = retrieve_bonded_devices();
+
+  if (dev_count <= max_keep) return;
+
+  int to_remove = dev_count - max_keep;
+  ESP_LOGD(TAG, "Bonded devices %d exceeds cap %d, pruning %d oldest", dev_count, max_keep,
+           to_remove);
+
+  // Assumed oldest-first ordering (see reconnect_bonded_ble()'s "last in list
+  // is most recent" comment) -- never remove the currently-connected device
+  // even if it happens to be among the oldest entries.
+  for (int i = 0; i < dev_count && to_remove > 0; i++) {
+    if (has_last_device && memcmp(dev_list[i].bd_addr, last_device_addr, sizeof(esp_bd_addr_t)) == 0) {
+      continue;
+    }
+    esp_ble_remove_bond_device(dev_list[i].bd_addr);
+    to_remove--;
+  }
+}
+
+bool BTKeyboard::reconnect_bonded_ble() {
+  if (connected_) return true;
+
+  auto [dev_list, dev_count] = retrieve_bonded_devices();
+  if (dev_count == 0) {
+    return false;
+  }
+
+  // Most recently bonded device is last in the list.
+  const esp_ble_bond_dev_t &dev = dev_list[dev_count - 1];
+  esp_hidh_dev_t *handle = esp_hidh_dev_open(const_cast<uint8_t *>(dev.bd_addr), ESP_HID_TRANSPORT_BLE,
+                                             (esp_ble_addr_type_t)dev.bd_addr_type);
+  #ifdef DEBUG_BT
+  std::cout << "Direct reconnect to bonded BLE device " << dev.bd_addr << " -> "
+            << (handle != nullptr ? "submitted" : "failed") << std::endl;
+  #endif
+  return handle != nullptr;
 }
