@@ -1,7 +1,7 @@
 | Support Targets | ![ESP32-WROOM32][esp32] | ![Pico2W][Pico2W] | ![alt text][Has_Precompiled_Firmware_Images] |
 | --- | --- | --- | --- |
 
-| Dev Environment Used | ![alt text][ESP-IDF] | ![alt text][ESP-IDF6] | ![Arduino IDE][Arduino]|
+| Dev Environment Used | ![alt text][ESP-IDF6] | ![Arduino IDE][Arduino]|
 | --- | --- | --- | --- |
 
 | BT Keyboards Tested | ![alt text][K380]|![alt text][K380s] | ![Rii i8+ mini][Rii_mini] |
@@ -9,7 +9,6 @@
 
 [Pico2W]: https://img.shields.io/badge/Pico2W-green "ESP32"
 [ESP32]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
-[ESP-IDF]: https://img.shields.io/badge/ESP--IDF--v5.5.4-cyan "ESP-IDF v5.5.4"
 [ESP-IDF6]: https://img.shields.io/badge/ESP--IDF--v6.0.1-cyan "ESP-IDF v6.0.1"
 [Arduino]: https://img.shields.io/badge/Arduino-cyan "Arduino v2.3.7"
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
@@ -22,7 +21,7 @@
 
 Based on a 2022 version modifed to run on ESP32-WROOM32 and Pico2W.  
 
-Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. Compiles under ESP-IDF for ESP32, or Arduino for either ESP32 or Pico2W.  Some limitations apply to BT keyboards on ESP32 under Arduino.
+Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. Compiles under ESP-IDF for ESP32, or Arduino for either ESP32 or Pico2W.
 
 To build under ESP-IDF (preferred) see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
 
@@ -53,8 +52,9 @@ _____________________________________________
  - Backlight timeout with enable/disable to save battery. Configurable timeout. TFT displays are around 270ma, 100ma with backlight off. About 10ma less without BT keyboard feature.
  - User assignable buttons and number of button rows.
  - For ESP32, optionally run GPS, BT, Touch, and Main loop in task.  All but Main Loop can run on either Core 0 or Core 1 (as a group move).  Lets BT connections and GPS time to run uninterrupted, even during 13WPM and 50WPM keying rates.  For Pico GPS and BT connect/reconnect can run on Core 1 (no task requried).  When BT is on Core1 it allows connect and reconnect in the background.
- - Compiles under ESP-IDF v5.5.4 and v6.0.1 as of June 2026.  Addresses several deprecated issues in some libraries.  Review the Change Notes Wiki Page for some manual managed component library fixes required for v6.  Hopefully Espressif will catch these libs up.
+ - Compiles under ESP-IDF v6.1.0 as of September 2026.  Addresses several deprecated issues in some libraries.  Review the Change Notes Wiki Page for some manual managed component library fixes required for v6.  Hopefully Espressif will catch these libs up.
  - FEATURE_BUTTONS and COMMAND_MODE now working.
+ - Sept 2026 have BT Classic and BLE keyboards pairing with receonnection on both ESP32 and Pico2W. The BT Classic keyboard, Logitech K380, pairs with a PIN teh first time, then after, pairs to receonnct, no PIN required so it is reasonably fast.
 
 Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
@@ -88,20 +88,21 @@ The ESP and PICO look and act identical with some minor differences around BT ke
 
 3 years ago (2022) SP5IOU modified the K3NG Keyer Arduino code to support an ESP32.  This repository is forked from his repository at https://github.com/aimeiz/k3ng_cw_keyer-master_2022.  After changing the pin assignments it worked on my ESP32-WROOM-32 dev board.  I used the board described in this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/CPU-Module
 
-I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.  Later I added several types of TFT displays and touch buttons for certain models.  Finally I added support for the PicoW and Pico2W. Only tested on Pico 2W (RP2350 and RP2350B).
+I then integrated a BT Keyboard library from https://github.com/turgu1/bt-keyboard.  It is a bit different in that the ESP32 is a HID host connecting to a BT keyboard for input.  Most examples just convert a USB or PS2 keyboard to BT to connect to a PC.  Later I added several types of TFT displays and touch buttons for certain models.  Finally I added support for the PicoW and Pico2W. Only tested on Pico2-W (RP2350A and RP2350B).
 
-ESP32: I am using ESP-IDF to compile.  Arduino-esp32 is added as a component.  I first tried Arduino IDE but I was not able to get a BT classic keyboard (Logitech K380) to fully connect after it was discovered.  My BLE Rii i8+ keyboard worked fine though.  My BT_Keyboard test programs behaved the same.  I ported it to esp-idf and BT classic works proper as does the Rii. The K380s BLE keyboard works but does not reconnect and required re-pairing after each disocnnect/powerup/reset.  You can compile this under Arduino IDE but see this page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE for current functionality restrictions.
-Pico: Using Arduino IDE to compile withteh arduino-pico board package.  Supports BT Classic or BLE, but only 1 of them based on a compile time switch.  BLE connects and reconnects, No PIN required.  BT Classic connects with no PIN also, but requires pushing the keyboard Pair button each connect.
+ESP32: I am using ESP-IDF to compile.  Arduino-esp32 is added as a component.  I first tried Arduino IDE but I was not able to get a BT classic keyboard (Logitech K380) to fully connect after it was discovered.  My BLE Rii i8+ keyboard worked fine though.  My BT_Keyboard test programs behaved the same.  I ported it to esp-idf and BT classic works proper as does the Rii and the K380s BLE keyboard. You can compile this under Arduino IDE but see this page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE for current functionality restrictions.
+
+Pico: Using Arduino IDE to compile with the arduino-pico board package.  Supports BT Classic or BLE based on a compile time switch.  BLE connects and reconnects, No PIN required.  BT Classic connects with a PIN adn but requires pushing the keyboard Pair button each connection aftawrds, no PIN required though.
 
 The BT keyboard code translates BT key codes to match the PS2 keycodes and calls into the slightly modified PS2 keyboard function.  See the K3NG docs for USB\PS2 Keyboard commands. I have a copy of the BT keyboard commands on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/BT-Keyboard-Key-Assignments.   Not all keys on a PS2/USB keyboard are present on these compact BT keyboards.   I may alter some of the key assignments over time.
 
-Tested with BLE K380s and Rii i8+ mini keyboards, and the Logitech K380, which happens to use BT classic.
+Tested with BLE K380s and Rthe ii i8+ mini keyboards, and the Logitech K380, which uses BT classic.
 
-I plan to fork the original K3NG repo then merge my changes into it so that this benefit from the updates to the original.  Since this version is currently compiled under esp-idf framework, it is not likely to be accepted into the main repo.  You can compile under Arduino but all BT keyboards do not work yet per the above notes.
+I have manually merged the most relevant updates from the orignal k3NG repo add since 2022.  Since this version is currently compiled under esp-idf framework, it is not likely to be accepted into the main repo.  You can compile for ESP32 under Arduino but not every (or any) BT keyboards work yet per the above notes.  Pico is compiled with Arduino.  Same code for both.  In fact you can compile them a the same time.
 
-I have several WIKI pages to show how I set up the ESP-IDF options.  The TFT_eSPI, BT_keyboard, and other required components (aka libraries) are included in tis repo so there should be no need to find and download libraries and components unlike in Arduino.  For Ardiono build you will need to copy somoe of the libraries to your standard Ardiuno/libraries path.  See the Wiki Notes for details.
+I have several WIKI pages to show how I set up the ESP-IDF options.  The TFT_eSPI, BT_keyboard, and other required components (aka libraries) are included in tis repo so there should be no need to find and download libraries and components unlike in Arduino.  For Arduino builds you will need to copy some of the libraries to your standard Arduino/libraries path.  See the Wiki Notes for details.
 
-I provide precompiled firmware files for your compatible CPU board using either of 2 tools so you do not have to compile the code, just upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmware: 
+I provide several precompiled firmware files for your compatible CPU board using either of 2 tools so you do not have to compile the code, just upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmware: 
 
 https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
 
