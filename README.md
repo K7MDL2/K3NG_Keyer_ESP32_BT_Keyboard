@@ -55,6 +55,9 @@ _____________________________________________
  - Compiles under ESP-IDF v6.1.0 as of September 2026.  Addresses several deprecated issues in some libraries.  Review the Change Notes Wiki Page for some manual managed component library fixes required for v6.  Hopefully Espressif will catch these libs up.
  - FEATURE_BUTTONS and COMMAND_MODE now working.
  - Sept 2026 have BT Classic and BLE keyboards pairing with receonnection on both ESP32 and Pico2W. The BT Classic keyboard, Logitech K380, pairs with a PIN teh first time, then after, pairs to receonnct, no PIN required so it is reasonably fast.
+ 
+ > [!NOTE]
+ > USB sound card functionality in now working in a test branch [test/pico2w-wm8960-usb-audio](https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/tree/test/pico2w-wm8960-usb-audio).  Uses common Waveshare WM8960 module with headphone, speakers and mic.  Can use as a soundcard for normal audio output. Sidetone is generated locally for zero latency and played into the USB audio output.  USB audio (play and mic) are muted for 7 dit lengths enabling full breakin.  Serial terminal commands, BT keyboard volume +/-/Mute work and are saved in EEPROM.  Adding touch controls later.  Still to be tested are MCS23017, GPS and Compass features to make they still work.
 
 Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
