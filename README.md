@@ -21,9 +21,9 @@
 
 Based on a 2022 version modifed to run on ESP32-WROOM32 and Pico2W.  
 
-Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. Compiles under ESP-IDF for ESP32, or Arduino for either ESP32 or Pico2W.
+Select relevant updates from 2022 to Dec 2025 have been applied.  Added BT keyboards, TFT, Touch, LCD displays, GPS, and Compass. The ESP32 build uses ESP-IDF for full Bluetooth keyboard support. Arduino IDE can compile for ESP32, but Bluetooth keyboard operation is not supported for all keyboard models there. Pico2W builds use Arduino.
 
-To build under ESP-IDF (preferred) see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
+To build the ESP32 under ESP-IDF see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-Project-with-ESP%E2%80%90IDF
 
 To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE.  For the Pico I post a UF2 image file, and image files for the ESP32 for each model display for those who do not want to try to compile their own.   
 
@@ -105,6 +105,271 @@ I have several WIKI pages to show how I set up the ESP-IDF options.  The TFT_eSP
 I provide several precompiled firmware files for your compatible CPU board using either of 2 tools so you do not have to compile the code, just upload the binary files and run it. There are Wiki pages about hardware, other info, and how to upload the firmware: 
 
 https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki
+
+## Pico 2 W WM8960 audio
+
+The optional WM8960 path is Pico-only. It adds 48 kHz,
+16-bit stereo USB speaker playback, mono USB microphone capture, and routes
+K3NG sidetone/beeps through the codec. ESP32-WROOM32 audio behavior is unchanged.
+
+### Saved audio levels and controls
+
+The dormant `FEATURE_SINEWAVE_SIDETONE` DAC/timer implementation was removed.
+Its only stored setting, `configuration.sidetone_volume`, is reused as WM8960
+sidetone volume in percent. The old initialization set it to 255, the midpoint
+of the former 10..500 limits; those obsolete limits are removed.
+`configuration.hz_sidetone` still controls frequency.
+New `usb_play_volume`, `usb_mic_volume`, `sidetone_muted`, `usb_play_muted`, and
+`usb_mic_muted` fields are saved in the same EEPROM configuration structure.
+All levels default to 100%, with mute off. Sidetone 100% preserves the previous
+8192-peak tone amplitude; USB 100% preserves the previous USB gain. These are
+device-side linear-amplitude trims, combined with (not replacing) host USB
+mute/volume settings. Microphone analogue PGA gain is unchanged.
+Headphone and speaker analogue output volumes are both 0x78 (-1 dB),
+8 dB above the earlier 0x70 setting; right-channel writes retain the paired
+volume-update bit (0x178).
+
+EEPROM magic is now 42 for Pico and 45 for ESP32 because the shared structure
+changed. **The first boot resets saved settings and initializes CW memories.**
+Bluetooth pairing/reconnection settings may need to be established again.
+Changes use the normal deferred EEPROM save when idle; allow at least the
+configured `eeprom_write_time_ms` before removing power.
+
+With `FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT` enabled, the Pico
+WM8960 build runs the terminal on **USB CDC2**, while WinKey stays on USB CDC1. Non-audio builds retain the UART `Serial1` mapping.
+Audio/timing diagnostics also use CDC2 when that terminal flag is enabled,
+so those messages do not contaminate the WinKey protocol on CDC1.
+`DEBUG_WM8960_AUDIO` in `main/keyer_debug.h` enables routine codec/PIO startup
+messages and serial-connect audio/timing dumps. Comment it out to suppress
+those messages and the diagnostic LRCLK sampling. Initialization/I2C errors
+and retained crash reporting remain enabled.
+Open the terminal at 115200 baud with DTR enabled. Native USB does not use the
+legacy WinKey startup-byte-discard option, which could block both interfaces.
+The sketch-local CDC driver disables Arduino-Pico's 1200-baud/DTR BOOTSEL
+reset for this composite firmware. WinKey can open/close at 1200 baud without
+entering the flashing drive. Host line coding is retained by TinyUSB, primary
+DTR/RTS handling is preserved, and CDC2 controls cannot change primary state.
+Automatic 1200-baud-touch uploading is unavailable; use physical BOOTSEL to
+flash from Arduino IDE or copy a UF2. No installed Arduino core patch is needed.
+
+Extended terminal commands start with `\:` and end with Enter:
+
+| Command | Action |
+|---|---|
+| `\:AUDIO` | Show all saved device levels and mute states |
+| `\:USBPLAY 65` | Set USB playback to 65% |
+| `\:USBMIC 80` | Set USB microphone level to 80% |
+| `\:SIDETONE 50` | Set sidetone to 50% |
+| `\:USBPLAY MUTE` / `\:USBPLAY UNMUTE` / `\:USBPLAY TOGGLE` | Change playback mute without losing its level |
+| `\:USBMIC +` / `\:SIDETONE -` | Adjust the selected level by approximately 2 dB |
+
+All three target commands accept a level from 0 to 100, `+`, `-`, `MUTE`,
+`UNMUTE`, or `TOGGLE`; no argument shows status. Setting/adjusting a level
+unmutes that target. Zero level is silent. Invalid input reports an error
+without changing settings. `\S` also includes audio status; `\?` lists commands.
+
+Bluetooth consumer/media keys use the same controls:
+
+| Prefix | Mute / Volume+ / Volume- target |
+|---|---|
+| None | USB playback |
+| Left or right Shift | WM8960 sidetone |
+| Left or right Ctrl | USB microphone |
+
+Mute toggles the selected path; Volume+/Volume- use approximately 2 dB
+audio-taper steps and unmute, as do terminal `+`/`-` commands. Each step
+multiplies linear amplitude by 1.259 (up) or 0.794 (down), rounded to the
+saved integer percentage. Near silence, a minimum 1% change ensures every
+step moves; 0% is silence and 100% is the upper limit. For example, decreasing
+from 100% gives 79%, 63%, 50%, 40%, then 32%. Numeric commands still set
+linear 0..100% directly, and the EEPROM layout/version is unchanged.
+Ctrl+Shift or Alt/Meta combinations are ignored. Consumer releases do not
+repeat the action or enter the Morse text buffer. The keyboard must actually
+send consumer usages 0xE2/0xE9/0xEA while modifiers are held (Fn behavior is
+keyboard-specific). Muting sidetone does not disable transmitter keying or
+the existing seven-dit USB keyer-priority hold and 5 ms fades.
+Hardware tests passed all nine consumer-key combinations, terminal level/mute
+commands and invalid-input rejection, saved levels and mute states across
+power cycles, and unmute recovery of all three audio paths. The final firmware
+also passed CDC2 diagnostic/status queries and a quiet CDC1 open followed by
+the expected 15-byte WinKey settings reply.
+
+Before enabling it, wire a WM8960 module with an onboard or external I2S MCLK
+source and verify the pin assignments in `main/keyer_pin_settings_pico.h`.
+The Waveshare WM8960 Audio Board has a 24 MHz onboard oscillator. Set
+`WM8960_MCLK_HZ` to `24000000UL` for this board; the codec PLL generates the
+12.288 MHz internal clock needed for 48 kHz audio. A module supplied with
+12.288 MHz MCLK can instead use `12288000UL` to bypass the PLL.
+The current display profile explicitly sets `WM8960_USE_PLL` to `1`.
+A direct-MCLK comparison with the SDR firmware did not restore audio.
+Direct 24 MHz MCLK is not the nominal 256-times-48-kHz clock and is not
+a validated production clock configuration.
+Codec register writes use the SDR driver's bounded recovery pattern: report
+the error, release the I2C bus with up to nine clock pulses and a STOP,
+reinitialize the controller, and retry once. A second failure aborts audio
+initialization; the serial status retains the last register/error even if
+recovery succeeds.
+The WM8960 transport uses the SDR project's TX and left-channel RX PIO
+programs with aligned 2048-frame circular buffers and RP2350 endless DMA.
+It does not use Arduino I2S/AudioBufferManager, linked DMA buffer lists, or
+audio DMA interrupts. PIOProgram allocates state machines alongside existing
+Arduino users. The TX divider is calculated from the existing system clock
+rather than changing it after USB/Bluetooth startup.
+The `.pio.h` headers are checked in, so Arduino IDE needs no CMake or assembler
+step. To regenerate them using Arduino-Pico's installed `pioasm`, run
+`pioasm -o c-sdk main/wm8960_i2s_tx.pio main/wm8960_i2s_tx.pio.h`
+and the equivalent command for `wm8960_i2s_rx`.
+The bundled TFT_eSPI RP2 `dmaWait()` checks `DMA_Enabled` before waiting,
+matching `dmaBusy()`. Without that guard, touch reads with display DMA disabled
+can wait forever on default channel 0 after audio claims it for endless DMA.
+Arduino IDE may use a separate installed TFT_eSPI rather than this bundled
+copy. Its `Processors/TFT_eSPI_RP2040.c` must have the same
+`if (!DMA_Enabled) return;` guard at the start of `TFT_eSPI::dmaWait()`.
+An unpatched copy can cause a startup watchdog at `WD S:11` (touch handling).
+Hardware testing with the PIO transport and this guard passed Bluetooth/paddle
+operation up to 49 WPM and touch input. USB speaker and microphone now carry
+recognizable audio, but both still have audible fuzzy/noisy distortion.
+Subsequent packet-deadline servicing tests produced clean PC speaker playback
+with stable keyer muting; microphone quality improved, with possible residual
+speech-start/stop transients still under investigation. Longer-duration
+stability remains to be validated. The revised codec startup sequence below
+passed three consecutive user-tested cold starts with audio and controls working.
+USB playback feedback tracks the combined TinyUSB, PCM, and DMA output queues,
+not TinyUSB's FIFO alone. A 64-packet smoothing filter targets 768 queued frames,
+adjusting the requested host rate by at most 0.25 sample per millisecond around
+48 samples/ms. Playback primes before consuming a new stream.
+TinyUSB's event hook immediately pends Arduino-Pico's existing USB task IRQ;
+the core's normal 1 ms timer remains a fallback. This reduces ISO endpoint
+rearming latency without calling the task inside the USB hardware interrupt
+or bypassing the core USB mutex.
+In hardware retesting, combined-queue feedback alone did not remove puffing.
+Adding immediate USB-task wakeup produced clean spoken-video playback with
+zero missing playback frames and zero microphone short packets; the filtered
+playback queue stayed near its 768-frame target. BT/paddles and tone muting
+remained stable during that test.
+Capture drains larger I2S batches, primes a four-millisecond cushion, and
+supplies 47/48/49-frame USB packets according to queue occupancy. Serial status
+reports playback missing frames and capture short packets to distinguish
+buffer starvation from analogue clipping or I2S signal problems.
+RX DMA ring draining runs exclusively in the USB microphone packet callback,
+not the foreground keyer loop, so display/Bluetooth delays do not starve
+capture packets. No blocking I2C, serial, or display operations run in that
+callback. Speaker packet callbacks also drain playback and render output,
+so incoming USB audio can keep the DMA ring fed during foreground delays.
+Foreground rendering remains available for standalone keyer tones. Both
+renderer paths are serialized by the core USB mutex.
+The microphone input PGA remains at +6.75 dB (register value 0x20).
+ADC digital gain remains 0 dB.
+While keying, PC playback is suppressed in the codec output
+and microphone packets sent to the PC contain silence. Both USB streams
+continue consuming samples. Muting spans letter and word gaps and releases
+after seven dit lengths without another tone, using the speed at tone start
+(including command-mode speed and QRSS dit duration). Each new tone extends
+the mute interval. Both USB directions fade out over 5 ms when muting begins
+and fade back in over 5 ms after the hold expires. A new tone during fade-in
+smoothly reverses the fade. Local keyer tones are not attenuated; PC playback
+briefly mixes with the tone during fade-out, with saturation to prevent clipping
+wraparound. Host mute/volume settings are not changed.
+For timing diagnosis, the last 128 software key-state transitions are retained
+without serial output during keying. Reopening the diagnostic serial port
+(CDC2 when the secondary terminal is enabled, otherwise CDC1) prints
+`[TIMING] time_us,set_wpm,element_dits,down` records. Hold one paddle to generate
+continuous dits or dahs, release it, then read the records. For consecutive dits,
+actual element WPM is 2,400,000 divided by the average down-to-down period in
+microseconds (4,800,000 for dahs). This includes key-up spacing, but not
+letter/word spacing; a PARIS test is needed for overall text WPM.
+These timestamps measure software keying, not physical GPIO or codec edges.
+Continuous-paddle dit measurements with audio running: set 20 WPM measured
+19.902 WPM (60.108 ms down, 60.486 ms up); set 49 WPM measured 49.417 WPM
+(24.116 ms down, 24.450 ms up). Each recording contained 64 dits.
+A separate set-6-WPM test measured 5.993 WPM across 29 complete dit cycles
+(200.105 ms down, 200.338 ms up), with codec audio initialization failed
+during that test.
+Keyboard/PARIS text rate and physical output timing remain unmeasured.
+Pico DOUT connects to `I2S_DAC` (header pin 13), and Pico DIN connects to
+`I2S_ADC` (header pin 14). The MCLK_RX/TX jumper routes the oscillator clock
+to the header; it does not select the I2S data direction.
+Use the display-profile pin definitions as the source of truth for your wiring.
+Codec control transfers use 100 kHz I2C, including after bus recovery, to
+improve startup signalling margin. DAC unmute completes before the PIO I2S
+clocks start; the DMA output ring is initialized to silence. Each control
+transfer has an explicit 5 ms timeout. Recovery uses open-drain
+clock pulses, waits up to 500 us for SCL to rise, and checks that both lines
+are released before retrying once. Failures remain explicit; reconnecting
+serial reports the last failing register, transfer duration, and bus levels.
+Reducing I2C speed alone did not eliminate the unmute failure. Completing
+unmute before I2S startup then passed upload startup and three cold starts;
+the final serial check reported audio ready with no recorded I2C error.
+The I2C controller is selected from the codec SDA/SCL pins. GPIO20/21 use
+`Wire` (I2C0) and can share the expander/compass bus. If sharing an I2C
+controller, use the same SDA/SCL pair as the other devices.
+I2S LRCLK must be BCLK+1, and all four I2S pins must fit one PIO GPIO window
+(GPIO0-31 or, on RP2350B, GPIO16-47). Avoid conflicts with display, touch,
+keyer, and other hardware; GPIO16/17 are used by Waveshare resistive touch.
+
+Enable `FEATURE_WM8960_USB_AUDIO` in
+`main/keyer_features_and_options_pico.h`. The project compiles TinyUSB's audio
+class driver as an application class driver only when this option is enabled,
+so no Arduino-Pico core rebuild or TinyUSB force-include flags are required.
+It also compiles a two-port CDC driver in place of the core's single-port
+driver and the MIDI driver in place of the core's weak MIDI stubs.
+The asynchronous audio endpoints reserve 49 sample frames per USB millisecond
+(196 bytes stereo playback, 98 bytes mono capture), allowing clock variation
+around 48 kHz and Windows UAC2 driver startup.
+The composite USB layout includes the built-in CDC
+console, a second CDC interface, MIDI, USB speaker playback, and USB microphone
+capture. The second CDC and MIDI descriptors are reserved for future K3NG
+WinKeyer/MIDI application routing; those application channels are not wired up
+by this audio change. USB disconnects and reconnects once during startup to
+install the composite descriptors, so a serial monitor may need to reconnect.
+The codec must be connected and initialize successfully for audio to work.
+Audio is serviced during keyer timing waits as well as the main loop, so CW
+elements continue generating PCM samples while keying. Opening the primary
+serial port reports whether codec initialization succeeded. USB playback FIFO
+access uses Arduino-Pico's USB mutex to avoid interrupt-time stream-reset
+deadlocks.
+The serial status includes DMA progress in units of 128 frames, polled from
+ring positions rather than counted by interrupt callbacks. Progress can
+undercount if servicing is delayed by a complete ring revolution.
+For isolated crash testing, disable `FEATURE_MCP23017_EXPANDER`, `FEATURE_GPS`,
+`FEATURE_COMPASS`, `FEATURE_BT_KEYBOARD`, `USE_CORE1`, and
+`USE_CONNECT_ON_CORE1` in the active display profile. With both core-1 options
+disabled, the Arduino shim does not launch a second application core.
+The current isolated wiring uses BCLK18, LRCLK19, DOUT6, DIN7, SDA20/SCL21,
+direct paddle GPIO2/3, straight-key GPIO4, TX14, and PTT22.
+Bluetooth keyboard, core-1 GPS/background Bluetooth connection, and compass
+were re-enabled for integration testing. GPS/compass are currently disabled
+again to isolate the BT/audio crash; Bluetooth and core 1 remain enabled.
+GPS RX remains GPIO5 at 38400 baud; the compass uses SDA20/SCL21 when enabled.
+MCP23017 remains disabled. Direct paddles are now left GPIO3/right GPIO2,
+with straight key GPIO4 and PTT22 unchanged. Paddle audio began
+working during DAC-header probing and continued after probe removal; an
+intermittent connection is suspected, not a confirmed firmware root cause.
+Routine audio-stage and post-audio startup messages are suppressed on the LCD.
+Initialization failures and retained crash diagnostics remain visible.
+The sketch-local RP2 USB device driver also carries the SDR project's TinyUSB
+ISO-reactivation backport: an active transfer is aborted before Windows reopens
+an audio streaming interface. Without this build-overlay fix, the core can panic
+with `ep ... was already available` during format selection or stream restart.
+Temporary timeout diagnostics display `WD S:... R:... T:...` separately from
+HardFault `LR`/panic diagnostics. R/T are DMA completion counts modulo 64.
+Stage 1 is initialization, 2 is initialization complete, 3 is serial status,
+4 is control initialization, 5 is USB playback, 6 is I2S capture, 7 is I2S
+rendering, and 8 means audio service returned to the keyer. The second row
+retains the last USB trace and interface/alternate-setting request; those are
+not fault addresses.
+Additional keyer checkpoints are 9 (Bluetooth initialization), 10 (serial/keying),
+11 (touch), 12 (Bluetooth status/events), 13 (keyboard processing),
+14 (configuration/memory maintenance), and 15 (display and remaining services).
+Calls to audio service within these operations can replace their checkpoints.
+Reopening the primary CDC serial port with DTR asserted also reports accepted
+tone starts, the last tone frequency, tone frames submitted to I2S, and the
+four I2S GPIO functions. This distinguishes missing tone generation from
+pin reassignment or codec/output-path silence.
+Serial status also samples LRCLK transitions over 2 ms and reports cumulative
+USB playback bytes and peak playback/ADC sample magnitudes since boot.
+The brief polling test checks GPIO clock activity, not precise clock frequency
+or the signal reaching the codec.
 
 - Mike K7MDL
 

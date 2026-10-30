@@ -6,7 +6,7 @@
 #endif
 
 #define CODE_VERSION "V:K7MDL-2026.9.15"
-#define eeprom_magic_number 44          // you can change this number to have the unit re-initialize EEPROM
+#define eeprom_magic_number 45          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -125,8 +125,6 @@
     #define USE_MAIN_TASK // runs Main loog on Core 0 (only)
     #define USE_GPS_TASK // run the Serial GPS in a separate task. Can run in core 1 or 0.
     //#define SCAN_ONCE   // for ESP32 only, limits scan cycle to startup only, best for keyboards that reconnect with scannning (K380, Rii)
-    //#define FEATURE_SINEWAVE_SIDETONE
-    //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     #define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3
@@ -225,8 +223,6 @@
     //#define USE_TOUCH_TASK  // run check_touch_buttons event handler in a task
     //#define USE_BT_TASK 
     //#define USE_MAIN_TASK
-    //#define FEATURE_SINEWAVE_SIDETONE
-    //#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
     //#define USE_WIRE1 // used to avoid conflict with i2c touch which grabs i2c bus 0 first.
     //#define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     //#define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3

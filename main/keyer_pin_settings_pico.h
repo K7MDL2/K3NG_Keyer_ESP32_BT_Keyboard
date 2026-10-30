@@ -34,6 +34,44 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 //#define M5STACK_CORE2 // provides sound and LCD touchscreen in one module
 
 #if defined (FEATURE_TFT_PICO_320x480_RES_LCD)
+  #ifdef FEATURE_WM8960_USB_AUDIO
+    // WM8960 defaults for this display profile; edit to match the codec wiring.
+    #ifndef WM8960_I2C_SDA_PIN
+      #ifdef USE_WIRE1
+        #define WM8960_I2C_SDA_PIN 16
+      #else
+        #define WM8960_I2C_SDA_PIN 20
+      #endif
+    #endif
+    #ifndef WM8960_I2C_SCL_PIN
+      #ifdef USE_WIRE1
+        #define WM8960_I2C_SCL_PIN 17
+      #else
+        #define WM8960_I2C_SCL_PIN 21
+      #endif
+    #endif
+    #ifndef WM8960_I2S_BCLK_PIN
+      #define WM8960_I2S_BCLK_PIN 18
+    #endif
+    #ifndef WM8960_I2S_LRCLK_PIN
+      #define WM8960_I2S_LRCLK_PIN 19
+    #endif
+    #ifndef WM8960_I2S_DOUT_PIN
+      #define WM8960_I2S_DOUT_PIN 6
+    #endif
+    #ifndef WM8960_I2S_DIN_PIN
+      #define WM8960_I2S_DIN_PIN 7
+    #endif
+    #ifndef WM8960_I2C_ADDRESS
+      #define WM8960_I2C_ADDRESS 0x1A
+    #endif
+    #ifndef WM8960_MCLK_HZ
+      #define WM8960_MCLK_HZ 24000000UL  // Waveshare Audio Board onboard oscillator
+    #endif
+    #ifndef WM8960_USE_PLL
+      #define WM8960_USE_PLL 1
+    #endif
+  #endif
     // For the BT Connected LED, when runnig in a task on Core 1, the LED_BUILTIN cannot be used
     // Instead choose any other CPU GPIO. 
     #ifdef USE_CORE1  
@@ -41,10 +79,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #else
       #define bt_keyboard_LED    0 //LED_BUILTIN   //LED_BUILTIN  //64 // indicates BT keyboard connection status - GPIO17 is Blue LED
     #endif
-    #if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
+    //#if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
       #define I2CDEV_SDA_PIN  20   // override the sdkconfig pair of 21, 22
       #define I2CDEV_SCL_PIN  21
-    #endif
+    //#endif
 
     #ifdef FEATURE_MCP23017_EXPANDER
       #define MCP23X17_ADDR 0x27      
@@ -55,8 +93,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
         #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY
     #else
-      #define paddle_left      2 // Must have pullup internal or external
-      #define paddle_right     3 // Must have pullup internal or external.
+      #define paddle_left      3 // Must have pullup internal or external
+      #define paddle_right     2 // Must have pullup internal or external.
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  4
       #endif //FEATURE_STRAIGHT_KEY          
@@ -70,12 +108,16 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #define TOUCH_Y1        3600  // raw Y span
     #define TOUCH_BITS      (0x05) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
     #define potentiometer   26 // ADC0 = Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-    #define tx_key_line_1    6 // (high = key down/tx on)
-    #define tx_key_line_2   14  
-    #define sidetone_line   42 // 18  //26 connect a passive buzzer for sidetone   42 is RP2350B
+    #define tx_key_line_1   14 // (high = key down/tx on)
+    #define tx_key_line_2    0  
+    #if defined(FEATURE_WM8960_USB_AUDIO)
+      #define sidetone_line  0
+    #else
+      #define sidetone_line 42 // connect a passive buzzer for GPIO sidetone
+    #endif
     #define audio_enable     0  // audio amp enable - 0 for Pico config
-    #define ptt_tx_1        19  // 22 for PTT ("push to talk") lines, GPIO22 is RED LED
-    #define ptt_tx_2         7  //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
+    #define ptt_tx_1        22 //for PTT ("push to talk") lines, GPIO22 is RED LED
+    #define ptt_tx_2         0 //7  //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 
     #define tx_pause_pin     0 
     // free pins are 7, 14, 16 (UART1 TX), 27 and more on RP2350B boards.

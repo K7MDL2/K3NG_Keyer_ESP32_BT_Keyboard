@@ -594,6 +594,8 @@ bool TFT_eSPI::dmaBusy(void) {
 ***************************************************************************************/
 void TFT_eSPI::dmaWait(void)
 {
+  if (!DMA_Enabled) return;
+
   while (dma_channel_is_busy(dma_tx_channel));
 
 #if !defined (RP2040_PIO_INTERFACE)

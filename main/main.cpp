@@ -1007,7 +1007,6 @@ Recent Update History
 
 		2019.02.05.01
 			Fixed bug in command mode K command when in ultimatic mode (Thanks, Rich)
-			Under Development: FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1 and FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3 in keyer_features_and_options_test.h
 
 		2019.02.05.02
 			Improvement in how K1EL Winkey emulation buffered speed command speed changing and clearing is handled
@@ -1605,6 +1604,10 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#include "keyer_settings.h"
 #endif
 
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+	#include "wm8960_audio.h"
+#endif
+
 #ifdef ARDUINO_ARCH_ESP32
 	#include "esp32-hal-log.h"
 #endif
@@ -1684,9 +1687,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 			uint8_t     keys[MAX_KEY_DATA_SIZE];
 			uint8_t     state;
 			KeyModifier modifier;
+			uint16_t consumer_usage = 0;
 		};
 
 		KeyInfo inf;
+		uint8_t bt_audio_modifiers = 0;
 		//bool new_bt_key = false;
 		#ifdef USE_BLE
 			bool use_BLE = true;
@@ -1991,7 +1996,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 // Variables and stuff
 const uint8_t grid_len_max = 9;
-struct config_t {  // 120 bytes total
+struct config_t {
 
 	uint8_t paddle_mode;
 	uint8_t keyer_mode;
@@ -2049,7 +2054,11 @@ struct config_t {  // 120 bytes total
 		// 44 bytes
 
 	int sidetone_volume;
-		// 2 bytes
+	uint8_t usb_play_volume;
+	uint8_t usb_mic_volume;
+	bool sidetone_muted;
+	bool usb_play_muted;
+	bool usb_mic_muted;
 
 	// GPS and Compass
 	uint8_t grid_digits;  // length of gridsquare to display
@@ -2073,6 +2082,13 @@ struct config_t {  // 120 bytes total
 		//40 bytes
 	#endif
 } configuration;
+
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
+void print_audio_volumes(PRIMARY_SERIAL_CLS *port);
+bool apply_audio_levels();
+void audio_consumer_key(uint16_t usage, uint8_t modifiers);
+#endif
 
 // Forward declarations to make esp-idf happy
 
@@ -2136,9 +2152,7 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 void display_scroll_print_char(char charin);
 void popup(bool show);
-void sinewave_interrupt_compute();
 void initialize_sinewave_generator();
-void initialize_tonsin();
 void myDelay(uint32_t _ms);
 void setup_esp();
 int print_memory(byte memory_number, char *mem_string);
@@ -7837,6 +7851,9 @@ void send_dah(){
 
 void tx_and_sidetone_key (int state)
 {
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		const bool previous_key_state = key_state;
+	#endif
 
 	#if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
 
@@ -7981,6 +7998,24 @@ void tx_and_sidetone_key (int state)
 			}
 		}
 	#endif //FEATURE_PTT_INTERLOCK
+
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (previous_key_state != static_cast<bool>(key_state)) {
+			uint16_t timing_wpm = configuration.wpm;
+			#ifdef FEATURE_FARNSWORTH
+				if (sending_mode == AUTOMATIC_SENDING &&
+				    configuration.wpm_farnsworth > timing_wpm) {
+					timing_wpm = configuration.wpm_farnsworth;
+				}
+			#endif
+			if (keyer_machine_mode == KEYER_COMMAND_MODE) {
+				timing_wpm = configuration.wpm_command_mode;
+			}
+			wm8960_audio_trace_key_edge(key_state,
+			    being_sent == SENDING_DIT ? 1 :
+			    being_sent == SENDING_DAH ? 3 : 0, timing_wpm);
+		}
+	#endif
 
 	#if defined(FEATURE_INTERNET_LINK)
 		link_key(state);
@@ -10389,11 +10424,6 @@ void service_dit_dah_buffers()
 
 void beep()
 {
-	// #if defined(FEATURE_SINEWAVE_SIDETONE)
-	//   tone(sidetone_line, hz_high_beep);
-	//   myDelay(200);
-	//   noTone(sidetone_line);
-	// #else
 	s_tone(sidetone_line, hz_high_beep, 200);
 }
 
@@ -13564,6 +13594,10 @@ void print_serial_help(PRIMARY_SERIAL_CLS * port_to_use,byte paged_help){
 	#if !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 		if (paged_help) {serial_page_pause(port_to_use,10);}
 		port_to_use->println(F("\r\n\\:\tExtended CLI commands"));
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			port_to_use->println(F("\t\taudio - show saved device audio levels"));
+			port_to_use->println(F("\t\tusbplay|usbmic|sidetone [0..100|+|-|MUTE|UNMUTE|TOGGLE]"));
+		#endif
 		port_to_use->println(F("\t\teepromdump\t\t- do a byte dump of EEPROM for troubleshooting"));
 		port_to_use->println(F("\t\tsaveeeprom <filename>\t- store EEPROM in a file"));
 		port_to_use->println(F("\t\tloadeeprom <filename> \t- load into EEPROM from a file"));
@@ -13973,6 +14007,143 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
 
 //---------------------------------------------------------------------
 
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+int audio_volume(AudioVolumeTarget target) {
+	switch (target) {
+		case AudioVolumeTarget::Playback: return configuration.usb_play_volume;
+		case AudioVolumeTarget::Sidetone: return configuration.sidetone_volume;
+		case AudioVolumeTarget::Microphone: return configuration.usb_mic_volume;
+	}
+	return 0;
+}
+
+bool audio_muted(AudioVolumeTarget target) {
+	switch (target) {
+		case AudioVolumeTarget::Playback: return configuration.usb_play_muted;
+		case AudioVolumeTarget::Sidetone: return configuration.sidetone_muted;
+		case AudioVolumeTarget::Microphone: return configuration.usb_mic_muted;
+	}
+	return false;
+}
+
+bool apply_audio_levels() {
+	return wm8960_audio_set_levels(
+	    configuration.sidetone_volume, configuration.usb_play_volume,
+	    configuration.usb_mic_volume, configuration.sidetone_muted,
+	    configuration.usb_play_muted, configuration.usb_mic_muted);
+}
+
+void set_audio_volume(AudioVolumeTarget target, int level, bool muted) {
+	switch (target) {
+		case AudioVolumeTarget::Playback:
+			configuration.usb_play_volume = level;
+			configuration.usb_play_muted = muted;
+			break;
+		case AudioVolumeTarget::Sidetone:
+			configuration.sidetone_volume = level;
+			configuration.sidetone_muted = muted;
+			break;
+		case AudioVolumeTarget::Microphone:
+			configuration.usb_mic_volume = level;
+			configuration.usb_mic_muted = muted;
+			break;
+	}
+	if (apply_audio_levels()) {
+		config_dirty = 1;
+	}
+}
+
+void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
+	port->printf("USBPLAY %u%% %s\r\nSIDETONE %d%% %s\r\nUSBMIC %u%% %s\r\n",
+	    configuration.usb_play_volume,
+	    configuration.usb_play_muted ? "MUTED" : "ON",
+	    configuration.sidetone_volume,
+	    configuration.sidetone_muted ? "MUTED" : "ON",
+	    configuration.usb_mic_volume,
+	    configuration.usb_mic_muted ? "MUTED" : "ON");
+}
+
+int step_audio_volume(int level, bool increase) {
+	// +/-2 dB in linear amplitude, rounded to the saved integer percentage.
+	if (increase) {
+		return constrain(max(level + 1, (level * 1259 + 500) / 1000), 0, 100);
+	}
+	return constrain(min(level - 1, (level * 794 + 500) / 1000), 0, 100);
+}
+
+void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
+	if (usage != 0xE2 && usage != 0xE9 && usage != 0xEA) {
+		return;
+	}
+	// Combined prefixes are deliberately ignored rather than changing two paths.
+	const bool shift = (modifiers & 0x22) != 0;
+	const bool ctrl = (modifiers & 0x11) != 0;
+	if ((modifiers & 0xCC) || (shift && ctrl)) {
+		return;
+	}
+	const AudioVolumeTarget target = ctrl ? AudioVolumeTarget::Microphone :
+	    shift ? AudioVolumeTarget::Sidetone : AudioVolumeTarget::Playback;
+	if (usage == 0xE2) {
+		set_audio_volume(target, audio_volume(target), !audio_muted(target));
+	} else {
+		const int level = step_audio_volume(audio_volume(target), usage == 0xE9);
+		set_audio_volume(target, level, false);
+	}
+}
+
+#if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
+bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	if (command == "AUDIO") {
+		print_audio_volumes(port);
+		return true;
+	}
+	const int separator = command.indexOf(' ');
+	const String name = separator < 0 ? command : command.substring(0, separator);
+	AudioVolumeTarget target;
+	if (name == "USBPLAY") {
+		target = AudioVolumeTarget::Playback;
+	} else if (name == "SIDETONE") {
+		target = AudioVolumeTarget::Sidetone;
+	} else if (name == "USBMIC") {
+		target = AudioVolumeTarget::Microphone;
+	} else {
+		return false;
+	}
+	String value = separator < 0 ? "" : command.substring(separator + 1);
+	value.trim();
+	int level = audio_volume(target);
+	bool muted = audio_muted(target);
+	if (value == "MUTE") {
+		muted = true;
+	} else if (value == "UNMUTE") {
+		muted = false;
+	} else if (value == "TOGGLE") {
+		muted = !muted;
+	} else if (value == "+" || value == "-") {
+		level = step_audio_volume(level, value == "+");
+		muted = false;
+	} else if (value.length()) {
+		bool valid = value.length() <= 3;
+		for (unsigned int index = 0; index < value.length(); ++index) {
+			valid = valid && value[index] >= '0' && value[index] <= '9';
+		}
+		if (!valid || value.toInt() > 100) {
+			port->println(F("Error: use 0..100, +, -, MUTE, UNMUTE or TOGGLE"));
+			return true;
+		}
+		level = value.toInt();
+		muted = false;
+	}
+	if (value.length()) {
+		set_audio_volume(target, level, muted);
+	}
+	print_audio_volumes(port);
+	return true;
+}
+#endif
+#endif
+
 #if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 {
@@ -14025,6 +14196,9 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 	if (userinput.startsWith("WIFI ")) { cli_wifi(port_to_use, userinputNoUpper.substring(5)); return; }
  else { userinput.toUpperCase();}
 #endif
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (cli_audio_volume(port_to_use, userinput)) { return; }
+	#endif
 	if (userinput.startsWith("EEPROMDUMP")){cli_eeprom_dump(port_to_use);return;}
 	if (userinput.startsWith("TIMING")){cli_timing_print(port_to_use);return;}
 	if (userinput.startsWith("PL ")){cli_timing_command(port_to_use,userinput.substring(3),COMMAND_PL);return;}
@@ -14327,6 +14501,12 @@ void sd_card_load_eeprom_from_file(PRIMARY_SERIAL_CLS * port_to_use,String filen
 	sdfile.close();
 	port_to_use->println(F("\r\nReading settings from eeprom."));
 	read_settings_from_eeprom();
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (!apply_audio_levels()) {
+			port_to_use->println(F("Error: loaded audio levels are invalid"));
+			return;
+		}
+	#endif
 	port_to_use->println(F("Done."));
 }
 
@@ -16809,12 +16989,9 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
 	port_to_use->print(configuration.hz_sidetone,DEC);
 	port_to_use->println(F(" hz"));
 
-	#if defined(FEATURE_SINEWAVE_SIDETONE)
-		 port_to_use->print(F("Sidetone Volume: "));
-		 port_to_use->print(map(configuration.sidetone_volume,sidetone_volume_low_limit,sidetone_volume_high_limit,0,100));
-		 port_to_use->println(F("%"));
-		 port_to_use->println(configuration.sidetone_volume);
-	#endif //FEATURE_SINEWAVE_SIDETONE
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		print_audio_volumes(port_to_use);
+	#endif
 
 	#ifdef FEATURE_SIDETONE_SWITCH
 		port_to_use->print(F("Sidetone Switch: "));
@@ -19516,7 +19693,12 @@ void initialize_keyer_state(){
 	configuration.cli_mode = CLI_NORMAL_MODE;
 	configuration.wpm_command_mode = initial_command_mode_speed_wpm;
 	configuration.ptt_buffer_hold_active = 0;
-	configuration.sidetone_volume = sidetone_volume_low_limit + ((sidetone_volume_high_limit - sidetone_volume_low_limit) / 2);
+	configuration.sidetone_volume = 100;
+	configuration.usb_play_volume = 100;
+	configuration.usb_mic_volume = 100;
+	configuration.sidetone_muted = false;
+	configuration.usb_play_muted = false;
+	configuration.usb_mic_muted = false;
 	configuration.ptt_disabled = 0;
 	configuration.beacon_mode_on_boot_up = 0;
 	configuration.cw_echo_timing_factor = 100 * default_cw_echo_timing_factor;
@@ -19691,9 +19873,6 @@ void initialize_eeprom(){
 			EEPROM.format();//sp5iou 20180328 to reinitialize / format EEPROM
 	 #endif
 	 write_settings_to_eeprom(1);
-	#if defined(FEATURE_SINEWAVE_SIDETONE)
-		 initialize_tonsin();
-	#endif
 	beep_boop();
 	myDelay(100);
 	boop_beep();
@@ -19967,6 +20146,9 @@ void bt_pairing_passkey_handler(uint32_t passkey) {
 
 #ifdef FEATURE_BT_KEYBOARD  // these are used by both ESP32 and Pico
 void keyboard_lost_connection_handler() {
+		#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+			bt_audio_modifiers = 0;
+		#endif
 		//debug_serial_port->println(F("\n====> Lost connection with keyboard <===="));
 		BT_Keyboard_Lost = true;
 		if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
@@ -19994,14 +20176,16 @@ void keyboard_connected_handler() {
 
 // Consumer keys are the special media keys on most modern keyboards (mute/etc.)
 void ckb(void *cbdata, int key) {
-		bool state = (bool)cbdata;
-		debug_serial_port->printf("Consumer: %02x %s \n", key, state ? "DOWN" : "UP");
-		inf.size = 8;  // fake the size to pass through the
-		inf.state = state;
-		if (state) inf.keys[2] = key;
-		else inf.keys[2] = 0;
-		//new_bt_key = true;
-		last_active_time = millis();  // reset backlight timeout timer
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			if (cbdata && (key == 0xE2 || key == 0xE9 || key == 0xEA)) {
+				KeyInfo event = {};
+				event.consumer_usage = static_cast<uint16_t>(key);
+				event.keys[0] = bt_audio_modifiers;
+				event.state = 1;
+				bt_queueadd(event);
+				last_active_time = millis();
+			}
+		#endif
 }
 
 // We get make/break for every key which lets us hold modifier keys while a regular key is depressed
@@ -20010,6 +20194,15 @@ void kb(void *cbdata, int key) {
 		static bool _holding = false;
 		static uint8_t _heldKey = 0;
 		bool state = (bool) cbdata;
+		inf.consumer_usage = 0;
+		if (key >= 0xE0 && key <= 0xE7) {
+			const uint8_t mask = 1u << (key - 0xE0);
+			if (state) {
+				bt_audio_modifiers |= mask;
+			} else {
+				bt_audio_modifiers &= ~mask;
+			}
+		}
 		inf.size = 8;  // fake the size to match the ESP32 bt_keyboard class string info to pass through the key value translation code
 		inf.state = state;
 		last_active_time = millis();   // reset backlight tomeout timer
@@ -20156,10 +20349,19 @@ void initialize_bt_keyboard(){  // init the BT 4.2 stack for ESP32-WROOM-32 for 
 				// Consumer keys are the special function ones like "mute" or "home"
 			bt_keyboard.onConsumerKeyDown(ckb, (void *)true);
 			bt_keyboard.onConsumerKeyUp(ckb, (void *)false);
+			#if defined(FEATURE_WM8960_USB_AUDIO) && defined(FEATURE_DISPLAY)
+				lcd_center_print_timed("BT: saved address", 1, 2000);
+			#endif
 			check_last_bt_addr_in_EEPROM(); // See about reconnecting
 			bt_keyboard.setPasskeyCB(bt_pairing_passkey_handler);
+			#if defined(FEATURE_WM8960_USB_AUDIO) && defined(FEATURE_DISPLAY)
+				lcd_center_print_timed("BT: stack start", 1, 2000);
+			#endif
 			if (use_BLE) bt_keyboard.begin(true);   // BLE
 			else bt_keyboard.begin();  // BT Classic
+			#if defined(FEATURE_WM8960_USB_AUDIO) && defined(FEATURE_DISPLAY)
+				lcd_center_print_timed("BT: stack ready", 1, 2000);
+			#endif
 
 			// BTstack's default page timeout (0x6000, ~15.4s) is too short for a
 			// blind reconnect (no clock offset from inquiry, since a bonded K380
@@ -20301,11 +20503,23 @@ void myDelay(uint32_t _ms)
 			vTaskDelay(pdMS_TO_TICKS(_ms));
 		}
 	#else
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			const uint32_t audio_delay_start = millis();
+			do {
+				wm8960_audio_service();
+				if (_ms != 0) {
+					delay(1);
+				} else {
+					yield();
+				}
+			} while (millis() - audio_delay_start < _ms);
+		#else
 		if (_ms == 0) {
 			yield();
 		} else {
 			delay(_ms);
 		}
+		#endif
 	#endif
 }
 
@@ -25008,7 +25222,16 @@ void so2r_command() {
 // eventually replace tone() with a better adjustable volume version
 void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration_ms)
 {
-	#if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		(void)sidetone_line_pin_num;
+		const uint32_t tone_wpm = keyer_machine_mode == KEYER_COMMAND_MODE
+		    ? configuration.wpm_command_mode : configuration.wpm;
+		const uint32_t mute_release_ms = speed_mode == SPEED_NORMAL
+		    ? (8400UL + (tone_wpm ? tone_wpm : 1) - 1) /
+		          (tone_wpm ? tone_wpm : 1)
+		    : 7000UL * qrss_dit_length;
+		wm8960_audio_start_tone(frequency, duration_ms, mute_release_ms);
+	#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 		#ifdef FEATURE_M5STACK_CORE2
 				M5.Speaker.tone(frequency, configuration.hz_sidetone);
 				myDelay(duration_ms);
@@ -25030,7 +25253,10 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 
  void s_noTone(uint8_t sidetone_line_pin_num)
  {
-		#if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			(void)sidetone_line_pin_num;
+			wm8960_audio_stop_tone();
+		#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 			#ifdef FEATURE_M5STACK_CORE2
 				if (M5.Speaker.isPlaying(0))
 				{
@@ -25046,137 +25272,6 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 		#endif
  }
 
-
-// DL2DBG contributed code (adapted into code by Goody K3NG)
-// Based on https://forum.arduino.cc/index.php?topic=446209.15
-
-
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-#include <driver/dac_oneshot.h>
-#include <driver/dac_cosine.h>
-#include <driver/dac_continuous.h>
-
-const float pi = 3.14159265359;  // Define Pi as a constant
-const float T = 100;  // sample time in microseconds
-float freq = 600;  // frquency of tone in Hz
-float omega = 2*pi*1;  // part of sine wave conversion factor
-const float A = 490;  // amplitude
-// next line initializes oscillation with amplitude A
-float a[]={(float) 0.0, ((float) A) * (float) (sin(omega*T/1000000.0)), (float) 0.0};
-// c1 is the difference equation coefficient
-const float c1 = (8.0 - 2.0*pow(omega*T/1000000.0,2))/(4.0+pow(omega*T/1000000.0,2));
-const int resolution = 8;
-
-//#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
-
-void compute_sinetone(int hz, int volume){ //dl2dbg
-	omega = omega*hz;
-
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.detachInterrupt();
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.detachInterrupt();
-	#endif
-	a[0]= 0.0;
-	a[1]= volume*sin(omega*T/1000000.0);
-	a[2]= 0.0;
-	sinewave_interrupt_compute();
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.attachInterrupt(sinewave_interrupt_compute);
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.attachInterrupt(sinewave_interrupt_compute);
-	#endif
-}
-#endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
-
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-
-void sinewave_interrupt_compute(){ //dl2dbg
-	a[2] = c1 * a[1] - a[0];
-	a[0] = a[1] ;
-	a[1] = a[2] ;
-	dacWrite(sidetone_line, map( a[2],-512, 512, 0, 1000));
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.setPwmDuty(sidetone_line, map( a[2],-512, 512, 0, 1000));
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.setPwmDuty(sidetone_line, map( a[2],-512, 512, 0, 1000));
-	#endif
-}
-#endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-
-void initialize_tonsin(){ //dl2dbg
-
-	configuration.sidetone_volume = sidetone_volume_low_limit + ((sidetone_volume_high_limit - sidetone_volume_low_limit) / 2);
-	compute_sinetone(configuration.hz_sidetone,configuration.sidetone_volume);
-	ledcAttach(sidetone_line, configuration.hz_sidetone, 255);
-
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.initialize(T);  // set sample time for discrete tone signal
-		Timer1.pwm(sidetone_line, 0, T);
-		Timer1.attachInterrupt(sinewave_interrupt_compute);
-		Timer1.stop();
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.initialize(T);  // set sample time for discrete tone signal
-		Timer3.pwm(sidetone_line, 0, T);
-		Timer3.attachInterrupt(sinewave_interrupt_compute);
-		Timer3.stop();
-	#endif
-}
-#endif //FEATURE_SINEWAVE_SIDETONE
-//-------------------------------------------------------------------------------------------------------
-
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-void sinetone(uint8_t pin_dummy_variable, unsigned short freq){  //dl2dbg
-	static int last_freq;
-	static int last_volume;
-
-	if ((freq != last_freq) || (configuration.sidetone_volume != last_volume)){
-		compute_sinetone(freq,configuration.sidetone_volume);
-		last_freq = freq;
-		last_volume = configuration.sidetone_volume;
-	}
-
-	//delay (2); compute_sinetone(freq,sidetone_volume/4);
-	//delay (2); compute_sinetone(freq,sidetone_volume/2);
-	//compute_sinetone(freq,configuration.sidetone_volume);
-
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.restart();
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.restart();
-	#endif
-}
-#endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
-
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-void nosineTone(uint8_t pin_dummy_variable) {    // disable tone on specified pin, if any    dl2dbg
-	//delay (2); compute_sinetone(freq,sidetone_volume/2);
-	//delay (2); compute_sinetone(freq,sidetone_volume/4);
-	compute_sinetone(configuration.hz_sidetone,0);
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.stop();
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.stop();
-	#endif
-	//digitalWrite(sidetone_line,LOW);
-}
-
-#endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
 
 void debug_blink(){
 	#if defined(DEBUG_STARTUP_BLINKS)
@@ -25710,6 +25805,12 @@ void tft_backlight(int state) {
 							#ifdef ARDUINO_RASPBERRY_PI_PICO_W
 							else inf = bt_queuepop();							
 							#endif
+						#endif
+						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+							if (inf.consumer_usage) {
+								audio_consumer_key(inf.consumer_usage, inf.keys[0]);
+								continue;
+							}
 						#endif
 						myDelay(10);
 
@@ -27112,6 +27213,10 @@ void mainloop(void)
 		//debug_serial_port->print(F("."));
 		myDelay(0);
 
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			wm8960_audio_service();
+		#endif
+
 		#ifdef OPTION_WATCHDOG_TIMER
 			wdt_reset();
 		#endif  //OPTION_WATCHDOG_TIMER
@@ -27164,6 +27269,9 @@ void mainloop(void)
 				service_dit_dah_buffers();
 
 				#if defined(FEATURE_SERIAL)
+						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+							wm8960_audio_trace_keyer(10);
+						#endif
 						check_serial();
 						check_paddles();
 						service_dit_dah_buffers();
@@ -27185,6 +27293,9 @@ void mainloop(void)
 				#endif
 
 				#if defined(FEATURE_TOUCH_DISPLAY)
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(11);
+					#endif
 					#ifndef USE_TOUCH_TASK
 						check_touch_buttons();
 					#endif
@@ -27192,6 +27303,9 @@ void mainloop(void)
 				#endif
 
 				#ifdef FEATURE_BT_KEYBOARD
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(12);
+					#endif
 					BT_Keyboard_Status();
 					#ifndef USE_BT_TASK
 						check_bt_keyboard();// check for BT events before PS2 events
@@ -27199,6 +27313,9 @@ void mainloop(void)
 				#endif
 
 				#if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(13);
+					#endif
 					check_ps2_keyboard();
 				#endif
 
@@ -27217,6 +27334,9 @@ void mainloop(void)
 					service_usb();
 				#endif
 
+				#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+					wm8960_audio_trace_keyer(14);
+				#endif
 				check_for_dirty_configuration();
 
 				#ifdef FEATURE_DEAD_OP_WATCHDOG
@@ -27228,6 +27348,9 @@ void mainloop(void)
 				#endif
 
 				#ifdef FEATURE_DISPLAY
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(15);
+					#endif
 					check_paddles();
 					service_send_buffer(PRINTCHAR);
 					service_display();
@@ -27413,7 +27536,29 @@ void setup_esp()
 	initialize_buttons();
 	initialize_ps2_keyboard();
 	initialize_usb();
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (!apply_audio_levels()) {
+			debug_serial_port->println(F("Error: saved audio levels are invalid"));
+		}
+		#ifdef FEATURE_DISPLAY
+			if (!wm8960_audio_initialize([](const char *status) {
+				if (strncmp(status, "WM8960:", 7) == 0) {
+					return;
+				}
+				const byte row = (strncmp(status, "LR:", 3) == 0 ||
+				                  strncmp(status, "WD ", 3) == 0) ? 0 : 1;
+				lcd_center_print_timed(status, row, 2000);
+			})) {
+				lcd_center_print_timed("WM8960: init failed", 1, 2000);
+			}
+		#else
+			(void)wm8960_audio_initialize();
+		#endif
+	#endif
 	initialize_cw_keyboard();
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		wm8960_audio_trace_keyer(9);
+	#endif
 	initialize_bt_keyboard();
 	#if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
 			wifiConnect(configuration.wifissid,configuration.wifipassword);
