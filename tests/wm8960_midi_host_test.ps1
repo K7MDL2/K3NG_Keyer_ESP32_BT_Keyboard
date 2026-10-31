@@ -46,6 +46,8 @@ $encoderFunctions = @('audio_volume', 'step_audio_volume', 'set_audio_volume',
     'check_rotary_encoder') |
     ForEach-Object { Get-CppFunction $main $_ }
 $potGuard = [regex]::Match($main, '(?s)#if defined\(potentiometer\) && potentiometer == 0.*?#endif').Value
+$keyInterrupts = [regex]::Match($main, '(?s)static void left_paddle_intr_handler\(\).*?(?=\r?\n#endif // non ESP32 local pin interrupt setup)').Value
+if (!$keyInterrupts) { throw 'Local key interrupt initialization not found' }
 
 $mock = @'
 #include <algorithm>
@@ -191,6 +193,9 @@ template<class T> T min(T a, T b) { return std::min(a,b); }
 bool apply_audio_levels() { return true; }
 constexpr int LOW = 0, HIGH = 1, INPUT = 0, INPUT_PULLUP = 2;
 constexpr int KEYER_COMMAND_MODE = 1;
+#define FEATURE_STRAIGHT_KEY
+constexpr int paddle_left = 30, paddle_right = 31, pin_straight_key = 4;
+bool paddle_left_state = true, paddle_right_state = true, straight_key_state = true;
 int keyer_machine_mode = 0;
 int pin_values[48] = {};
 constexpr int CHANGE = 3;
@@ -482,6 +487,17 @@ int main() {
 #endif
   fresh();
   for (int &pin : pin_values) pin = HIGH;
+  init_GPIO_key_pins();
+  assert(pin_modes.back() == (std::array<int,2>{pin_straight_key, INPUT_PULLUP}));
+  assert(straight_key_state == HIGH);
+  pin_values[pin_straight_key] = LOW; straight_key_intr_handler();
+  assert(straight_key_state == LOW);
+  pin_values[pin_straight_key] = HIGH; straight_key_intr_handler();
+  assert(straight_key_state == HIGH);
+  pin_values[pin_straight_key] = LOW; init_GPIO_key_pins();
+  assert(straight_key_state == LOW);
+  pin_values[pin_straight_key] = HIGH;
+  pin_modes.clear(); interrupt_pins.clear();
   configuration.pot_activated = 1;
   initialize_potentiometer();
   assert(configuration.pot_activated == 0 && pin_modes.empty());
@@ -659,7 +675,7 @@ try {
         $mock + "`n" + $sine + "`n" + ($audioFunctions -join "`n") +
         "`n" + $header + "`n" + $midi + "`n" + $config +
         "`n" + $cli + "`n" + $potGuard + "`n" + $encoderMocks +
-        "`n" + $encoderDirection + "`n" + $encoderTable + "`n" + $encoderCapture +
+        "`n" + $keyInterrupts + "`n" + $encoderDirection + "`n" + $encoderTable + "`n" + $encoderCapture +
         "`n" + $encoder + "`n" + ($encoderFunctions -join "`n") + "`n" + $checks
     ) -Encoding ASCII
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"

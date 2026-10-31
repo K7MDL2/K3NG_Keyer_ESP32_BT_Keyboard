@@ -19262,7 +19262,9 @@ void display_heading(void) {
 			attachInterrupt(paddle_left, left_paddle_intr_handler, CHANGE);
 			attachInterrupt(paddle_right, right_paddle_intr_handler, CHANGE);
 			#ifdef FEATURE_STRAIGHT_KEY
+				pinMode(pin_straight_key, INPUT_PULLUP);
 				attachInterrupt(pin_straight_key, straight_key_intr_handler, CHANGE);
+				straight_key_state = digitalRead(pin_straight_key);
 			#endif
 	}
 #endif // non ESP32 local pin interrupt setup

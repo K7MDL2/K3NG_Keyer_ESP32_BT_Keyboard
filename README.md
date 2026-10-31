@@ -590,22 +590,16 @@ pass; physical encoder/menu testing remains pending.
 
 All items below are pending; order follows the requested worklist.
 
-1. MIDI application routing and wheel API are implemented from
-   `D:\Documents\GitHub\RP2350-SDR-CW-Interface`; test MIDI on hardware and
-   validate the physical encoder menu on hardware.
-2. The encoder menu reuses the existing quadrature decoder and speed handling;
-   verify control behavior and pin assignments on hardware.
-3. Test with GPS, MCP23017, and compass features enabled; resolve pin
+1. Test with GPS, MCP23017, and compass features enabled; resolve pin
    assignments and conflicts.
-4. Diagnose touch on the currently configured Pico display: normal touch
+2. Diagnose touch on the currently configured Pico display: normal touch
    operation requires first pressing just the right spot at the far-left
    center edge of the panel. Determine whether the cause is software or
    hardware.
-5. Test the straight key.
-6. Test Command mode using a single button.
-7. Add touch buttons for volume and mute controls, usable without a serial
+3. Test Command mode using a single button.
+4. Add touch buttons for volume and mute controls, usable without a serial
    terminal or keyboard.
-8. Port this project's Pico Bluetooth keyboard support into
+5. Port this project's Pico Bluetooth keyboard support into
    `D:\Documents\GitHub\RP2350-SDR-CW-Interface`.
 
 - Mike K7MDL
