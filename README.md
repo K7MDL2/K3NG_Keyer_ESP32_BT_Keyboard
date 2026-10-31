@@ -121,6 +121,7 @@ of the former 10..500 limits; those obsolete limits are removed.
 `configuration.hz_sidetone` still controls frequency.
 New `usb_play_volume`, `usb_mic_volume`, `sidetone_muted`, `usb_play_muted`, and
 `usb_mic_muted` fields are saved in the same EEPROM configuration structure.
+The MIDI port also adds the saved `midi_ptt_mode` field, defaulting to off.
 All levels default to 100%, with mute off. Sidetone 100% preserves the previous
 8192-peak tone amplitude; USB 100% preserves the previous USB gain. These are
 device-side linear-amplitude trims, combined with (not replacing) host USB
@@ -129,7 +130,7 @@ Headphone and speaker analogue output volumes are both 0x78 (-1 dB),
 8 dB above the earlier 0x70 setting; right-channel writes retain the paired
 volume-update bit (0x178).
 
-EEPROM magic is now 42 for Pico and 45 for ESP32 because the shared structure
+EEPROM magic is now 43 for Pico and 46 for ESP32 because the shared structure
 changed. **The first boot resets saved settings and initializes CW memories.**
 Bluetooth pairing/reconnection settings may need to be established again.
 Changes use the normal deferred EEPROM save when idle; allow at least the
@@ -318,9 +319,8 @@ The asynchronous audio endpoints reserve 49 sample frames per USB millisecond
 around 48 kHz and Windows UAC2 driver startup.
 The composite USB layout includes the built-in CDC
 console, a second CDC interface, MIDI, USB speaker playback, and USB microphone
-capture. The second CDC and MIDI descriptors are reserved for future K3NG
-WinKeyer/MIDI application routing; those application channels are not wired up
-by this audio change. USB disconnects and reconnects once during startup to
+capture. WinKey uses the first CDC, the terminal uses the second, and the MIDI
+application routing is described below. USB disconnects and reconnects once during startup to
 install the composite descriptors, so a serial monitor may need to reconnect.
 The codec must be connected and initialize successfully for audio to work.
 Audio is serviced during keyer timing waits as well as the main loop, so CW
@@ -370,6 +370,146 @@ Serial status also samples LRCLK transitions over 2 ms and reports cumulative
 USB playback bytes and peak playback/ADC sample magnitudes since boot.
 The brief polling test checks GPIO clock activity, not precise clock frequency
 or the signal reaching the codec.
+
+### USB MIDI
+
+The Pico WM8960 composite interface now carries the MIDI behavior from
+`D:\Documents\GitHub\RP2350-SDR-CW-Interface`. The previous keyer MIDI code
+provided only the USB descriptor and driver, not application handlers.
+ESP32 and non-WM8960 builds do not gain a MIDI interface.
+
+Outgoing events use MIDI channel 10 and cable 0:
+
+| Event | Message |
+|---|---|
+| CW key down/up from paddles, straight key, WinKey, keyboard, or memories | Note On 17, velocity 127 / 0 |
+| PTT in `ONOFF` mode | Note On 18, velocity 127 / 0 |
+| PTT in `TOGGLE` mode | Note On 18, velocity 127 at both edges |
+| Positive / negative wheel step | CC20, value 127 / 1 |
+| Keyer speed | CC21, Thetis CW Speed scaling for 1..60 WPM |
+| Optional sidetone pitch | CC3, 300..1000 Hz mapped to 0..127; higher pitches clamp to 127 |
+
+Command-mode practice and disabled transmitter keying do not send CW notes.
+MIDI PTT follows the existing logical PTT lead/tail and manual PTT controls;
+it does not replace the GPIO PTT output. The saved `midi_ptt_mode` field
+defaults to `OFF` for host-controlled Semi Break-In. Thetis CW and PTT have
+been user-tested successfully with `ONOFF`. Use `ONOFF` for piHPSDR.
+SDRoxide PTT has been user-tested successfully with `TOGGLE`; CW remains unresolved.
+Do not use `TOGGLE` with Thetis.
+
+Terminal commands (CDC2 when configured) are:
+
+- `\:MIDI`: show connection, PTT mode, queue, and packet/error counters.
+- `\:MIDI-PTT [OFF|ONOFF|TOGGLE]`: show or change the saved PTT mode.
+  Release PTT and let queued events drain before changing it.
+- `\:MIDIWHEEL +` / `\:MIDIWHEEL -`: send one wheel step for host mapping/testing.
+
+`wm8960_midi_wheel_step(int direction)` supplies the wheel API; positive
+direction sends 127 and negative sends 1, matching the source implementation
+(its README lists the opposite values). Physical encoder wiring and the
+source's local encoder menu are deferred. Existing keyer WPM encoder behavior
+and pin assignments are unchanged.
+
+Uncomment `SEND_MIDI_FREQUENCY` in `main/keyer_features_and_options_pico.h`
+to send CC3 when its mapped value changes and once per second. It defaults
+off to avoid disrupting host MIDI assignment dialogs.
+`DEBUG_MIDI` in `main/keyer_debug.h` enables routine MIDI status on terminal
+connection. Errors remain reported without that define; explicit status/help
+commands remain available.
+`DEBUG_MIDI_MESSAGES` enables individual RX/TX packet traces on the same
+terminal. RX includes packets later rejected or suppressed as echoes; TX
+means accepted by TinyUSB, not proof of host receipt. Each line contains
+the observation timestamp in microseconds, all four USB-MIDI bytes in hex,
+cable/CIN, one-based channel (0 for system messages), decoded type, and
+decimal data bytes. For CC messages, `data1` is the controller number and
+`data2` is its value.
+Traces buffer up to 128 messages and drain one line per service call only
+when key/PTT sources are idle and terminal space is available. Overflow is
+reported as a dropped-message count. Open the CDC2 terminal with DTR enabled,
+change Thetis CW Speed to two or more known WPM values, and record the
+corresponding RX lines to establish its mapping. Thetis speed-to-keyer/LCD
+control is not implemented; speed synchronization instead runs from the keyer
+to the host using CC21 on channel 10. Assign this controller to CW Speed in
+Thetis. The value uses the inverse of
+[Thetis's `CWSpeed` conversion](https://github.com/ramdor/Thetis/blob/master/Project%20Files/Source/Console/Midi2CatCommands.cs):
+`round((WPM - 1) * 2.1333)`, with reported WPM clamped to 1..60.
+Value 1 is sent for 1 WPM because Thetis ignores value 0.
+For example, 5 WPM sends 9, 20 WPM sends 41, and 50 WPM sends 105.
+Raw WPM values previously displayed about half-speed in Thetis because it
+decodes `round(value / 2.1333 + 1)`; neighboring values can decode to the
+same WPM. Actual keyer speed is not clamped or changed. The keyer
+sends it on USB connection/reconnection, whenever `configuration.wpm` changes,
+and every five minutes while connected. This includes changes from local
+controls, WinKey, and buffered speed commands; command-mode practice speed
+and Farnsworth spacing settings are separate and are not reported.
+Existing local speed/LCD behavior is unchanged. No EEPROM layout change is
+needed. This CC21 encoding targets Thetis's absolute CW Speed action;
+other hosts need an equivalent mapping.
+
+Incoming Note On 17 (nonzero velocity) starts a WM8960 monitor tone using
+the current sidetone frequency/volume. Zero velocity or Note Off releases it.
+Note 18 controls USB priority mute only. These notes are accepted on any MIDI
+channel, tracked independently per channel, and **never drive key/PTT GPIO**.
+CC120/CC123 release the corresponding channel's incoming key/PTT state.
+Incoming key/PTT states mute both USB audio directions with the existing
+5 ms fades; they release on note-up without adding a seven-dit hold.
+The local keyer's seven-dit hold remains unchanged. Local sidetone has
+priority if both local and MIDI tones are active; releasing either source
+does not cancel the other.
+
+For a manual MIDI monitor test, send `99 11 7F` and then `99 11 00`
+(three-byte MIDI messages, not four-byte USB packets).
+Received cable-0 packets are echoed; matching recently transmitted packets
+are suppressed for 15 ms to prevent immediate host loopback. Avoid routing
+the device output back into its input; delayed host loops cannot be
+distinguished reliably from new commands.
+
+USB access uses Arduino-Pico's USB mutex, with bounded foreground servicing
+during keyer waits. A 128-packet queue retries temporary endpoint backpressure.
+Overflow or a queued packet reaching 250 ms stops MIDI output, discards stale
+events, and retries a CW/PTT release; reconnect USB to resume output.
+Local GPIO/audio keying remains operational. USB disconnect/suspend releases
+incoming MIDI audio states and discards queued events. Reconnect reports the
+current CW state but does not replay a PTT toggle or stale PTT hold.
+User-reported host interoperability:
+
+| Host | MIDI PTT mode | CW note 17 | PTT note 18 |
+|---|---|---|---|
+| Thetis | `ONOFF` | Working | Working |
+| SDRoxide controlling an Elecraft K3 | `TOGGLE` | Not yet working; investigation ongoing | Working through to radio TX |
+| Quisk | Not yet established | Not yet working | Not yet verified |
+
+Thetis CW Speed synchronization from CC21 is also user-confirmed working
+after applying the Thetis-compatible scaling above.
+
+Incoming MIDI and other host-radio interoperability tests remain pending.
+Host regression tests compile the actual MIDI handlers and audio source/render
+functions with mocked USB/DMA backends. On Windows with Visual Studio C++
+tools installed, run `.\tests\wm8960_midi_host_test.ps1`; it checks debug/pitch
+options both enabled and disabled, packet routing, source coexistence,
+EEPROM configuration byte round-trips, and USB failure recovery.
+
+### Pending Pico integration worklist
+
+All items below are pending; order follows the requested worklist.
+
+1. MIDI application routing and wheel API are implemented from
+   `D:\Documents\GitHub\RP2350-SDR-CW-Interface`; test MIDI on hardware and
+   complete physical encoder integration.
+2. Compare that encoder implementation with the existing keyer encoder
+   features and resolve how they should coexist or be reused.
+3. Test with GPS, MCP23017, and compass features enabled; resolve pin
+   assignments and conflicts.
+4. Diagnose touch on the currently configured Pico display: normal touch
+   operation requires first pressing just the right spot at the far-left
+   center edge of the panel. Determine whether the cause is software or
+   hardware.
+5. Test the straight key.
+6. Test Command mode using a single button.
+7. Add touch buttons for volume and mute controls, usable without a serial
+   terminal or keyboard.
+8. Port this project's Pico Bluetooth keyboard support into
+   `D:\Documents\GitHub\RP2350-SDR-CW-Interface`.
 
 - Mike K7MDL
 

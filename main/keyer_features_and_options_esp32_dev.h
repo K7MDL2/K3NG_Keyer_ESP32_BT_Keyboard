@@ -6,7 +6,7 @@
 #endif
 
 #define CODE_VERSION "V:K7MDL-2026.9.15"
-#define eeprom_magic_number 45          // you can change this number to have the unit re-initialize EEPROM
+#define eeprom_magic_number 46          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior

@@ -1606,6 +1606,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 #if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 	#include "wm8960_audio.h"
+	#include "wm8960_midi.h"
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32
@@ -2059,6 +2060,7 @@ struct config_t {
 	bool sidetone_muted;
 	bool usb_play_muted;
 	bool usb_mic_muted;
+	uint8_t midi_ptt_mode;
 
 	// GPS and Compass
 	uint8_t grid_digits;  // length of gridsquare to display
@@ -6971,6 +6973,9 @@ void ptt_key(){
 		#endif //FEATURE_SO2R_BASE
 
 		ptt_line_activated = 1;
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			wm8960_midi_ptt(true);
+		#endif
 
 		#ifdef FEATURE_SO2R_BASE
 			so2r_set_rx();
@@ -7110,6 +7115,9 @@ void ptt_unkey(){
 			#endif //FEATURE_SO2R_BASE
 		}
 		ptt_line_activated = 0;
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			wm8960_midi_ptt(false);
+		#endif
 		#ifdef FEATURE_SEQUENCER
 			sequencer_ptt_inactive_time = millis();
 		#endif
@@ -8001,6 +8009,8 @@ void tx_and_sidetone_key (int state)
 
 	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 		if (previous_key_state != static_cast<bool>(key_state)) {
+			wm8960_midi_key(key_state && key_tx &&
+			    keyer_machine_mode != KEYER_COMMAND_MODE);
 			uint16_t timing_wpm = configuration.wpm;
 			#ifdef FEATURE_FARNSWORTH
 				if (sending_mode == AUTOMATIC_SENDING &&
@@ -13597,6 +13607,9 @@ void print_serial_help(PRIMARY_SERIAL_CLS * port_to_use,byte paged_help){
 		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 			port_to_use->println(F("\t\taudio - show saved device audio levels"));
 			port_to_use->println(F("\t\tusbplay|usbmic|sidetone [0..100|+|-|MUTE|UNMUTE|TOGGLE]"));
+			port_to_use->println(F("\t\tmidi - show MIDI status"));
+			port_to_use->println(F("\t\tmidi-ptt [OFF|ONOFF|TOGGLE] - saved MIDI PTT mode (OFF for Thetis)"));
+			port_to_use->println(F("\t\tmidiwheel +|- - send one relative CC20 step"));
 		#endif
 		port_to_use->println(F("\t\teepromdump\t\t- do a byte dump of EEPROM for troubleshooting"));
 		port_to_use->println(F("\t\tsaveeeprom <filename>\t- store EEPROM in a file"));
@@ -14141,6 +14154,49 @@ bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 	print_audio_volumes(port);
 	return true;
 }
+
+bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	if (command == "MIDI") {
+		port->print(F(" "));
+		wm8960_midi_print_status(*port);
+		return true;
+	}
+	const int separator = command.indexOf(' ');
+	const String name = separator < 0 ? command : command.substring(0, separator);
+	String value = separator < 0 ? "" : command.substring(separator + 1);
+	value.trim();
+	if (name == "MIDIWHEEL") {
+		if (value != "+" && value != "-") {
+			port->println(F("Error: use MIDIWHEEL + or -"));
+		} else if (!wm8960_midi_wheel_step(value == "+" ? 1 : -1)) {
+			port->println(F("Error: MIDI USB disconnected or output queue faulted"));
+		}
+		return true;
+	}
+	if (name != "MIDI-PTT") {
+		return false;
+	}
+	if (value.length()) {
+		uint8_t mode;
+		if (value == "OFF") mode = 0;
+		else if (value == "ONOFF") mode = 1;
+		else if (value == "TOGGLE") mode = 2;
+		else {
+			port->println(F("Error: use MIDI-PTT OFF, ONOFF or TOGGLE"));
+			return true;
+		}
+		if (!wm8960_midi_set_ptt_mode(mode)) {
+			port->println(F("Error: release PTT and wait for the MIDI queue to drain before changing mode"));
+			return true;
+		}
+		configuration.midi_ptt_mode = mode;
+		config_dirty = 1;
+	}
+	port->print(F(" "));
+	wm8960_midi_print_status(*port);
+	return true;
+}
 #endif
 #endif
 
@@ -14198,6 +14254,7 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 #endif
 	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 		if (cli_audio_volume(port_to_use, userinput)) { return; }
+		if (cli_midi(port_to_use, userinput)) { return; }
 	#endif
 	if (userinput.startsWith("EEPROMDUMP")){cli_eeprom_dump(port_to_use);return;}
 	if (userinput.startsWith("TIMING")){cli_timing_print(port_to_use);return;}
@@ -14504,6 +14561,10 @@ void sd_card_load_eeprom_from_file(PRIMARY_SERIAL_CLS * port_to_use,String filen
 	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 		if (!apply_audio_levels()) {
 			port_to_use->println(F("Error: loaded audio levels are invalid"));
+			return;
+		}
+		if (!wm8960_midi_set_ptt_mode(configuration.midi_ptt_mode)) {
+			port_to_use->println(F("Error: loaded MIDI PTT mode is invalid or PTT/MIDI output is busy"));
 			return;
 		}
 	#endif
@@ -16991,6 +17052,7 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
 
 	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 		print_audio_volumes(port_to_use);
+		wm8960_midi_print_status(*port_to_use);
 	#endif
 
 	#ifdef FEATURE_SIDETONE_SWITCH
@@ -19699,6 +19761,7 @@ void initialize_keyer_state(){
 	configuration.sidetone_muted = false;
 	configuration.usb_play_muted = false;
 	configuration.usb_mic_muted = false;
+	configuration.midi_ptt_mode = 0;
 	configuration.ptt_disabled = 0;
 	configuration.beacon_mode_on_boot_up = 0;
 	configuration.cw_echo_timing_factor = 100 * default_cw_echo_timing_factor;
@@ -20506,6 +20569,7 @@ void myDelay(uint32_t _ms)
 		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 			const uint32_t audio_delay_start = millis();
 			do {
+				wm8960_midi_service(configuration.hz_sidetone, configuration.wpm);
 				wm8960_audio_service();
 				if (_ms != 0) {
 					delay(1);
@@ -27214,6 +27278,7 @@ void mainloop(void)
 		myDelay(0);
 
 		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			wm8960_midi_service(configuration.hz_sidetone, configuration.wpm);
 			wm8960_audio_service();
 		#endif
 
@@ -27540,6 +27605,10 @@ void setup_esp()
 		if (!apply_audio_levels()) {
 			debug_serial_port->println(F("Error: saved audio levels are invalid"));
 		}
+		if (!wm8960_midi_set_ptt_mode(configuration.midi_ptt_mode)) {
+			debug_serial_port->println(F("Error: saved MIDI PTT mode is invalid"));
+		}
+		wm8960_midi_initialize();
 		#ifdef FEATURE_DISPLAY
 			if (!wm8960_audio_initialize([](const char *status) {
 				if (strncmp(status, "WM8960:", 7) == 0) {

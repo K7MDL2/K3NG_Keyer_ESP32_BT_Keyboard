@@ -31,6 +31,7 @@ void wm8960_audio_service(void);
 void wm8960_audio_start_tone(uint16_t frequency, uint32_t duration_ms,
                              uint32_t mute_release_ms);
 void wm8960_audio_stop_tone(void);
+void wm8960_audio_set_midi_input(bool keyed, bool ptt, uint16_t frequency);
 void wm8960_audio_trace_keyer(uint8_t stage);
 void wm8960_audio_trace_key_edge(bool down, uint8_t element_dits,
                                  uint16_t wpm);

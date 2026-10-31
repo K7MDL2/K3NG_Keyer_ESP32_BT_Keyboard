@@ -358,6 +358,10 @@ uint32_t speaker_sample_rate = kSampleRate;
 uint32_t microphone_sample_rate = kSampleRate;
 
 volatile bool tone_active = false;
+volatile bool midi_tone_active = false;
+volatile bool midi_ptt_active = false;
+uint32_t midi_tone_phase = 0;
+uint32_t midi_tone_phase_increment = 0;
 volatile bool tone_mute_pending = false;
 volatile uint32_t tone_stopped_ms = 0;
 volatile uint32_t tone_mute_release_ms = 0;
@@ -379,7 +383,7 @@ int16_t apply_mute_ramp(int16_t sample, uint16_t level) {
 }
 
 bool usb_audio_muted_for_keyer() {
-  return tone_active ||
+  return tone_active || midi_tone_active || midi_ptt_active ||
       (tone_mute_pending &&
        static_cast<uint32_t>(millis() - tone_stopped_ms) <
            tone_mute_release_ms);
@@ -768,9 +772,12 @@ void render_i2s_output() {
   uint32_t phase = tone_phase;
   uint32_t tone_remaining = tone_frames_remaining;
   bool active_tone = tone_active;
+  const bool midi_active = midi_tone_active;
+  uint32_t midi_phase = midi_tone_phase;
   const bool mute_for_keyer = usb_audio_muted_for_keyer();
   uint16_t mute_level = playback_mute_level;
   uint16_t tone_frames_generated = 0;
+  uint16_t midi_frames_generated = 0;
   const uint32_t playback_queued = playback_write_index - playback_read_index;
   if (!playback_started && playback_queued >= 192) {
     playback_started = true;
@@ -792,18 +799,23 @@ void render_i2s_output() {
            local_playback_gain_q15) / 32767), mute_level);
     }
 
-    if (active_tone) {
+    if (active_tone || midi_active) {
       const int16_t tone = static_cast<int16_t>(
-          (static_cast<int32_t>(next_tone_sample(phase)) *
+          (static_cast<int32_t>(next_tone_sample(active_tone ? phase : midi_phase)) *
            local_sidetone_gain_q15) / 32767);
       left = static_cast<int16_t>(std::max<int32_t>(
           -32768, std::min<int32_t>(32767, static_cast<int32_t>(left) + tone)));
       right = static_cast<int16_t>(std::max<int32_t>(
           -32768, std::min<int32_t>(32767, static_cast<int32_t>(right) + tone)));
-      phase += tone_phase_increment;
-      ++tone_frames_generated;
-      if (tone_remaining > 0 && --tone_remaining == 0) {
-        active_tone = false;
+      if (active_tone) {
+        phase += tone_phase_increment;
+        ++tone_frames_generated;
+        if (tone_remaining > 0 && --tone_remaining == 0) {
+          active_tone = false;
+        }
+      } else {
+        midi_phase += midi_tone_phase_increment;
+        ++midi_frames_generated;
       }
     }
     output[frame * 2] = left;
@@ -829,6 +841,9 @@ void render_i2s_output() {
       std::min<uint16_t>(frames_written, tone_frames_generated);
   tone_output_frames += accepted_tone_frames;
   tone_phase += tone_phase_increment * accepted_tone_frames;
+  midi_tone_phase += midi_tone_phase_increment *
+      std::min<uint16_t>(frames_written - accepted_tone_frames,
+                         midi_frames_generated);
   if (tone_frames_remaining > 0) {
     if (accepted_tone_frames >= tone_frames_remaining) {
       tone_frames_remaining = 0;
@@ -1218,6 +1233,18 @@ void wm8960_audio_stop_tone(void) {
   }
   tone_active = false;
   tone_frames_remaining = 0;
+  restore_interrupts(interrupt_state);
+}
+
+void wm8960_audio_set_midi_input(bool keyed, bool ptt, uint16_t frequency) {
+  const uint32_t interrupt_state = save_and_disable_interrupts();
+  if (keyed && !midi_tone_active) {
+    midi_tone_phase = 0;
+  }
+  midi_tone_phase_increment = static_cast<uint32_t>(
+      (static_cast<uint64_t>(frequency) << 32) / kSampleRate);
+  midi_tone_active = keyed && frequency != 0;
+  midi_ptt_active = ptt;
   restore_interrupts(interrupt_state);
 }
 
