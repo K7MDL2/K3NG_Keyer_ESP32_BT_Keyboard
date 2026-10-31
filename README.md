@@ -57,11 +57,18 @@ _____________________________________________
  - Sept 2026 have BT Classic and BLE keyboards pairing with receonnection on both ESP32 and Pico2W. The BT Classic keyboard, Logitech K380, pairs with a PIN teh first time, then after, pairs to receonnct, no PIN required so it is reasonably fast.
  
  > [!NOTE]
- > USB sound card and MIDI functionality in now working in a test branch [test/pico2w-wm8960-usb-audio](https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/tree/test/pico2w-wm8960-usb-audio).  Uses common Waveshare WM8960 module with headphone, speakers and an onboard mic.  Can use as a soundcard for normal audio output. Sidetone is generated locally for zero latency and played into the USB audio output.  USB audio (play and mic) are muted for 7 dit lengths enabling full break-in if your hardware allows it.  Serial terminal commands, BT keyboard volume +/-/Mute keys work and are saved in EEPROM.  Adding touch controls later.  Still to be tested are MCP23017, GPS and Compass features to make they still work.
-> MIDI now sends note 17 or CWX key, 18 for CWX PTT, CC20 Wheel Tune, and CC21 slider (1-60WPM ==> 0-127) for CW speed.  Tested with Thetis mostly so far.  Set up CC21 in Thetis for CW Speed knob and it will report the keyer speed setting and stay sync'd to changes and current speed on the keyer side.
-> There are now 2 serial ports, one for Winkeyer and the 2nd keyer's terminal interface and debug info.
+ > USB sound card, MIDI functionality, encoder, are now working in a test branch [test/pico2w-wm8960-usb-audio](https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/tree/test/pico2w-wm8960-usb-audio).
+- Uses common Waveshare WM8960 module with headphone, speakers and an onboard mic.  Can use as a soundcard for normal audio output. Sidetone is generated locally for zero latency and played into the USB audio output.  USB audio (play and mic) are muted for 7 dit lengths enabling full break-in if your hardware allows it.  Serial terminal commands, BT keyboard volume +/-/Mute keys work and are saved in EEPROM.  Adding touch controls later.  Still to be tested are MCP23017, GPS and Compass features to make they still work.
+ 
+ - MIDI now sends note 17 for CWX key, 18 for CWX PTT, CC20 Wheel Tune, and CC21 slider (1-60WPM ==> 0-127) for CW speed.  Tested with Thetis mostly so far.  Set up CC21 in Thetis for CW Speed knob and it will report the keyer speed setting and stay sync'd to changes and current speed on the keyer side.
 
-Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
+- There are now 2 serial ports, one for Winkeyer and the 2nd keyer's terminal interface and debug info.
+
+- One encoder with push switch can be used to control USB Audio Volume, USB mic audio level, VFO tune, Sidetone level and frequency.  Tap the knob to cycle through each function.  Long press to return to VFO tune.  If there is no push switch configured, then the knob controls USB audio out volume.
+
+- When the MCP23017 is enabled, All 6 PTT_TX and 6 TX_Key_line outputs are mapped to MCP23017 expander pins freeing up local GPIO for encoders, serial GPS, and I2S lines for the audio module.  The Paddle and Straight key inputs were already mapped there.
+
+Check out the latest main branch changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
 > [!NOTE]
 > Arduino IDE Users with ESP32 see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE
