@@ -8,7 +8,7 @@ $midi = [regex]::Replace($midi, '(?m)^#include .*\r?$', '')
 $header = [regex]::Replace($header, '(?m)^#include .*\r?$', '')
 
 function Get-CppFunction([string]$text, [string]$name) {
-    $match = [regex]::Match($text, "(?m)^(?:bool|void|int16_t|uint16_t) $name\([^;]*?\) \{")
+    $match = [regex]::Match($text, "(?m)^(?:bool|void|int|int16_t|uint16_t) $name\([^;]*?\)\s*\{")
     if (!$match.Success) { throw "Function not found: $name" }
     $start = $match.Index
     $opening = $text.IndexOf('{', $start)
@@ -33,6 +33,19 @@ if (!$sine) { throw 'Sine table not found' }
 $config = [regex]::Match($main, '(?s)struct config_t \{.*?\} configuration;').Value
 if (!$config) { throw 'EEPROM configuration structure not found' }
 $cli = Get-CppFunction $main 'cli_midi'
+$encoder = [regex]::Match($main, '(?s)enum class EncoderFunction.*?(?=\r?\n#endif\r?\n\r?\nint chk_rotary_encoder)').Value
+if (!$encoder) { throw 'Encoder menu functions not found' }
+$encoderCapture = [regex]::Match($main, '(?s)struct EncoderEvent.*?(?=\r?\n#endif)').Value
+if (!$encoderCapture) { throw 'Encoder interrupt capture not found' }
+$encoderTable = [regex]::Match($main, '(?s)#ifdef OPTION_ENCODER_HALF_STEP_MODE.*?(?=\r?\n#endif //FEATURE_ENCODER_SUPPORT)').Value
+$settings = Get-Content (Join-Path $root 'main\keyer_settings_pico.h') -Raw
+$encoderDirection = [regex]::Match($settings, '(?s)#ifndef ENCODER_VFO_DIRECTION.*?(?=\r?\n#define sd_card_spi_ss_line)').Value
+if (!$encoderDirection) { throw 'Encoder VFO direction setting not found' }
+$encoderFunctions = @('audio_volume', 'step_audio_volume', 'set_audio_volume',
+    'initialize_potentiometer', 'initialize_rotary_encoder', 'chk_rotary_encoder',
+    'check_rotary_encoder') |
+    ForEach-Object { Get-CppFunction $main $_ }
+$potGuard = [regex]::Match($main, '(?s)#if defined\(potentiometer\) && potentiometer == 0.*?#endif').Value
 
 $mock = @'
 #include <algorithm>
@@ -51,11 +64,27 @@ $mock = @'
 #define FEATURE_INTERNET_LINK_MAX_LINKS 2
 #define F(text) text
 #define PRIMARY_SERIAL_CLS HardwareSerial
+#define FEATURE_DISPLAY
+#define FEATURE_TFT_DISPLAY
+#define FEATURE_ROTARY_ENCODER
+#define OPTION_ENCODER_ENABLE_PULLUPS
+#ifndef TEST_ENCODER_FULL_STEP
+#define OPTION_ENCODER_HALF_STEP_MODE
+#endif
+#define FEATURE_POTENTIOMETER
+#define potentiometer 0
+#define rotary_pin1 2
+#define rotary_pin2 3
+#ifndef rotary_switch
+#define rotary_switch 4
+#endif
 constexpr uint8_t grid_len_max = 9;
 class String {
   std::string text;
  public:
   String(const char *value = "") : text(value) {}
+  String(int value) : text(std::to_string(value)) {}
+  String(unsigned int value) : text(std::to_string(value)) {}
   explicit String(std::string value) : text(value) {}
   void trim() {
     auto start = text.find_first_not_of(" \r\n\t");
@@ -73,6 +102,10 @@ class String {
   size_t length() const { return text.size(); }
   bool operator==(const char *value) const { return text == value; }
   bool operator!=(const char *value) const { return text != value; }
+  friend String operator+(const String &left, const String &right) {
+    return String(left.text + right.text);
+  }
+  const std::string &str() const { return text; }
 };
 uint8_t config_dirty = 0;
 template<class T> T constrain(T value, int lo, int hi) {
@@ -145,6 +178,53 @@ namespace wm8960_i2s {
   size_t write(const uint8_t *bytes, size_t count) {
     output.resize(count / 2); memcpy(output.data(), bytes, count); return count;
   }
+}
+'@
+
+$encoderMocks = @'
+enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
+int audio_volume(AudioVolumeTarget);
+int step_audio_volume(int, bool);
+void set_audio_volume(AudioVolumeTarget, int, bool);
+template<class T> T max(T a, T b) { return std::max(a,b); }
+template<class T> T min(T a, T b) { return std::min(a,b); }
+bool apply_audio_levels() { return true; }
+constexpr int LOW = 0, HIGH = 1, INPUT = 0, INPUT_PULLUP = 2;
+constexpr int KEYER_COMMAND_MODE = 1;
+int keyer_machine_mode = 0;
+int pin_values[48] = {};
+constexpr int CHANGE = 3;
+std::vector<int> interrupt_pins;
+void (*encoder_irq)() = nullptr;
+int digitalPinToInterrupt(int pin) { return pin; }
+void attachInterrupt(int pin, void (*handler)(), int mode) {
+  assert(mode == CHANGE); interrupt_pins.push_back(pin); encoder_irq = handler;
+}
+HardwareSerial *debug_serial_port = &terminal;
+std::vector<std::array<int,2>> pin_modes;
+int digitalRead(int pin) { assert(pin != 0); return pin_values[pin]; }
+void pinMode(int pin, int mode) {
+  assert(pin != 0); pin_modes.push_back({pin,mode});
+}
+void digitalWrite(int, int) { assert(false); }
+std::string lcd_text;
+constexpr int TFT_BLACK = 0, ICON_ANCHOR = 250, STATUS_BAR_FONT = 2;
+struct MockLcd {
+  int draws = 0;
+  std::string label;
+  uint16_t color565(int r, int g, int b) {
+    assert(r == 144 && g == 238 && b == 144); return 0x9772;
+  }
+  void setTextColor(int fg, int bg) { assert(fg == 0x9772 && bg == TFT_BLACK); }
+  void drawString(const char *text, int x, int row, int font) {
+    assert(x == ICON_ANCHOR && row == 6 && font == STATUS_BAR_FONT);
+    label = text; ++draws;
+  }
+} lcd;
+void lcd_center_print_timed(String text, int, int) { lcd_text = text.str(); }
+void speed_change(int step) { configuration.wpm += step; config_dirty = 1; }
+void speed_change_command_mode(int step) {
+  configuration.wpm_command_mode += step; config_dirty = 1;
 }
 '@
 
@@ -400,7 +480,172 @@ int main() {
   assert(terminal.output.find("dropped 3 messages") != std::string::npos);
   terminal.open = false;
 #endif
-  puts("PASS: MIDI packets, PTT modes, input sources, echo, DMA render, queue recovery, disconnect, rollover, CLI, EEPROM, optional pitch");
+  fresh();
+  for (int &pin : pin_values) pin = HIGH;
+  configuration.pot_activated = 1;
+  initialize_potentiometer();
+  assert(configuration.pot_activated == 0 && pin_modes.empty());
+#ifdef FEATURE_POTENTIOMETER
+#error "Zero potentiometer must disable all analog speed feature code"
+#endif
+  initialize_rotary_encoder();
+  assert(pin_modes.size() == (rotary_switch ? 3 : 2));
+  assert(pin_modes[0][1] == INPUT_PULLUP && pin_modes[1][1] == INPUT_PULLUP);
+  assert(interrupt_pins == std::vector<int>({rotary_pin1, rotary_pin2}));
+  // Capture complete turns without any foreground polling or display servicing.
+  clock_ms = 10000;
+  auto pins = [](int value) {
+    pin_values[rotary_pin1] = value & 1;
+    pin_values[rotary_pin2] = (value >> 1) & 1;
+    advance(100); encoder_irq();
+  };
+  auto turn = [&](bool reverse) {
+    if (reverse) for (int value : {2,0,1,3}) pins(value);
+    else for (int value : {1,0,2,3}) pins(value);
+  };
+  const int steps_per_turn =
+#ifdef OPTION_ENCODER_HALF_STEP_MODE
+    2;
+#else
+    1;
+#endif
+  pins(3);
+  for (int n = 0; n < 20; ++n) turn(false);
+  for (int n = 0; n < 20; ++n) turn(true);
+  advance(1000);
+  for (int n = 0; n < 20 * steps_per_turn; ++n) assert(chk_rotary_encoder() == -1);
+  for (int n = 0; n < 20 * steps_per_turn; ++n) assert(chk_rotary_encoder() == 1);
+  assert(chk_rotary_encoder() == 0);
+  // Incomplete contact bounce must not produce a step.
+  for (int value : {1,3,1,3}) pins(value);
+  assert(chk_rotary_encoder() == 0);
+  for (int n = 0; n < 140; ++n) turn(false);
+  assert(encoder_event_overflow);
+  terminal.output.clear(); chk_rotary_encoder();
+  assert(!encoder_event_overflow && terminal.output.find("encoder event queue overflow") != std::string::npos);
+  while (chk_rotary_encoder()) {}
+  for (auto function : {EncoderFunction::Vfo, EncoderFunction::Master,
+      EncoderFunction::Sidetone, EncoderFunction::Frequency,
+      EncoderFunction::Speed, EncoderFunction::Microphone}) {
+    encoder_function = function; draw_encoder_mode(6, false);
+    assert(lcd.label == std::string(1, "VMSFWU"[static_cast<int>(function)]));
+    int draws = lcd.draws;
+    draw_encoder_mode(6, false); assert(lcd.draws == draws);
+    draw_encoder_mode(6, true); assert(lcd.draws == draws + 1);
+  }
+  encoder_function = rotary_switch ? EncoderFunction::Vfo : EncoderFunction::Master;
+  if (rotary_switch) {
+    assert(encoder_function == EncoderFunction::Vfo);
+    auto click = []() {
+      pin_values[rotary_switch] = LOW; check_encoder_switch();
+      advance(20); check_encoder_switch();
+      advance(50); pin_values[rotary_switch] = HIGH; check_encoder_switch();
+      advance(20); check_encoder_switch();
+    };
+    pin_values[rotary_switch] = LOW; check_encoder_switch();
+    advance(10); pin_values[rotary_switch] = HIGH; check_encoder_switch();
+    advance(20); check_encoder_switch();
+    assert(encoder_function == EncoderFunction::Vfo);
+    for (auto function : {EncoderFunction::Master, EncoderFunction::Sidetone,
+        EncoderFunction::Frequency, EncoderFunction::Speed,
+        EncoderFunction::Microphone, EncoderFunction::Vfo}) {
+      click(); assert(encoder_function == function && !lcd_text.empty());
+    }
+    click(); assert(encoder_function == EncoderFunction::Master);
+    pin_values[rotary_switch] = LOW; check_encoder_switch();
+    advance(20); check_encoder_switch();
+    advance(999); check_encoder_switch();
+    assert(encoder_function == EncoderFunction::Master);
+    advance(1); check_encoder_switch();
+    assert(encoder_function == EncoderFunction::Vfo);
+    pin_values[rotary_switch] = HIGH; check_encoder_switch();
+    advance(20); check_encoder_switch();
+    assert(encoder_function == EncoderFunction::Vfo);
+    click();
+    clock_ms = UINT32_MAX-500;
+    pin_values[rotary_switch] = LOW; check_encoder_switch();
+    advance(20); check_encoder_switch(); advance(1000); check_encoder_switch();
+    assert(encoder_function == EncoderFunction::Vfo);
+  } else {
+    assert(encoder_function == EncoderFunction::Master);
+    check_encoder_switch(); assert(encoder_function == EncoderFunction::Master);
+  }
+  encoder_function = EncoderFunction::Master;
+  for (int level = 0; level <= 100; ++level) {
+    assert(step_audio_volume(level, true) ==
+        std::min(100, std::max(level + 1, (level * 1122 + 500) / 1000)));
+    assert(step_audio_volume(level, false) ==
+        std::max(0, std::min(level - 1, (level * 891 + 500) / 1000)));
+  }
+  configuration.usb_play_volume = 100; configuration.usb_play_muted = true;
+  lcd_text = "unchanged";
+  apply_encoder_step(-1);
+  assert(configuration.usb_play_volume == 89 && !configuration.usb_play_muted);
+  assert(lcd_text == "unchanged");
+  encoder_function = EncoderFunction::Sidetone;
+  configuration.sidetone_volume = 50; apply_encoder_step(1);
+  assert(configuration.sidetone_volume == 56);
+  encoder_function = EncoderFunction::Microphone;
+  configuration.usb_mic_volume = 0; apply_encoder_step(-1);
+  assert(configuration.usb_mic_volume == 0);
+  apply_encoder_step(1); assert(configuration.usb_mic_volume == 1);
+  encoder_function = EncoderFunction::Frequency;
+  configuration.hz_sidetone = 750; apply_encoder_step(1);
+  assert(configuration.hz_sidetone == 760);
+  configuration.hz_sidetone = 300; apply_encoder_step(-1);
+  assert(configuration.hz_sidetone == 300);
+  configuration.hz_sidetone = 1200; apply_encoder_step(1);
+  assert(configuration.hz_sidetone == 1200);
+  encoder_function = EncoderFunction::Speed;
+  configuration.wpm = 20; apply_encoder_step(2); assert(configuration.wpm == 22);
+  configuration.wpm_command_mode = 15; keyer_machine_mode = KEYER_COMMAND_MODE;
+  apply_encoder_step(-1);
+  assert(configuration.wpm_command_mode == 14 && configuration.wpm == 22);
+  keyer_machine_mode = 0; encoder_function = EncoderFunction::Vfo;
+  lcd_text = "unchanged";
+  show_encoder_function(); assert(lcd_text == "unchanged");
+  outgoing.clear(); apply_encoder_step(1); service();
+  assert(lcd_text == "unchanged");
+  assert(messages(0xB9,20,ENCODER_VFO_DIRECTION < 0 ? 1 : 127) == 1);
+  apply_encoder_step(-1); service();
+  assert(messages(0xB9,20,127) == 1 && messages(0xB9,20,1) == 1);
+  // A backlog must send in bounded batches without waiting for clock ticks.
+  configuration.hz_sidetone = 750;
+  outgoing.clear(); lcd_text = "unchanged";
+  for (int n = 0; n < 20; ++n) turn(false);
+  const uint32_t before_send = clock_ms;
+  check_rotary_encoder();
+  assert(messages(0xB9,20,ENCODER_VFO_DIRECTION < 0 ? 127 : 1) == 16);
+  assert(clock_ms == before_send && lcd_text == "unchanged");
+  check_rotary_encoder();
+  if (steps_per_turn == 2) check_rotary_encoder();
+  assert(messages(0xB9,20,ENCODER_VFO_DIRECTION < 0 ? 127 : 1) == 20 * steps_per_turn);
+  assert(chk_rotary_encoder() == 0 && clock_ms == before_send && lcd_text == "unchanged");
+  for (auto function : {EncoderFunction::Master, EncoderFunction::Sidetone,
+      EncoderFunction::Frequency, EncoderFunction::Speed, EncoderFunction::Microphone}) {
+    encoder_function = function;
+    configuration.wpm = 100; configuration.hz_sidetone = 1000;
+    configuration.usb_play_volume = configuration.sidetone_volume = configuration.usb_mic_volume = 100;
+    lcd_text = "unchanged";
+    for (int n = 0; n < 20; ++n) turn(false);
+    const uint32_t start = clock_ms;
+    check_rotary_encoder();
+    assert(((encoder_event_head - encoder_event_tail) & 127) == 20 * steps_per_turn - 16);
+    assert(lcd_text == "unchanged" && clock_ms == start);
+    check_rotary_encoder();
+    if (steps_per_turn == 2) check_rotary_encoder();
+    assert(encoder_event_head == encoder_event_tail);
+    if (function == EncoderFunction::Speed) assert(configuration.wpm == 100 - 20 * steps_per_turn);
+    if (function == EncoderFunction::Frequency) assert(configuration.hz_sidetone == 1000 - 200 * steps_per_turn);
+    advance(99); check_rotary_encoder(); assert(lcd_text == "unchanged");
+    advance(1); check_rotary_encoder(); assert(lcd_text != "unchanged");
+    lcd_text = "no repeat"; advance(100); check_rotary_encoder();
+    assert(lcd_text == "no repeat");
+  }
+  encoder_function = EncoderFunction::Vfo;
+  mounted = false; service(); apply_encoder_step(1);
+  assert(lcd_text == "MIDI unavailable");
+  puts("PASS: MIDI/audio, encoder IRQ capture, bounce, overflow, mode status, menu, VFO direction, potentiometer disabled");
 }
 '@
 
@@ -413,14 +658,16 @@ try {
     Set-Content -LiteralPath $source -Value (
         $mock + "`n" + $sine + "`n" + ($audioFunctions -join "`n") +
         "`n" + $header + "`n" + $midi + "`n" + $config +
-        "`n" + $cli + "`n" + $checks
+        "`n" + $cli + "`n" + $potGuard + "`n" + $encoderMocks +
+        "`n" + $encoderDirection + "`n" + $encoderTable + "`n" + $encoderCapture +
+        "`n" + $encoder + "`n" + ($encoderFunctions -join "`n") + "`n" + $checks
     ) -Encoding ASCII
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     if (!(Test-Path -LiteralPath $vswhere)) { throw 'Visual Studio C++ tools required' }
     $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if (!$vs) { throw 'Visual Studio C++ tools not found' }
     $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
-    foreach ($defines in @('', '/DDEBUG_MIDI', '/DSEND_MIDI_FREQUENCY', '/DDEBUG_MIDI /DSEND_MIDI_FREQUENCY', '/DDEBUG_MIDI_MESSAGES', '/DDEBUG_MIDI /DDEBUG_MIDI_MESSAGES /DSEND_MIDI_FREQUENCY')) {
+    foreach ($defines in @('', '/DDEBUG_MIDI', '/DSEND_MIDI_FREQUENCY', '/DDEBUG_MIDI /DSEND_MIDI_FREQUENCY', '/DDEBUG_MIDI_MESSAGES', '/DDEBUG_MIDI /DDEBUG_MIDI_MESSAGES /DSEND_MIDI_FREQUENCY', '/Drotary_switch=0', '/Drotary_switch=42', '/DENCODER_VFO_DIRECTION=1', '/DTEST_ENCODER_FULL_STEP')) {
         & $env:ComSpec /c "call `"$vcvars`" >nul && cl /nologo /std:c++17 /EHsc /W3 $defines /Fo`"$obj`" /Fe`"$exe`" `"$source`""
         if ($LASTEXITCODE -ne 0) { throw "Host compilation failed: $defines" }
         & $exe

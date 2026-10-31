@@ -1609,6 +1609,14 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#include "wm8960_midi.h"
 #endif
 
+#if defined(potentiometer) && potentiometer == 0
+	#undef FEATURE_POTENTIOMETER
+#endif
+
+#if defined(FEATURE_ROTARY_ENCODER) && defined(ARDUINO_ARCH_RP2040)
+	#include "hardware/sync.h"
+#endif
+
 #ifdef ARDUINO_ARCH_ESP32
 	#include "esp32-hal-log.h"
 #endif
@@ -2090,6 +2098,9 @@ enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
 void print_audio_volumes(PRIMARY_SERIAL_CLS *port);
 bool apply_audio_levels();
 void audio_consumer_key(uint16_t usage, uint8_t modifiers);
+int audio_volume(AudioVolumeTarget target);
+int step_audio_volume(int level, bool increase);
+void set_audio_volume(AudioVolumeTarget target, int level, bool muted);
 #endif
 
 // Forward declarations to make esp-idf happy
@@ -2118,6 +2129,13 @@ void check_dah_paddle();
 void clear_send_buffer();
 void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm_in);
 void speed_set(int wpm_set);
+void speed_change(int change);
+void speed_change_command_mode(int change);
+void check_rotary_encoder();
+#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+char encoder_mode_letter();
+void draw_encoder_mode(int row, bool redraw);
+#endif
 int convert_cw_number_to_ascii (long number_in);
 void cli_timing_print(PRIMARY_SERIAL_CLS * port_to_use);
 void cli_paddle_echo_factor(PRIMARY_SERIAL_CLS * port_to_use,String command_arguments);
@@ -3799,7 +3817,10 @@ void service_keypad(){
 
 		static byte last_straight_key_state = 0;
 
-		#if defined(USE_KEY_PIN_INTERRUPTS)
+		#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+			read_io_handler();
+		#endif
+		#if defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
 			if (straight_key_state == STRAIGHT_KEY_ACTIVE_STATE) {
 		#else
 			if (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE){
@@ -4663,8 +4684,9 @@ void update_icons(void) {
 
 		char WPM[7] = "\0";
 		static int last_WPM = 0;
+		const bool wpm_changed = last_WPM != (int) configuration.wpm;
 
-		if (last_WPM != (int) configuration.wpm)  // wpm changed, update display
+		if (wpm_changed)  // wpm changed, update display
 		{
 			lcd.setTextColor(TFT_CYAN, TFT_BLACK);
 			itoa(configuration.wpm, WPM, 10);
@@ -4673,6 +4695,10 @@ void update_icons(void) {
 			lcd.drawString(WPM,       WPM_ANCHOR, row, STATUS_BAR_FONT);  // WPM rate
 			last_WPM = configuration.wpm;
 		}
+
+		#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			draw_encoder_mode(row, wpm_changed);
+		#endif
 
 		#ifdef NOT_USING_THESE_NOW
 		if (last_sending_mode != sending_mode)    // modes are : Auto, Manual, Auto-Interrupted
@@ -6353,19 +6379,204 @@ void debug_capture_dump()
 
 //-------------------------------------------------------------------------------------------------------
 #ifdef FEATURE_ROTARY_ENCODER
+#if defined(ARDUINO_ARCH_RP2040)
+struct EncoderEvent {
+	uint8_t direction;
+	uint32_t time_ms;
+};
+volatile EncoderEvent encoder_events[128];
+volatile uint8_t encoder_event_head = 0;
+volatile uint8_t encoder_event_tail = 0;
+volatile bool encoder_event_overflow = false;
+
+void capture_encoder_transition() {
+	const uint8_t pins = (digitalRead(rotary_pin2) << 1) | digitalRead(rotary_pin1);
+	state = ttable[state & 0x0f][pins];
+	const uint8_t direction = state & 0x30;
+	if (!direction) return;
+	const uint8_t next = (encoder_event_head + 1) & 127;
+	if (next == encoder_event_tail) {
+		encoder_event_overflow = true;
+		return;
+	}
+	encoder_events[encoder_event_head].direction = direction;
+	encoder_events[encoder_event_head].time_ms = millis();
+	encoder_event_head = next;
+}
+#endif
+
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+enum class EncoderFunction : uint8_t {
+	Vfo, Master, Sidetone, Frequency, Speed, Microphone, Count
+};
+EncoderFunction encoder_function =
+    rotary_switch ? EncoderFunction::Vfo : EncoderFunction::Master;
+bool encoder_button_candidate = false;
+bool encoder_button_pressed = false;
+bool encoder_long_press = false;
+uint32_t encoder_button_changed_ms = 0;
+uint32_t encoder_button_down_ms = 0;
+
+char encoder_mode_letter() {
+	switch (encoder_function) {
+		case EncoderFunction::Vfo: return 'V';
+		case EncoderFunction::Master: return 'M';
+		case EncoderFunction::Sidetone: return 'S';
+		case EncoderFunction::Frequency: return 'F';
+		case EncoderFunction::Speed: return 'W';
+		case EncoderFunction::Microphone: return 'U';
+		case EncoderFunction::Count: return '?';
+	}
+	return '?';
+}
+
+void draw_encoder_mode(int row, bool redraw) {
+	#ifdef FEATURE_TFT_DISPLAY
+		static char last_mode = '\0';
+		const char mode = encoder_mode_letter();
+		if (mode != last_mode || redraw) {
+			lcd.setTextColor(lcd.color565(144, 238, 144), TFT_BLACK);
+			const char label[] = {mode, '\0'};
+			lcd.drawString(label, ICON_ANCHOR, row, STATUS_BAR_FONT);
+			last_mode = mode;
+		}
+	#endif
+}
+
+void show_encoder_function() {
+	#ifdef FEATURE_DISPLAY
+		String text;
+		switch (encoder_function) {
+			case EncoderFunction::Vfo: return;
+			case EncoderFunction::Master:
+				text = "Master " + String(configuration.usb_play_volume) + "%"; break;
+			case EncoderFunction::Sidetone:
+				text = "Sidetone " + String(configuration.sidetone_volume) + "%"; break;
+			case EncoderFunction::Frequency:
+				text = "Tone " + String(configuration.hz_sidetone) + " Hz"; break;
+			case EncoderFunction::Speed:
+				text = "Speed " + String(keyer_machine_mode == KEYER_COMMAND_MODE ?
+				    configuration.wpm_command_mode : configuration.wpm) + " WPM"; break;
+			case EncoderFunction::Microphone:
+				text = "USB Mic " + String(configuration.usb_mic_volume) + "%"; break;
+			case EncoderFunction::Count: return;
+		}
+		lcd_center_print_timed(text, 0, 2000);
+	#endif
+}
+
+void check_encoder_switch() {
+	#if rotary_switch != 0
+		const uint32_t now = millis();
+		const bool pressed = digitalRead(rotary_switch) == LOW;
+		if (pressed != encoder_button_candidate) {
+			encoder_button_candidate = pressed;
+			encoder_button_changed_ms = now;
+		}
+		if (encoder_button_candidate != encoder_button_pressed &&
+		    static_cast<uint32_t>(now - encoder_button_changed_ms) >= 20) {
+			encoder_button_pressed = encoder_button_candidate;
+			if (encoder_button_pressed) {
+				encoder_button_down_ms = now;
+				encoder_long_press = false;
+			} else if (!encoder_long_press) {
+				if (static_cast<uint32_t>(now - encoder_button_down_ms) >= 1000) {
+					encoder_function = EncoderFunction::Vfo;
+				} else {
+					encoder_function = static_cast<EncoderFunction>(
+					    (static_cast<uint8_t>(encoder_function) + 1) %
+					    static_cast<uint8_t>(EncoderFunction::Count));
+				}
+				show_encoder_function();
+			}
+			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+				last_active_time = now;
+			#endif
+		}
+		if (encoder_button_pressed && !encoder_long_press &&
+		    static_cast<uint32_t>(now - encoder_button_down_ms) >= 1000) {
+			encoder_long_press = true;
+			encoder_function = EncoderFunction::Vfo;
+			show_encoder_function();
+			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+				last_active_time = now;
+			#endif
+		}
+	#endif
+}
+
+void apply_encoder_step(int step) {
+	switch (encoder_function) {
+		case EncoderFunction::Vfo:
+			if (!wm8960_midi_wheel_step(step * ENCODER_VFO_DIRECTION)) {
+				#ifdef FEATURE_DISPLAY
+					lcd_center_print_timed("MIDI unavailable", 0, 2000);
+				#else
+					debug_serial_port->println(F("Error: MIDI encoder output unavailable"));
+				#endif
+				return;
+			}
+			break;
+		case EncoderFunction::Master:
+		case EncoderFunction::Sidetone:
+		case EncoderFunction::Microphone: {
+			const AudioVolumeTarget target =
+			    encoder_function == EncoderFunction::Master ? AudioVolumeTarget::Playback :
+			    encoder_function == EncoderFunction::Sidetone ? AudioVolumeTarget::Sidetone :
+			    AudioVolumeTarget::Microphone;
+			set_audio_volume(target, step_audio_volume(audio_volume(target), step > 0), false);
+			break;
+		}
+		case EncoderFunction::Frequency:
+			configuration.hz_sidetone = constrain(
+			    static_cast<int>(configuration.hz_sidetone) + (step > 0 ? 10 : -10),
+			    300, 1200);
+			config_dirty = 1;
+			break;
+		case EncoderFunction::Speed:
+			if (keyer_machine_mode == KEYER_COMMAND_MODE) speed_change_command_mode(step);
+			else speed_change(step);
+			#ifdef FEATURE_WINKEY_EMULATION
+				if ((primary_serial_port_mode == SERIAL_WINKEY_EMULATION) && winkey_host_open) {
+					winkey_port_write(((configuration.wpm-pot_wpm_low_value)|128),0);
+					winkey_last_unbuffered_speed_wpm = configuration.wpm;
+				}
+			#endif
+			break;
+		case EncoderFunction::Count: return;
+	}
+}
+#endif
+
 int chk_rotary_encoder(){
 
 	static unsigned long timestamp[5];
 
+	#if defined(ARDUINO_ARCH_RP2040)
+		uint8_t result = 0;
+		uint32_t event_time = 0;
+		const uint32_t irq_state = save_and_disable_interrupts();
+		const bool overflow = encoder_event_overflow;
+		encoder_event_overflow = false;
+		if (encoder_event_tail != encoder_event_head) {
+			result = encoder_events[encoder_event_tail].direction;
+			event_time = encoder_events[encoder_event_tail].time_ms;
+			encoder_event_tail = (encoder_event_tail + 1) & 127;
+		}
+		restore_interrupts(irq_state);
+		if (overflow) debug_serial_port->println(F("Error: encoder event queue overflow; steps lost"));
+	#else
 	unsigned char pinstate = (digitalRead(rotary_pin2) << 1) | digitalRead(rotary_pin1);
 	state = ttable[state & 0xf][pinstate];
 	unsigned char result = (state & 0x30);
+	const unsigned long event_time = millis();
+	#endif
 	if (result) {
 		timestamp[0] = timestamp[1];                    // Encoder step timer
 		timestamp[1] = timestamp[2];
 		timestamp[2] = timestamp[3];
 		timestamp[3] = timestamp[4];
-		timestamp[4] = millis();
+		timestamp[4] = event_time;
 
 		unsigned long elapsed_time = (timestamp[4] - timestamp[0]); // Encoder step time difference for 10's step
 
@@ -6381,15 +6592,40 @@ int chk_rotary_encoder(){
 
 void check_rotary_encoder(){
 
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		static bool value_message_pending = false;
+		static uint32_t last_movement_ms = 0;
+		static EncoderFunction message_function = encoder_function;
+		check_encoder_switch();
+		if (message_function != encoder_function) {
+			value_message_pending = false;
+			message_function = encoder_function;
+		}
+		bool moved = false;
+		for (uint8_t count = 0; count < 16; ++count) {
+			const int step = chk_rotary_encoder();
+			if (!step) break;
+			apply_encoder_step(step);
+			moved = true;
+		}
+		if (moved) {
+			last_movement_ms = millis();
+			value_message_pending = encoder_function != EncoderFunction::Vfo;
+			wm8960_midi_service(configuration.hz_sidetone, configuration.wpm);
+			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+				last_active_time = last_movement_ms;
+			#endif
+		} else if (value_message_pending &&
+		    static_cast<uint32_t>(millis() - last_movement_ms) >= 100) {
+			value_message_pending = false;
+			show_encoder_function();
+		}
+	#else
 	int step = chk_rotary_encoder();
 
 	if (step != 0) {
 		if (keyer_machine_mode == KEYER_COMMAND_MODE) speed_change_command_mode(step);
 		else speed_change(step);
-
-		#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-			last_active_time = millis();
-		#endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 
 		// Start of Winkey Speed change mod for Rotary Encoder -- VE2EVN
 		#ifdef FEATURE_WINKEY_EMULATION
@@ -6400,7 +6636,12 @@ void check_rotary_encoder(){
 		#endif
 		// End of Winkey Speed change mod for Rotary Encoder -- VE2EVN
 
+		#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+			last_active_time = millis();
+		#endif
+
 	} // if (step != 0)
+	#endif
 
 }
 #endif //FEATURE_ROTARY_ENCODER
@@ -6912,6 +7153,69 @@ void check_paddles()
 
 //-------------------------------------------------------------------------------------------------------
 
+#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+uint8_t keyer_output_latches[2] = {};
+uint8_t keyer_output_directions[2] = {0xFF, 0xFF};
+
+bool keyer_expander_register_write(uint8_t reg, uint8_t value) {
+	#ifdef USE_WIRE1
+		TwoWire &bus = Wire1;
+	#else
+		TwoWire &bus = Wire;
+	#endif
+	bus.beginTransmission(MCP23X17_ADDR);
+	bus.write(reg);
+	bus.write(value);
+	const uint8_t error = bus.endTransmission();
+	if (error) {
+		debug_serial_port->printf("Error: MCP23017 register 0x%02X write failed (%u)\r\n", reg, error);
+		return false;
+	}
+	return true;
+}
+#endif
+
+void keyer_output_write(uint8_t pin, uint8_t state) {
+	#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+		if (pin >= 100 && pin <= 115) {
+			const uint8_t port = (pin - 100) / 8;
+			const uint8_t mask = 1u << ((pin - 100) % 8);
+			const uint8_t value = state == HIGH ?
+			    keyer_output_latches[port] | mask :
+			    keyer_output_latches[port] & ~mask;
+			// OLAT writes preserve other outputs without reading/clearing paddle IRQs.
+			if (keyer_expander_register_write(0x14 + port, value)) {
+				keyer_output_latches[port] = value;
+			}
+			return;
+		}
+	#endif
+	digitalWrite(pin, state);
+}
+
+void keyer_output_initialize(uint8_t pin, uint8_t inactive_state) {
+	#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+		if (pin >= 100 && pin <= 115) {
+			const uint8_t port = (pin - 100) / 8;
+			const uint8_t mask = 1u << ((pin - 100) % 8);
+			const uint8_t value = inactive_state == HIGH ?
+			    keyer_output_latches[port] | mask :
+			    keyer_output_latches[port] & ~mask;
+			if (!keyer_expander_register_write(0x14 + port, value)) {
+				return;
+			}
+			keyer_output_latches[port] = value;
+			const uint8_t direction = keyer_output_directions[port] & ~mask;
+			if (keyer_expander_register_write(port, direction)) {
+				keyer_output_directions[port] = direction;
+			}
+			return;
+		}
+	#endif
+	pinMode(pin, OUTPUT);
+	digitalWrite(pin, inactive_state);
+}
+
 void ptt_key(){
 
 	unsigned long ptt_activation_time = millis();
@@ -6933,10 +7237,10 @@ void ptt_key(){
 
 					#if defined(FEATURE_WINKEY_EMULATION) && defined(OPTION_WINKEY_PINCONFIG_PTT_CONTROLS_PTT_LINE)
 						if (winkey_pinconfig_ptt_bit){
-							digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
+							keyer_output_write (configuration.current_ptt_line, ptt_line_active_state);
 						}
 					#else
-						digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
+						keyer_output_write (configuration.current_ptt_line, ptt_line_active_state);
 					#endif // defined(FEATURE_WINKEY_EMULATION) && !defined(OPTION_WINKEY_PINCONFIG_PTT_CONTROLS_PTT_HOLD)
 
 
@@ -6952,17 +7256,17 @@ void ptt_key(){
 
 					#if defined(FEATURE_WINKEY_EMULATION) && defined(OPTION_WINKEY_PINCONFIG_PTT_CONTROLS_PTT_LINE)
 						if (winkey_pinconfig_ptt_bit){
-							digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
+							keyer_output_write (configuration.current_ptt_line, ptt_line_active_state);
 						}
 					#else
-						digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
+						keyer_output_write (configuration.current_ptt_line, ptt_line_active_state);
 					#endif // defined(FEATURE_WINKEY_EMULATION) && !defined(OPTION_WINKEY_PINCONFIG_PTT_CONTROLS_PTT_HOLD)
 
 				//digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
 
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION)
 					if ((wk2_both_tx_activated) && (ptt_tx_2)) {
-						digitalWrite (ptt_tx_2, ptt_line_active_state);
+						keyer_output_write (ptt_tx_2, ptt_line_active_state);
 					}
 				#endif
 				 //myDelay(configuration.ptt_lead_time[configuration.current_tx-1]);
@@ -7103,13 +7407,13 @@ void ptt_unkey(){
 
 		#ifdef FEATURE_SO2R_BASE
 			if (current_tx_ptt_line) {
-				digitalWrite (current_tx_ptt_line, ptt_line_inactive_state);
+				keyer_output_write (current_tx_ptt_line, ptt_line_inactive_state);
 		#else
 			if (configuration.current_ptt_line) {
-				digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);
+				keyer_output_write (configuration.current_ptt_line, ptt_line_inactive_state);
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION)
 					if ((wk2_both_tx_activated) && (ptt_tx_2)) {
-						digitalWrite (ptt_tx_2, ptt_line_inactive_state);
+						keyer_output_write (ptt_tx_2, ptt_line_inactive_state);
 					}
 				#endif
 			#endif //FEATURE_SO2R_BASE
@@ -7456,6 +7760,10 @@ int read_settings_from_eeprom() {
 			#endif
 
 			close_r_eeprom();
+
+			#if defined(potentiometer) && potentiometer == 0
+				configuration.pot_activated = 0;
+			#endif
 
 			#ifndef FEATURE_SO2R_BASE
 				switch_to_tx_silent(configuration.current_tx);
@@ -7934,10 +8242,10 @@ void tx_and_sidetone_key (int state)
 			if (key_tx) {
 				byte previous_ptt_line_activated = ptt_line_activated;
 				ptt_key();
-				if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_active_state);}
+				if (current_tx_key_line) {keyer_output_write (current_tx_key_line, tx_key_line_active_state);}
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 					if ((wk2_both_tx_activated) && (tx_key_line_2)) {
-						digitalWrite (tx_key_line_2, HIGH);
+						keyer_output_write (tx_key_line_2, HIGH);
 					}
 				#endif
 				if ((first_extension_time) && (previous_ptt_line_activated == 0)) {
@@ -7951,10 +8259,10 @@ void tx_and_sidetone_key (int state)
 		} else {
 			if ((state == 0) && (key_state)) {
 				if (key_tx) {
-					if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_inactive_state);}
+					if (current_tx_key_line) {keyer_output_write (current_tx_key_line, tx_key_line_inactive_state);}
 					#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 						if ((wk2_both_tx_activated) && (tx_key_line_2)) {
-							digitalWrite (tx_key_line_2, LOW);
+							keyer_output_write (tx_key_line_2, LOW);
 						}
 					#endif
 					ptt_key();
@@ -7972,10 +8280,10 @@ void tx_and_sidetone_key (int state)
 				if (!ptt_interlock_active) {
 					ptt_key();
 				}
-				if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_active_state);}
+				if (current_tx_key_line) {keyer_output_write (current_tx_key_line, tx_key_line_active_state);}
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 					if ((wk2_both_tx_activated) && (tx_key_line_2)) {
-						digitalWrite (tx_key_line_2, HIGH);
+						keyer_output_write (tx_key_line_2, HIGH);
 					}
 				#endif
 				if ((first_extension_time) && (previous_ptt_line_activated == 0)) {
@@ -7989,10 +8297,10 @@ void tx_and_sidetone_key (int state)
 		} else {
 			if ((state == 0) && (key_state)) {
 				if (key_tx) {
-					if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_inactive_state);}
+					if (current_tx_key_line) {keyer_output_write (current_tx_key_line, tx_key_line_inactive_state);}
 					#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 						if ((wk2_both_tx_activated) && (tx_key_line_2)) {
-							digitalWrite (tx_key_line_2, LOW);
+							keyer_output_write (tx_key_line_2, LOW);
 						}
 					#endif
 					if (!ptt_interlock_active) {
@@ -14077,11 +14385,11 @@ void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
 }
 
 int step_audio_volume(int level, bool increase) {
-	// +/-2 dB in linear amplitude, rounded to the saved integer percentage.
+	// +/-1 dB in linear amplitude, rounded to the saved integer percentage.
 	if (increase) {
-		return constrain(max(level + 1, (level * 1259 + 500) / 1000), 0, 100);
+		return constrain(max(level + 1, (level * 1122 + 500) / 1000), 0, 100);
 	}
-	return constrain(min(level - 1, (level * 794 + 500) / 1000), 0, 100);
+	return constrain(min(level - 1, (level * 891 + 500) / 1000), 0, 100);
 }
 
 void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
@@ -19016,7 +19324,7 @@ void display_heading(void) {
 			while (1) {
 				myDelay(0);
 	 #else
-		void read_io_handler(void) {  // otherwise called from an interrrupt
+		void read_io_handler(void) {
 	 #endif	
 				uint8_t bits = 0x00;
 				if (paddle_irq) {
@@ -19046,8 +19354,10 @@ void display_heading(void) {
 	#else   // for other CPUs each interrupt queries the MCP pins
 		static void paddle_intr_handler(void) {
 			paddle_irq = 1;
+			#if !defined(ARDUINO_ARCH_RP2040)
 			read_io_handler();
 			yield();
+			#endif
 		}
 	#endif		
 
@@ -19058,6 +19368,10 @@ void display_heading(void) {
 		// could be bus 1 if board has a touch controller. else normally bus 0
 		//debug_serial_port->println("MCP23107: Start setup");
 		mcp23017.init();
+		#if defined(ARDUINO_ARCH_RP2040)
+			keyer_expander_register_write(0x00, 0xFF);
+			keyer_expander_register_write(0x01, 0xFF);
+		#endif
 		mcp23017.interruptMode(MCP23017InterruptMode::Or);  // MCP23017InterruptMode::Separated
 		mcp23017.interrupt(MCP23017Port::A, CHANGE);   // port A change only, not port B
 		mcp23017.pinMode(paddle_left, INPUT_PULLUP, false);
@@ -19065,8 +19379,20 @@ void display_heading(void) {
 		#ifdef FEATURE_STRAIGHT_KEY
 			mcp23017.pinMode(pin_straight_key, INPUT_PULLUP, false);
 		#endif
+		#if defined(ARDUINO_ARCH_RP2040)
+			keyer_output_latches[0] = keyer_output_latches[1] = 0;
+			keyer_output_directions[0] = keyer_output_directions[1] = 0xFF;
+			const uint8_t input_interrupts = (1u << paddle_left) |
+			    (1u << paddle_right)
+			    #ifdef FEATURE_STRAIGHT_KEY
+			      | (1u << pin_straight_key)
+			    #endif
+			    ;
+			keyer_expander_register_write(0x04, input_interrupts);
+			keyer_expander_register_write(0x05, 0);
+		#endif
 		mcp23017.clearInterrupts();
-		
+
 		#if defined(HARDWARE_ESP32_DEV)			
 			// Setup CPU side GPIO interrupt for IntA
 			gpio_set_direction((gpio_num_t) MCP23017_INTA_GPIO, GPIO_MODE_INPUT);
@@ -19089,6 +19415,10 @@ void display_heading(void) {
 		//val = mcp23017.readPort(MCP23017Port::A);
 		//debug_serial_port->print(F("MCP23107: Port A read:")); debug_serial_port->println(val, HEX);
 		mcp23017.clearInterrupts();
+		#if defined(ARDUINO_ARCH_RP2040)
+			paddle_irq = 1;
+			read_io_handler();
+		#endif
 
 		#ifdef HARDWARE_ESP32_DEV
 			BaseType_t xReturned;
@@ -19144,54 +19474,42 @@ void initialize_pins() {
 	}
 
 	if (tx_key_line_1) {
-		pinMode (tx_key_line_1, OUTPUT);
-		digitalWrite (tx_key_line_1, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_1, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_2) {
-		pinMode (tx_key_line_2, OUTPUT);
-		digitalWrite (tx_key_line_2, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_2, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_3) {
-		pinMode (tx_key_line_3, OUTPUT);
-		digitalWrite (tx_key_line_3, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_3, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_4) {
-		pinMode (tx_key_line_4, OUTPUT);
-		digitalWrite (tx_key_line_4, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_4, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_5) {
-		pinMode (tx_key_line_5, OUTPUT);
-		digitalWrite (tx_key_line_5, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_5, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_6) {
-		pinMode (tx_key_line_6, OUTPUT);
-		digitalWrite (tx_key_line_6, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_6, tx_key_line_inactive_state);
 	}
 
 
 	if (ptt_tx_1) {
-		pinMode (ptt_tx_1, OUTPUT);
-		digitalWrite (ptt_tx_1, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_1, ptt_line_inactive_state);
 	}
 	if (ptt_tx_2) {
-		pinMode (ptt_tx_2, OUTPUT);
-		digitalWrite (ptt_tx_2, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_2, ptt_line_inactive_state);
 	}
 	if (ptt_tx_3) {
-		pinMode (ptt_tx_3, OUTPUT);
-		digitalWrite (ptt_tx_3, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_3, ptt_line_inactive_state);
 	}
 	if (ptt_tx_4) {
-		pinMode (ptt_tx_4, OUTPUT);
-		digitalWrite (ptt_tx_4, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_4, ptt_line_inactive_state);
 	}
 	if (ptt_tx_5) {
-		pinMode (ptt_tx_5, OUTPUT);
-		digitalWrite (ptt_tx_5, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_5, ptt_line_inactive_state);
 	}
 	if (ptt_tx_6) {
-		pinMode (ptt_tx_6, OUTPUT);
-		digitalWrite (ptt_tx_6, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_6, ptt_line_inactive_state);
 	}
 	if (sidetone_line) {
 		pinMode (sidetone_line, OUTPUT);
@@ -19395,9 +19713,11 @@ void initialize_pins() {
 		pinMode(tx_pause_pin,INPUT_PULLUP);
 	}
 
+	#ifdef FEATURE_POTENTIOMETER
 	if (potentiometer_enable_pin){
 		pinMode(potentiometer_enable_pin,INPUT_PULLUP);
 	}
+	#endif
 
 	if (pin_sending_mode_automatic){
 		pinMode(pin_sending_mode_automatic,OUTPUT);
@@ -19833,6 +20153,8 @@ void initialize_potentiometer(){
 		last_pot_wpm_read = pot_value_wpm();
 		configuration.pot_activated = 1;
 //    Serial.print(pot_value_wpm());//SP5IOU 20220129
+	#elif defined(potentiometer) && potentiometer == 0
+		configuration.pot_activated = 0;
 	#endif
 
 }
@@ -19842,7 +20164,7 @@ void initialize_rotary_encoder(){
 
 	#ifdef FEATURE_ROTARY_ENCODER
 		#ifdef OPTION_ENCODER_ENABLE_PULLUPS
-			#if defined (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) ||defined(HARDWARE_ESP32_DEV)//sp5iou 20180329 //SP5IOU 20220129
+			#if defined (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) ||defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_ARCH_RP2040)
 				pinMode(rotary_pin1, INPUT_PULLUP);//sp5iou 20180329
 				pinMode(rotary_pin2, INPUT_PULLUP);//sp5iou 20180329
 			#else // (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) //sp5iou 20180329
@@ -19851,7 +20173,27 @@ void initialize_rotary_encoder(){
 				digitalWrite(rotary_pin1, HIGH);
 				digitalWrite(rotary_pin2, HIGH);
 			 #endif
+		#else
+			pinMode(rotary_pin1, INPUT);
+			pinMode(rotary_pin2, INPUT);
 		#endif //OPTION_ENCODER_ENABLE_PULLUPS
+		#if defined(ARDUINO_ARCH_RP2040)
+			encoder_event_head = encoder_event_tail = 0;
+			encoder_event_overflow = false;
+			state = 0;
+			capture_encoder_transition();
+			attachInterrupt(digitalPinToInterrupt(rotary_pin1), capture_encoder_transition, CHANGE);
+			attachInterrupt(digitalPinToInterrupt(rotary_pin2), capture_encoder_transition, CHANGE);
+		#endif
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			#if rotary_switch != 0
+				pinMode(rotary_switch, INPUT_PULLUP);
+				encoder_button_candidate = encoder_button_pressed =
+				    digitalRead(rotary_switch) == LOW;
+				encoder_button_changed_ms = encoder_button_down_ms = millis();
+				encoder_long_press = false;
+			#endif
+		#endif
 	#endif //FEATURE_ROTARY_ENCODER
 
 }
@@ -22434,6 +22776,9 @@ void update_led_ring(){
 
 //---------------------------------------------------------------------
 int paddle_pin_read(int pin_to_read) {
+	#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+		read_io_handler();
+	#endif
 
 	// Updated code provided by Fred, VK2EFL
 	// Modified to read memory var updated by IO interrupt reads by K7MDL. When Pin_interrupts or MCP23017 is enabled.
@@ -22472,7 +22817,7 @@ int paddle_pin_read(int pin_to_read) {
 				}                                                     // end switch
 		#endif                                                  // OPTION_SAVE_MEMORY_NANOKEYER
 		#if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
-				#if defined(USE_KEY_PIN_INTERRUPTS)
+				#if defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
 						// !OPTION_INVERT_PADDLE_PIN_LOGIC
 						if (pin_to_read == paddle_left) {
 							//debug_serial_port->print(F("Paddle Left  Val = ")); debug_serial_port->println(paddle_left_state);
@@ -22487,7 +22832,7 @@ int paddle_pin_read(int pin_to_read) {
 				#endif
 		#endif                                                  // !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
 	#else                                               // !OPTION_INVERT_PADDLE_PIN_LOGIC
-			#if defined(USE_KEY_PIN_INTERRUPTS)
+			#if defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
 						if (pin_to_read == paddle_left) {
 							//debug_serial_port->print(F("Paddle Left  Val = ")); debug_serial_port->println(paddle_left_state);
 							return (int) !paddle_left_state;
@@ -27304,7 +27649,7 @@ void mainloop(void)
 						#ifdef OPTION_BEACON_MODE_PTT_TAIL_TIME
 							myDelay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
 							check_ptt_tail();                                                         // this resets things so that the ptt line will go high during the next playout
-							digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
+							keyer_output_write (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
 						#endif                                                                      // OPTION_BEACON_MODE_PTT_TAIL_TIME
 
 						#ifdef FEATURE_SERIAL

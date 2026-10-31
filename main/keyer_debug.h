@@ -68,7 +68,7 @@
 // #define DEBUG_COMPASS
 // #define DEBUG_WM8960_AUDIO
 // #define DEBUG_MIDI
-// #define DEBUG_MIDI_MESSAGES
+#define DEBUG_MIDI_MESSAGES
 // #define TASK_HIGH_WATER_MONITOR  // use to check status of runnign FreeRTOS tasks
 // #define TASK_PROCESS_STATUS     // used to check run status of all tasks on both CPUs
 // #define OPTION_WINKEY_IGNORE_FIRST_STATUS_REQUEST

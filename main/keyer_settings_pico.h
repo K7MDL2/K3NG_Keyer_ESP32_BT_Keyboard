@@ -277,6 +277,13 @@
 
 #define initial_sidetone_mode 1            // Sidetone mode, 0=OFF, 1=ON, 2=PADDLE_ONLY
 
+#ifndef ENCODER_VFO_DIRECTION
+  #define ENCODER_VFO_DIRECTION -1 // -1 reverses VFO tuning only; +1 uses normal encoder direction
+#endif
+#if ENCODER_VFO_DIRECTION != -1 && ENCODER_VFO_DIRECTION != 1
+  #error "ENCODER_VFO_DIRECTION must be -1 or +1"
+#endif
+
 #define sd_card_spi_ss_line 4
 
 #if defined(OPTION_DFROBOT_LCD_COMMAND_BUTTONS)

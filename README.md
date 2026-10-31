@@ -162,7 +162,7 @@ Extended terminal commands start with `\:` and end with Enter:
 | `\:USBMIC 80` | Set USB microphone level to 80% |
 | `\:SIDETONE 50` | Set sidetone to 50% |
 | `\:USBPLAY MUTE` / `\:USBPLAY UNMUTE` / `\:USBPLAY TOGGLE` | Change playback mute without losing its level |
-| `\:USBMIC +` / `\:SIDETONE -` | Adjust the selected level by approximately 2 dB |
+| `\:USBMIC +` / `\:SIDETONE -` | Adjust the selected level by approximately 1 dB |
 
 All three target commands accept a level from 0 to 100, `+`, `-`, `MUTE`,
 `UNMUTE`, or `TOGGLE`; no argument shows status. Setting/adjusting a level
@@ -177,12 +177,12 @@ Bluetooth consumer/media keys use the same controls:
 | Left or right Shift | WM8960 sidetone |
 | Left or right Ctrl | USB microphone |
 
-Mute toggles the selected path; Volume+/Volume- use approximately 2 dB
+Mute toggles the selected path; Volume+/Volume- use approximately 1 dB
 audio-taper steps and unmute, as do terminal `+`/`-` commands. Each step
-multiplies linear amplitude by 1.259 (up) or 0.794 (down), rounded to the
+multiplies linear amplitude by 1.122 (up) or 0.891 (down), rounded to the
 saved integer percentage. Near silence, a minimum 1% change ensures every
 step moves; 0% is silence and 100% is the upper limit. For example, decreasing
-from 100% gives 79%, 63%, 50%, 40%, then 32%. Numeric commands still set
+from 100% gives 89%, 79%, 70%, 62%, then 55%. Numeric commands still set
 linear 0..100% directly, and the EEPROM layout/version is unchanged.
 Ctrl+Shift or Alt/Meta combinations are ignored. Consumer releases do not
 repeat the action or enter the Morse text buffer. The keyboard must actually
@@ -406,9 +406,8 @@ Terminal commands (CDC2 when configured) are:
 
 `wm8960_midi_wheel_step(int direction)` supplies the wheel API; positive
 direction sends 127 and negative sends 1, matching the source implementation
-(its README lists the opposite values). Physical encoder wiring and the
-source's local encoder menu are deferred. Existing keyer WPM encoder behavior
-and pin assignments are unchanged.
+(its README lists the opposite values). The Pico WM8960 encoder menu below
+uses this API for VFO tuning.
 
 Uncomment `SEND_MIDI_FREQUENCY` in `main/keyer_features_and_options_pico.h`
 to send CC3 when its mapped value changes and once per second. It defaults
@@ -489,15 +488,113 @@ tools installed, run `.\tests\wm8960_midi_host_test.ps1`; it checks debug/pitch
 options both enabled and disabled, packet routing, source coexistence,
 EEPROM configuration byte round-trips, and USB failure recovery.
 
+### Pico MCP23017 TX/PTT outputs
+
+With `FEATURE_MCP23017_EXPANDER`, all six TX/PTT pairs use the expander:
+
+| Transmitter | TX key MCP pin | PTT MCP pin |
+|---|---|---|
+| 1 | 3 (A3) | 4 (A4) |
+| 2 | 5 (A5) | 6 (A6) |
+| 3 | 7 (A7) | 8 (B0) |
+| 4 | 9 (B1) | 10 (B2) |
+| 5 | 11 (B3) | 12 (B4) |
+| 6 | 13 (B5) | 14 (B6) |
+
+Paddles remain on MCP pins 0/1, straight key on pin 2, and pin 15 is spare.
+The TX Select touch control cycles through six transmitters. Internal output
+identifiers use 100 + MCP pin; paddle/key identifiers remain raw MCP pins.
+CPU GPIO14/22 are no longer TX/PTT outputs in this mode; GPIO22 remains the
+expander interrupt input for the current Pico display profile.
+Without the feature, existing GPIO assignments and TX selection limits remain
+unchanged. No EEPROM format/magic change is required: the saved transmitter
+selection is resolved to the current pin mapping at startup.
+
+Output latches are set to the configured inactive polarity before enabling
+each output direction. Writes use cached OLAT values to preserve other outputs
+without clearing paddle interrupts, and report I2C write errors. On Pico,
+interrupts only flag input changes; foreground paddle/straight-key reads
+service the expander, avoiding I2C reentry during TX/PTT writes.
+Only key input pins generate interrupts. Expander output updates add I2C
+latency; hardware timing and integration with the codec still need testing.
+Run `.\tests\keyer_expander_host_test.ps1` for the host routing/polarity tests.
+
+### Pico WM8960 rotary encoder
+
+`FEATURE_ROTARY_ENCODER` is enabled in the Pico configuration. The user's
+pin assignments in `main/keyer_pin_settings_pico.h` are **CPU GPIO numbers**,
+not MCP pin numbers:
+
+| MCP23017 feature | Encoder A/B | Switch |
+|---|---|---|
+| Enabled | GPIO2 / GPIO3 | GPIO4 |
+| Disabled | GPIO22 / GPIO14 | GPIO42 |
+
+These conditional assignments reuse CPU pins freed by moving key inputs
+and TX/PTT outputs onto the MCP23017. The current direct-GPIO profile disables
+TX/PTT GPIO outputs (zero) to free GPIO14/22. Internal pull-ups are enabled;
+connect encoder contacts/switch to ground. Review assignments before changing
+features or restoring direct TX/PTT pins.
+
+With a nonzero `rotary_switch`, the initial function is MIDI VFO tuning.
+Short press/release advances through:
+
+**VFO -> master (USB playback) volume -> sidetone volume -> sidetone
+frequency -> CW speed -> USB microphone level -> VFO.**
+
+The switch has 20 ms debounce. Holding it for one second returns to VFO;
+release after a long hold does not advance the menu. There is no double-click
+save action. Non-VFO function/value messages appear on the LCD for two seconds;
+rotation updates the controls immediately, with one final-value message after
+100 ms without further processed steps rather than a redraw per step.
+VFO uses only the status letter, without a per-step LCD message.
+The status row immediately to the right of WPM shows a light-green mode letter:
+**V** = VFO, **M** = master volume, **S** = sidetone volume,
+**F** = sidetone frequency, **W** = CW speed, **U** = USB microphone level.
+Output routing (headphone/speaker/both/none) and decoder-source selection
+are not included.
+
+Setting `rotary_switch` to **0** disables all switch pin setup/reads and fixes
+the encoder function to **master/USB playback volume**, not speed.
+Menu selection is not saved; audio/pitch/speed settings use normal deferred
+EEPROM saving, with no layout or magic-number change.
+
+Volume functions reuse the existing approximately 1 dB audio-taper steps and
+unmute the selected path. Master volume changes the existing saved USB playback
+trim, not the codec's analogue output gain or sidetone volume. Frequency
+changes by 10 Hz per decoded step, limited to 300..1200 Hz. CW speed retains
+the existing 1/2-WPM acceleration, command-mode speed handling, WinKey speed
+notification, LCD update, and normal-speed MIDI CC21 synchronization.
+VFO emits one CC20 relative message per decoded step (positive 127, negative 1).
+`ENCODER_VFO_DIRECTION` in `main/keyer_settings_pico.h` defaults to **-1**
+to reverse VFO tuning; set **+1** for the original direction. Other modes
+are unaffected.
+The existing half-step quadrature decoder is reused. Pico GPIO CHANGE
+interrupts capture transitions and queue up to 127 timestamped steps while
+foreground display/audio work runs. Only foreground code changes settings,
+draws the display, or sends MIDI; queue overflow reports an explicit error
+on the terminal. All modes drain up to 16 captured steps per encoder service call
+and immediately services MIDI, without a periodic send timer. Other builds retain
+the legacy speed-only encoder behavior.
+
+`potentiometer` set to **0** disables `FEATURE_POTENTIOMETER` after pin/settings
+selection, even if the feature was requested. No analog-speed pin or enable-pin
+setup, ADC reads, or potentiometer enable/help/UI commands are compiled in.
+Saved activation is ignored/cleared when settings load. A nonzero
+potentiometer pin retains existing feature-controlled behavior.
+
+Host menu/button/volume tests and Pico builds with MCP23017 enabled/disabled
+pass; physical encoder/menu testing remains pending.
+
 ### Pending Pico integration worklist
 
 All items below are pending; order follows the requested worklist.
 
 1. MIDI application routing and wheel API are implemented from
    `D:\Documents\GitHub\RP2350-SDR-CW-Interface`; test MIDI on hardware and
-   complete physical encoder integration.
-2. Compare that encoder implementation with the existing keyer encoder
-   features and resolve how they should coexist or be reused.
+   validate the physical encoder menu on hardware.
+2. The encoder menu reuses the existing quadrature decoder and speed handling;
+   verify control behavior and pin assignments on hardware.
 3. Test with GPS, MCP23017, and compass features enabled; resolve pin
    assignments and conflicts.
 4. Diagnose touch on the currently configured Pico display: normal touch
