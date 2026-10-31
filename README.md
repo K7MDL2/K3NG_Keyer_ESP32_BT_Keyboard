@@ -600,7 +600,7 @@ All items below are pending; order follows the requested worklist.
 4. Add touch buttons for volume and mute controls, usable without a serial
    terminal or keyboard.
 5. Port this project's Pico Bluetooth keyboard support into
-   `D:\Documents\GitHub\RP2350-SDR-CW-Interface`.
+   `RP2350-SDR-CW-Interface`.
 
 - Mike K7MDL
 
