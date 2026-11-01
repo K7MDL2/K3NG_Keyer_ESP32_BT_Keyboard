@@ -7,7 +7,9 @@
 enum class Wm8960MidiPttMode : uint8_t { Off, OnOff, Toggle };
 
 void wm8960_midi_initialize();
-void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm);
+void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm,
+                         uint8_t master_volume, uint8_t sidetone_volume,
+                         uint8_t microphone_volume);
 void wm8960_midi_key(bool down);
 void wm8960_midi_ptt(bool down);
 bool wm8960_midi_set_ptt_mode(uint8_t mode);

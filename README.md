@@ -409,9 +409,20 @@ direction sends 127 and negative sends 1, matching the source implementation
 (its README lists the opposite values). The Pico WM8960 encoder menu below
 uses this API for VFO tuning.
 
-Uncomment `SEND_MIDI_FREQUENCY` in `main/keyer_features_and_options_pico.h`
-to send CC3 when its mapped value changes and once per second. It defaults
-off to avoid disrupting host MIDI assignment dialogs.
+These controls send absolute MIDI CC values on channel 10 when changed
+and on USB connection/reconnection, without periodic repeats:
+
+| Control | CC | Mapping to 0..127 |
+|---|---|---|
+| Master (USB playback) volume | 7 | 0..100%, rounded |
+| Sidetone volume | 22 | 0..100%, rounded |
+| Sidetone frequency | 3 | 300..1000 Hz, clamped and rounded |
+| USB microphone level | 23 | 0..100%, rounded |
+
+Muted volume controls report 0; unmuting reports the stored level.
+Changes from the encoder, keyboard, terminal, and restored settings are
+covered. Frequency reporting no longer requires `SEND_MIDI_FREQUENCY`.
+For host MIDI assignment dialogs, avoid changing other controls while mapping.
 `DEBUG_MIDI` in `main/keyer_debug.h` enables routine MIDI status on terminal
 connection. Errors remain reported without that define; explicit status/help
 commands remain available.
@@ -484,8 +495,8 @@ after applying the Thetis-compatible scaling above.
 Incoming MIDI and other host-radio interoperability tests remain pending.
 Host regression tests compile the actual MIDI handlers and audio source/render
 functions with mocked USB/DMA backends. On Windows with Visual Studio C++
-tools installed, run `.\tests\wm8960_midi_host_test.ps1`; it checks debug/pitch
-options both enabled and disabled, packet routing, source coexistence,
+tools installed, run `.\tests\wm8960_midi_host_test.ps1`; it checks debug
+options both enabled and disabled, control-change reporting, packet routing, source coexistence,
 EEPROM configuration byte round-trips, and USB failure recovery.
 
 ### Pico MCP23017 TX/PTT outputs

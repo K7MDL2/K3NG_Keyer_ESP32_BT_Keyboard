@@ -41,7 +41,7 @@ $encoderTable = [regex]::Match($main, '(?s)#ifdef OPTION_ENCODER_HALF_STEP_MODE.
 $settings = Get-Content (Join-Path $root 'main\keyer_settings_pico.h') -Raw
 $encoderDirection = [regex]::Match($settings, '(?s)#ifndef ENCODER_VFO_DIRECTION.*?(?=\r?\n#define sd_card_spi_ss_line)').Value
 if (!$encoderDirection) { throw 'Encoder VFO direction setting not found' }
-$encoderFunctions = @('audio_volume', 'step_audio_volume', 'set_audio_volume',
+$encoderFunctions = @('service_keyer_midi', 'audio_volume', 'step_audio_volume', 'set_audio_volume',
     'initialize_potentiometer', 'initialize_rotary_encoder', 'chk_rotary_encoder',
     'check_rotary_encoder') |
     ForEach-Object { Get-CppFunction $main $_ }
@@ -186,6 +186,7 @@ namespace wm8960_i2s {
 $encoderMocks = @'
 enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
 int audio_volume(AudioVolumeTarget);
+void service_keyer_midi();
 int step_audio_volume(int, bool);
 void set_audio_volume(AudioVolumeTarget, int, bool);
 template<class T> T max(T a, T b) { return std::max(a,b); }
@@ -234,6 +235,9 @@ void speed_change_command_mode(int step) {
 '@
 
 $checks = @'
+void wm8960_midi_service(uint16_t frequency, uint32_t speed) {
+  wm8960_midi_service(frequency, speed, 100, 50, 100);
+}
 void fresh() {
   mounted = writable = lockable = true; suspended = false;
   write_budget = -1;
@@ -395,18 +399,65 @@ int main() {
     assert(memcmp(&restored, &configuration, sizeof(restored)) == 0);
   }
   fresh();
-#ifdef SEND_MIDI_FREQUENCY
   outgoing.clear(); wm8960_midi_service(300, 20);
   assert(messages(0xB9,3,0) == 1);
+  outgoing.clear(); wm8960_midi_service(301, 20);
+  assert(messages(0xB9,3,0) == 1); // Report even a change below one MIDI unit.
   outgoing.clear(); wm8960_midi_service(1000, 20);
   assert(messages(0xB9,3,127) == 1);
   outgoing.clear(); wm8960_midi_service(1500, 20);
   assert(messages(0xB9,3,127) == 0);
   advance(1000); wm8960_midi_service(1500, 20);
-  assert(messages(0xB9,3,127) == 1);
-#else
-  assert(messages(0xB9,3,0) == 0 && messages(0xB9,3,127) == 0);
-#endif
+  assert(messages(0xB9,3,127) == 0);
+  fresh();
+  mounted = false; service(); outgoing.clear();
+  mounted = true; service();
+  assert(messages(0xB9,7,127) == 1 && messages(0xB9,22,64) == 1);
+  assert(messages(0xB9,23,127) == 1 && messages(0xB9,3,82) == 1);
+  outgoing.clear(); service(); assert(outgoing.empty());
+  advance(300000); service();
+  assert(outgoing.size() == 1 && messages(0xB9,21,41) == 1);
+  for (uint8_t level = 0; level <= 100; ++level) {
+    outgoing.clear(); wm8960_midi_service(750, 20, level, level, level);
+    const uint8_t value = (level * 127u + 50u) / 100u;
+    for (uint8_t control : {7,22,23}) {
+      assert(messages(0xB9,control,value) == 1);
+    }
+    assert(outgoing.size() == 3);
+    outgoing.clear(); wm8960_midi_service(750, 20, level, level, level);
+    assert(outgoing.empty());
+  }
+  outgoing.clear(); wm8960_midi_service(750, 20, 255, 255, 255);
+  assert(outgoing.empty()); // Out-of-range volumes clamp to 100%.
+  // Backpressure and USB-lock contention must not lose control reports.
+  fresh(); writable = false;
+  wm8960_midi_service(600, 20, 0, 25, 75);
+  assert(outgoing.empty() && queue_count == 4);
+  writable = true; wm8960_midi_service(600, 20, 0, 25, 75);
+  assert(messages(0xB9,7,0) == 1 && messages(0xB9,22,32) == 1);
+  assert(messages(0xB9,23,95) == 1 && messages(0xB9,3,54) == 1);
+  outgoing.clear(); lockable = false;
+  wm8960_midi_service(700, 20, 80, 60, 40);
+  assert(outgoing.empty());
+  lockable = true; wm8960_midi_service(700, 20, 80, 60, 40);
+  assert(messages(0xB9,7,102) == 1 && messages(0xB9,22,76) == 1);
+  assert(messages(0xB9,23,51) == 1 && messages(0xB9,3,73) == 1);
+  fresh();
+  configuration.hz_sidetone = 750; configuration.wpm = 20;
+  configuration.usb_play_volume = 80; configuration.sidetone_volume = 60;
+  configuration.usb_mic_volume = 40;
+  configuration.usb_play_muted = configuration.sidetone_muted =
+      configuration.usb_mic_muted = true;
+  service_keyer_midi();
+  for (uint8_t control : {7,22,23}) assert(messages(0xB9,control,0) == 1);
+  assert(configuration.usb_play_volume == 80 && configuration.sidetone_volume == 60 &&
+         configuration.usb_mic_volume == 40);
+  outgoing.clear();
+  configuration.usb_play_muted = configuration.sidetone_muted =
+      configuration.usb_mic_muted = false;
+  service_keyer_midi();
+  assert(messages(0xB9,7,102) == 1 && messages(0xB9,22,76) == 1);
+  assert(messages(0xB9,23,51) == 1);
   fresh();
   // Connection publishes speed, unchanged speed waits exactly five minutes.
   mounted = false; service(); outgoing.clear();
@@ -429,8 +480,8 @@ int main() {
     assert(packet != outgoing.end() && (*packet)[3] > 0 && (*packet)[3] <= 127);
     const int decoded = static_cast<int>((*packet)[3] / 2.1333 + 1.5);
     assert(decoded == static_cast<int>(speed < 1 ? 1 : speed > 60 ? 60 : speed));
-    wm8960_midi_service(750, speed);
-    assert(outgoing.size() <= 2); // Optional pitch may also be reported.
+    outgoing.clear(); wm8960_midi_service(750, speed);
+    assert(outgoing.empty());
   }
   fresh(); writable = false; wm8960_midi_service(750, 30);
   assert(messages(0xB9,21,62) == 0 && queue_count > 0);
@@ -683,7 +734,7 @@ try {
     $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if (!$vs) { throw 'Visual Studio C++ tools not found' }
     $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
-    foreach ($defines in @('', '/DDEBUG_MIDI', '/DSEND_MIDI_FREQUENCY', '/DDEBUG_MIDI /DSEND_MIDI_FREQUENCY', '/DDEBUG_MIDI_MESSAGES', '/DDEBUG_MIDI /DDEBUG_MIDI_MESSAGES /DSEND_MIDI_FREQUENCY', '/Drotary_switch=0', '/Drotary_switch=42', '/DENCODER_VFO_DIRECTION=1', '/DTEST_ENCODER_FULL_STEP')) {
+    foreach ($defines in @('', '/DDEBUG_MIDI', '/DDEBUG_MIDI_MESSAGES', '/DDEBUG_MIDI /DDEBUG_MIDI_MESSAGES', '/Drotary_switch=0', '/Drotary_switch=42', '/DENCODER_VFO_DIRECTION=1', '/DTEST_ENCODER_FULL_STEP')) {
         & $env:ComSpec /c "call `"$vcvars`" >nul && cl /nologo /std:c++17 /EHsc /W3 $defines /Fo`"$obj`" /Fe`"$exe`" `"$source`""
         if ($LASTEXITCODE -ne 0) { throw "Host compilation failed: $defines" }
         & $exe

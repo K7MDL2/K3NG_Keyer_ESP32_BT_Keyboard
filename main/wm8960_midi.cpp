@@ -58,8 +58,8 @@ uint32_t reported_invalid_packets = 0;
 uint32_t sent_packets = 0;
 uint32_t received_packets = 0;
 uint32_t suppressed_echoes = 0;
-uint16_t last_frequency = UINT16_MAX;
-uint32_t last_frequency_ms = 0;
+uint16_t last_control_inputs[4] = {
+    UINT16_MAX, UINT16_MAX, UINT16_MAX, UINT16_MAX};
 uint32_t last_speed_wpm = 0;
 uint32_t last_speed_report_ms = 0;
 bool speed_reported = false;
@@ -298,7 +298,9 @@ void reset_session() {
   ptt_session_active = false;
   faulted = cleanup_pending = false;
   cleanup_key_pending = false;
-  last_frequency = UINT16_MAX;
+  for (uint16_t &input : last_control_inputs) {
+    input = UINT16_MAX;
+  }
   speed_reported = false;
   wm8960_audio_set_midi_input(false, false, 0);
 }
@@ -325,7 +327,9 @@ void wm8960_midi_initialize() {
   initialized = true;
 }
 
-void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm) {
+void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm,
+                         uint8_t master_volume, uint8_t sidetone_volume,
+                         uint8_t microphone_volume) {
   if (!initialized || get_core_num() != 0) {
     return;
   }
@@ -360,17 +364,22 @@ void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm) {
           speed_reported = true;
         }
       }
-#if defined(SEND_MIDI_FREQUENCY)
-      const uint16_t frequency = constrain(sidetone_frequency, 300, 1000);
-      const uint8_t value = ((frequency - 300u) * 127u + 350u) / 700u;
-      if (last_frequency != value ||
-          static_cast<uint32_t>(millis() - last_frequency_ms) >= 1000) {
-        if (enqueue_control(3, value)) {
-          last_frequency = value;
-          last_frequency_ms = millis();
+      const uint8_t controls[4] = {7, 22, 23, 3};
+      const uint16_t inputs[4] = {
+          static_cast<uint16_t>(constrain(master_volume, 0, 100)),
+          static_cast<uint16_t>(constrain(sidetone_volume, 0, 100)),
+          static_cast<uint16_t>(constrain(microphone_volume, 0, 100)),
+          static_cast<uint16_t>(constrain(sidetone_frequency, 300, 1000))};
+      for (uint8_t index = 0; index < 4; ++index) {
+        if (last_control_inputs[index] != inputs[index]) {
+          const uint8_t value = index == 3
+              ? ((inputs[index] - 300u) * 127u + 350u) / 700u
+              : (inputs[index] * 127u + 50u) / 100u;
+          if (enqueue_control(controls[index], value)) {
+            last_control_inputs[index] = inputs[index];
+          }
         }
       }
-#endif
       wm8960_audio_set_midi_input(input_keys != 0, input_ptt != 0,
                                   sidetone_frequency);
       flush_output();

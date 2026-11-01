@@ -2097,6 +2097,7 @@ struct config_t {
 enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
 void print_audio_volumes(PRIMARY_SERIAL_CLS *port);
 bool apply_audio_levels();
+void service_keyer_midi();
 void audio_consumer_key(uint16_t usage, uint8_t modifiers);
 int audio_volume(AudioVolumeTarget target);
 int step_audio_volume(int level, bool increase);
@@ -6611,7 +6612,7 @@ void check_rotary_encoder(){
 		if (moved) {
 			last_movement_ms = millis();
 			value_message_pending = encoder_function != EncoderFunction::Vfo;
-			wm8960_midi_service(configuration.hz_sidetone, configuration.wpm);
+			service_keyer_midi();
 			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
 				last_active_time = last_movement_ms;
 			#endif
@@ -14329,6 +14330,13 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
 //---------------------------------------------------------------------
 
 #if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+void service_keyer_midi() {
+	wm8960_midi_service(configuration.hz_sidetone, configuration.wpm,
+	    configuration.usb_play_muted ? 0 : configuration.usb_play_volume,
+	    configuration.sidetone_muted ? 0 : configuration.sidetone_volume,
+	    configuration.usb_mic_muted ? 0 : configuration.usb_mic_volume);
+}
+
 int audio_volume(AudioVolumeTarget target) {
 	switch (target) {
 		case AudioVolumeTarget::Playback: return configuration.usb_play_volume;
@@ -20913,7 +20921,7 @@ void myDelay(uint32_t _ms)
 		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 			const uint32_t audio_delay_start = millis();
 			do {
-				wm8960_midi_service(configuration.hz_sidetone, configuration.wpm);
+				service_keyer_midi();
 				wm8960_audio_service();
 				if (_ms != 0) {
 					delay(1);
@@ -27625,7 +27633,7 @@ void mainloop(void)
 		myDelay(0);
 
 		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
-			wm8960_midi_service(configuration.hz_sidetone, configuration.wpm);
+			service_keyer_midi();
 			wm8960_audio_service();
 		#endif
 

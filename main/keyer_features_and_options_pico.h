@@ -9,7 +9,6 @@
 #define eeprom_magic_number 43          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
-// #define SEND_MIDI_FREQUENCY  // USB MIDI CC3 pitch updates; disabled for easier host mapping
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
 //  Use empty string ("") if there is no GPS active.  No grid will display on status row.
