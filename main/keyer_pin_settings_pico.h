@@ -55,10 +55,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #ifndef WM8960_I2S_LRCLK_PIN
       #define WM8960_I2S_LRCLK_PIN 19
     #endif
-    #ifndef WM8960_I2S_DOUT_PIN
+    #ifndef WM8960_I2S_DOUT_PIN   // RXSDA pin for I2S data output
       #define WM8960_I2S_DOUT_PIN 6
     #endif
-    #ifndef WM8960_I2S_DIN_PIN
+    #ifndef WM8960_I2S_DIN_PIN   // TXSDA pin for I2S data input
       #define WM8960_I2S_DIN_PIN 7
     #endif
     #ifndef WM8960_I2C_ADDRESS
@@ -86,8 +86,8 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #ifdef FEATURE_MCP23017_EXPANDER
       #define MCP23X17_ADDR 0x27      
       #define MCP23017_INTA_GPIO 22 // input only, no pullup on this pin
-      #define paddle_left     MCP23017_PIN0 // expander pin PA0
-      #define paddle_right    MCP23017_PIN1 // expander pin PA1
+      #define paddle_left     MCP23017_PIN1 // expander pin PA0 or 1, swap to put dash and dit on correct paddle when paddle reverse setting is off.
+      #define paddle_right    MCP23017_PIN0 // expander pin PA1 or 0
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY

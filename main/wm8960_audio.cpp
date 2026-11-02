@@ -1226,6 +1226,14 @@ void wm8960_audio_start_tone(uint16_t frequency, uint32_t duration_ms,
   restore_interrupts(interrupt_state);
 }
 
+bool wm8960_audio_tone_active() {
+  return tone_active || midi_tone_active;
+}
+
+bool wm8960_audio_feedback_pending() {
+  return tone_active && tone_frames_remaining != 0;
+}
+
 void wm8960_audio_stop_tone(void) {
   const uint32_t interrupt_state = save_and_disable_interrupts();
   if (tone_active) {

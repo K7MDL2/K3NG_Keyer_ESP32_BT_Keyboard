@@ -530,6 +530,27 @@ Only key input pins generate interrupts. Expander output updates add I2C
 latency; hardware timing and integration with the codec still need testing.
 Run `.\tests\keyer_expander_host_test.ps1` for the host routing/polarity tests.
 
+With GPS enabled, startup loads saved settings and initializes the display
+before opening the GPS UART and showing its baud-rate message. Drawing this
+message before TFT/SPI initialization could previously stop boot with no LCD
+activity or usable USB ports. MCP23017 does not disable the composite USB
+interfaces. For the current Pico display profile, GPS RX is GPIO5 (UART1,
+38400 baud), GPS TX is disabled, and MCP23017/WM8960 share I2C0 on GPIO20/21.
+MCP23017 address is 0x27 and its interrupt input is GPIO22. Check address
+straps, 3.3V logic, common ground, and I2C pull-ups when wiring the modules.
+The GPS status clock redraws only when its displayed time or status color
+changes, avoiding repeated SPI transfers that can starve WM8960 tone output.
+GPS parsing, clock drawing, and pending grid processing pause while PTT or
+key-down is active, including GPS running on core 1. Pending grid updates
+resume when idle. The UART can still receive into its FIFO; prolonged
+transmission may overflow that buffer, with later NMEA sentences restoring GPS.
+Clock and location status are independent: fresh valid time keeps the clock
+active even without a position fix. Grid status requires fresh valid location;
+data becomes stale after five seconds without an update. Raw UART bytes alone
+do not mark either status active. Without location, the configured fallback
+grid remains visible; a GPS fix produces an eight-character grid in the status
+row (the separate saved-grid digit setting controls memory storage).
+
 ### Pico WM8960 rotary encoder
 
 `FEATURE_ROTARY_ENCODER` is enabled in the Pico configuration. The user's
@@ -555,9 +576,29 @@ frequency -> CW speed -> USB microphone level -> VFO.**
 
 The switch has 20 ms debounce. Holding it for one second returns to VFO;
 release after a long hold does not advance the menu. There is no double-click
-save action. Non-VFO function/value messages appear on the LCD for two seconds;
-rotation updates the controls immediately, with one final-value message after
-100 ms without further processed steps rather than a redraw per step.
+save action. Non-VFO function/value messages appear on the LCD for one second;
+rotation updates controls immediately while idle, with live value messages
+limited to one redraw per 25 ms rather than a redraw per step. PTT or key-down
+pauses encoder processing, mode-icon drawing, and messages. Captured steps
+remain queued and resume when idle (subject to the existing queue capacity).
+Encoder value messages expire one second after the last displayed update;
+expiry is serviced while idle even outside normal keyer mode and does not
+wait for an in-progress scroll redraw. The temporary BT saved-address and
+stack-start/ready startup diagnostics have been removed; pairing prompts
+and errors remain.
+WM8960 feedback beeps finish with audio servicing before their callers
+draw LCD messages. Normal display servicing pauses during local or MIDI
+tones, key-down, or PTT; GPS processing also pauses during feedback tones.
+Touch, keyboard, and terminal command polling must remain available during
+tune/TX so stop commands can be received; audio servicing takes priority
+over GPS and LCD work. Pico WM8960 resistive touch reads use two samples
+three milliseconds apart with continuous audio servicing between samples,
+instead of the library's repeated blocking delays. Pressure, raw-position
+stability, and calibrated screen bounds are checked before accepting a touch.
+Feedback-tone waits service audio continuously without millisecond sleeps.
+They wait for generated tone samples to finish, then service the six-millisecond
+DMA tail before LCD drawing. A stalled tone is stopped with an explicit error
+after its requested duration plus one second, rather than hanging the caller.
 VFO uses only the status letter, without a per-step LCD message.
 The status row immediately to the right of WPM shows a light-green mode letter:
 **V** = VFO, **M** = master volume, **S** = sidetone volume,
@@ -601,17 +642,19 @@ pass; physical encoder/menu testing remains pending.
 
 All items below are pending; order follows the requested worklist.
 
-1. Test with GPS, MCP23017, and compass features enabled; resolve pin
-   assignments and conflicts.
-2. Diagnose touch on the currently configured Pico display: normal touch
-   operation requires first pressing just the right spot at the far-left
-   center edge of the panel. Determine whether the cause is software or
-   hardware.
-3. Test Command mode using a single button.
-4. Add touch buttons for volume and mute controls, usable without a serial
+1. Repair or replace the suspected damaged touch-panel membrane, then
+   retest touch. Only occasional events occur when pressure is applied at
+   the left edge; physical touch testing, including stop-TX/tune controls,
+   is blocked until working hardware is available.
+2. Test Command mode using a single button.
+3. Add touch buttons for volume and mute controls, usable without a serial
    terminal or keyboard.
-5. Port this project's Pico Bluetooth keyboard support into
+4. Port this project's Pico Bluetooth keyboard support into
    `RP2350-SDR-CW-Interface`.
+
+Hardware testing confirms clean paddle/keyboard CW, Ctrl-T tune, and
+Ctrl-O feedback tones in On, Paddles Only, and Off modes. The audio-serviced
+touch implementation has host-test coverage but is not hardware-verified.
 
 - Mike K7MDL
 

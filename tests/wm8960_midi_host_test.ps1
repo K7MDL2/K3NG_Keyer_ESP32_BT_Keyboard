@@ -23,11 +23,37 @@ function Get-CppFunction([string]$text, [string]$name) {
     return $text.Substring($start, $end - $start)
 }
 
+$setup = Get-CppFunction $main 'setup_esp'
+$setup = [regex]::Replace($setup, '(?m)//.*$', '')
+$displayInit = $setup.IndexOf('initialize_display();')
+$gpsInit = $setup.IndexOf('initialize_gps_port();')
+$settingsInit = $setup.IndexOf('check_eeprom_for_initialization();')
+if ($settingsInit -lt 0 -or $displayInit -le $settingsInit -or $gpsInit -le $displayInit) {
+    throw 'GPS startup must follow saved settings and display initialization: GPS reports its baud rate on the LCD'
+}
+if ([regex]::Matches($setup, '\binitialize_gps_port\(\);').Count -ne 1) {
+    throw 'GPS must initialize exactly once during startup'
+}
+if ($main -notmatch '(?s)void check_gps\(void \* pvParameters\).*?for\s*\(;;\)\s*\{\s*if \(gps_updates_paused\(\)\)' -or
+    $main -notmatch 'void check_gps\(\)\s*\{\s*if \(1\)\s*\{\s*if \(gps_updates_paused\(\)\) return;' -or
+    $main -notmatch 'while \(!gps_updates_paused\(\) && gps_serial_port.available\(\) > 0\)' -or
+    $main -notmatch 'void process_gps\(\) \{[^\r\n]*\r?\n\s*if \(gps_updates_paused\(\)\) return;') {
+    throw 'GPS task, foreground/core1 parsing, and grid processing must pause during PTT/keying'
+}
+
 $audioFunctions = @(
     'advance_mute_ramp', 'apply_mute_ramp', 'usb_audio_muted_for_keyer',
-    'next_tone_sample', 'wm8960_audio_stop_tone',
+    'next_tone_sample', 'wm8960_audio_tone_active', 'wm8960_audio_feedback_pending', 'wm8960_audio_stop_tone',
     'wm8960_audio_set_midi_input', 'render_i2s_output'
 ) | ForEach-Object { Get-CppFunction $audio $_ }
+$toneFunction = Get-CppFunction $main 's_tone'
+if ($toneFunction -notmatch 'wm8960_audio_start_tone\(frequency, duration_ms, mute_release_ms\);\s*if \(duration_ms\)' -or
+    $toneFunction -notmatch 'while \(wm8960_audio_feedback_pending\(\)\)' -or
+    $toneFunction -notmatch 'millis\(\) - drain_started_ms < 6' -or
+    $toneFunction -notmatch 'Error: WM8960 feedback tone stalled' -or
+    $main -notmatch 'void service_display\(\) \{\s*#if[^\r\n]*\r?\n\s*if \(ptt_line_activated \|\| key_state \|\| wm8960_audio_tone_active\(\)\) return;') {
+    throw 'Feedback tones must service audio before LCD work, and display servicing must defer during tones/PTT/keying'
+}
 $sine = [regex]::Match($audio, '(?s)constexpr int16_t kSineTable\[64\] = \{.*?\};').Value
 if (!$sine) { throw 'Sine table not found' }
 $config = [regex]::Match($main, '(?s)struct config_t \{.*?\} configuration;').Value
@@ -41,7 +67,7 @@ $encoderTable = [regex]::Match($main, '(?s)#ifdef OPTION_ENCODER_HALF_STEP_MODE.
 $settings = Get-Content (Join-Path $root 'main\keyer_settings_pico.h') -Raw
 $encoderDirection = [regex]::Match($settings, '(?s)#ifndef ENCODER_VFO_DIRECTION.*?(?=\r?\n#define sd_card_spi_ss_line)').Value
 if (!$encoderDirection) { throw 'Encoder VFO direction setting not found' }
-$encoderFunctions = @('service_keyer_midi', 'audio_volume', 'step_audio_volume', 'set_audio_volume',
+$encoderFunctions = @('read_audio_safe_touch', 'lcd_timed_message_expired', 'gps_updates_paused', 'gps_data_fresh', 'update_gps_clock_icon', 'service_keyer_midi', 'audio_volume', 'step_audio_volume', 'set_audio_volume',
     'initialize_potentiometer', 'initialize_rotary_encoder', 'chk_rotary_encoder',
     'check_rotary_encoder') |
     ForEach-Object { Get-CppFunction $main $_ }
@@ -68,6 +94,7 @@ $mock = @'
 #define PRIMARY_SERIAL_CLS HardwareSerial
 #define FEATURE_DISPLAY
 #define FEATURE_TFT_DISPLAY
+#define FEATURE_BT_KEYBOARD
 #define FEATURE_ROTARY_ENCODER
 #define OPTION_ENCODER_ENABLE_PULLUPS
 #ifndef TEST_ENCODER_FULL_STEP
@@ -117,6 +144,10 @@ uint32_t clock_ms = 100, clock_us = 100000;
 uint32_t millis() { return clock_ms; }
 uint32_t micros() { return clock_us; }
 void advance(uint32_t ms) { clock_ms += ms; clock_us += ms * 1000; }
+int touch_audio_services = 0;
+void myDelay(uint32_t ms) {
+  assert(ms == 0); ++touch_audio_services; advance(1);
+}
 int get_core_num() { return 0; }
 uint32_t save_and_disable_interrupts() { return 0; }
 void restore_interrupts(uint32_t) {}
@@ -214,20 +245,46 @@ void pinMode(int pin, int mode) {
 }
 void digitalWrite(int, int) { assert(false); }
 std::string lcd_text;
+constexpr uint8_t LCD_CLEAR = 0, LCD_TIMED_MESSAGE = 1;
+uint8_t lcd_status = LCD_CLEAR;
+uint32_t lcd_timed_message_clear_time = 0;
+int display_expirations = 0;
+void service_display() {
+  ++display_expirations; lcd_status = LCD_CLEAR; lcd_text.clear();
+}
 constexpr int TFT_BLACK = 0, ICON_ANCHOR = 250, STATUS_BAR_FONT = 2;
+constexpr int TFT_YELLOW = 1, TFT_GREY = 2, TIME_ANCHOR = 0, STATUS_BAR_Y_CURSOR = 6;
+char time_str[27] = {};
+bool stop_msg = false;
+bool gps_time_active = true;
+volatile uint8_t key_state = 0, ptt_line_activated = 0;
 struct MockLcd {
+  uint16_t pressure = 0, raw_x = 100, raw_y = 150;
+  bool unstable = false;
+  int raw_reads = 0;
+  uint16_t getTouchRawZ() { return pressure; }
+  void getTouchRaw(uint16_t *x, uint16_t *y) {
+    *x = raw_x + (unstable && (++raw_reads % 2 == 0) ? 30 : 0); *y = raw_y;
+  }
+  void convertRawXY(uint16_t *, uint16_t *) {}
+  int width() { return 480; }
+  int height() { return 320; }
   int draws = 0;
   std::string label;
   uint16_t color565(int r, int g, int b) {
     assert(r == 144 && g == 238 && b == 144); return 0x9772;
   }
-  void setTextColor(int fg, int bg) { assert(fg == 0x9772 && bg == TFT_BLACK); }
+  void setTextColor(int fg, int bg) {
+    assert((fg == 0x9772 || fg == TFT_YELLOW || fg == TFT_GREY || fg == TFT_BLACK) && bg == TFT_BLACK);
+  }
   void drawString(const char *text, int x, int row, int font) {
-    assert(x == ICON_ANCHOR && row == 6 && font == STATUS_BAR_FONT);
+    assert((x == ICON_ANCHOR || x == TIME_ANCHOR) && row == 6 && font == STATUS_BAR_FONT);
     label = text; ++draws;
   }
 } lcd;
-void lcd_center_print_timed(String text, int, int) { lcd_text = text.str(); }
+void lcd_center_print_timed(String text, int, int duration) {
+  assert(duration == 1000); lcd_text = text.str();
+}
 void speed_change(int step) { configuration.wpm += step; config_dirty = 1; }
 void speed_change_command_mode(int step) {
   configuration.wpm_command_mode += step; config_dirty = 1;
@@ -537,6 +594,87 @@ int main() {
   terminal.open = false;
 #endif
   fresh();
+  uint16_t touch_x = 0, touch_y = 0;
+  lcd.pressure = 0;
+  assert(!read_audio_safe_touch(&touch_x, &touch_y, 320));
+  lcd.pressure = 400;
+  const int services_before_touch = touch_audio_services;
+  assert(read_audio_safe_touch(&touch_x, &touch_y, 320));
+  assert(touch_x == 100 && touch_y == 150 && touch_audio_services - services_before_touch >= 5);
+  lcd.pressure = 100;
+  assert(read_audio_safe_touch(&touch_x, &touch_y, 320));
+  lcd.pressure = 0; assert(!read_audio_safe_touch(&touch_x, &touch_y, 320));
+  lcd.pressure = 100; assert(!read_audio_safe_touch(&touch_x, &touch_y, 320));
+  lcd.pressure = 400; lcd.unstable = true; lcd.raw_reads = 0;
+  assert(!read_audio_safe_touch(&touch_x, &touch_y, 320));
+  lcd.unstable = false; lcd.raw_x = 500;
+  assert(!read_audio_safe_touch(&touch_x, &touch_y, 320));
+  lcd.raw_x = 100; lcd.pressure = 0;
+  lcd_status = LCD_TIMED_MESSAGE;
+  lcd_timed_message_clear_time = clock_ms + 1000;
+  assert(!lcd_timed_message_expired());
+  advance(999); assert(!lcd_timed_message_expired());
+  advance(1); assert(lcd_timed_message_expired());
+  ptt_line_activated = 1; check_rotary_encoder();
+  assert(display_expirations == 0);
+  ptt_line_activated = 0; key_state = 1; check_rotary_encoder();
+  assert(display_expirations == 0);
+  key_state = 0; check_rotary_encoder();
+  assert(display_expirations == 1 && lcd_status == LCD_CLEAR);
+  clock_ms = UINT32_MAX - 1000;
+  lcd_status = LCD_TIMED_MESSAGE; lcd_timed_message_clear_time = clock_ms + 1000;
+  assert(!lcd_timed_message_expired());
+  advance(1000); assert(lcd_timed_message_expired());
+  lcd_status = LCD_CLEAR;
+  configuration.ignore_gps = false; stop_msg = false;
+  strcpy(time_str, "12:34:56");
+  lcd.draws = 0; update_gps_clock_icon(); assert(lcd.draws == 1);
+  for (int count = 0; count < 1000; ++count) update_gps_clock_icon();
+  assert(lcd.draws == 1);
+  strcpy(time_str, "12:34:57"); update_gps_clock_icon();
+  assert(lcd.draws == 2 && lcd.label == "12:34:57");
+  stop_msg = true; update_gps_clock_icon(); assert(lcd.draws == 2);
+  gps_time_active = false; update_gps_clock_icon(); assert(lcd.draws == 3);
+  update_gps_clock_icon(); assert(lcd.draws == 3);
+  stop_msg = false; gps_time_active = true; update_gps_clock_icon(); assert(lcd.draws == 4);
+  configuration.ignore_gps = true; update_gps_clock_icon(); assert(lcd.draws == 5);
+  configuration.ignore_gps = false; update_gps_clock_icon(); assert(lcd.draws == 6);
+  assert(!gps_data_fresh(false, 0));
+  assert(gps_data_fresh(true, 0) && gps_data_fresh(true, 4999));
+  assert(!gps_data_fresh(true, 5000) && !gps_data_fresh(true, UINT32_MAX));
+  tone_active = true;
+  tone_frames_remaining = 100;
+  assert(wm8960_audio_feedback_pending());
+  tone_frames_remaining = 0;
+  assert(!wm8960_audio_feedback_pending());
+  assert(wm8960_audio_tone_active() && gps_updates_paused());
+  tone_active = false; midi_tone_active = true;
+  assert(wm8960_audio_tone_active() && gps_updates_paused());
+  midi_tone_active = false;
+  assert(!wm8960_audio_tone_active() && !gps_updates_paused());
+  for (uint32_t frequency : {400u,1500u}) {
+    tone_active = true; tone_frames_remaining = 9600;
+    tone_phase = 0;
+    tone_phase_increment = uint32_t((uint64_t(frequency) << 32) / kSampleRate);
+    advance(300); // Wall-clock expiry alone must not end sample-based feedback.
+    assert(wm8960_audio_feedback_pending());
+    const uint32_t before_frames = tone_output_frames;
+    for (int block = 0; block < 75; ++block) render_i2s_output();
+    assert(!wm8960_audio_feedback_pending());
+    assert(tone_output_frames - before_frames == 9600);
+  }
+  for (uint8_t ptt : {0,1}) {
+    for (uint8_t key : {0,1}) {
+      ptt_line_activated = ptt; key_state = key;
+      assert(gps_updates_paused() == bool(ptt || key));
+      if (ptt || key) {
+        strcpy(time_str, "12:35:00");
+        update_gps_clock_icon(); assert(lcd.draws == 6);
+      }
+    }
+  }
+  ptt_line_activated = key_state = 0;
+  update_gps_clock_icon(); assert(lcd.draws == 7 && lcd.label == "12:35:00");
   for (int &pin : pin_values) pin = HIGH;
   init_GPIO_key_pins();
   assert(pin_modes.back() == (std::array<int,2>{pin_straight_key, INPUT_PULLUP}));
@@ -598,7 +736,7 @@ int main() {
     assert(lcd.label == std::string(1, "VMSFWU"[static_cast<int>(function)]));
     int draws = lcd.draws;
     draw_encoder_mode(6, false); assert(lcd.draws == draws);
-    draw_encoder_mode(6, true); assert(lcd.draws == draws + 1);
+    draw_encoder_mode(6, true); assert(lcd.draws == draws + 2);
   }
   encoder_function = rotary_switch ? EncoderFunction::Vfo : EncoderFunction::Master;
   if (rotary_switch) {
@@ -698,17 +836,37 @@ int main() {
     const uint32_t start = clock_ms;
     check_rotary_encoder();
     assert(((encoder_event_head - encoder_event_tail) & 127) == 20 * steps_per_turn - 16);
-    assert(lcd_text == "unchanged" && clock_ms == start);
+    assert(lcd_text != "unchanged" && clock_ms == start);
+    lcd_text = "unchanged";
     check_rotary_encoder();
     if (steps_per_turn == 2) check_rotary_encoder();
     assert(encoder_event_head == encoder_event_tail);
     if (function == EncoderFunction::Speed) assert(configuration.wpm == 100 - 20 * steps_per_turn);
     if (function == EncoderFunction::Frequency) assert(configuration.hz_sidetone == 1000 - 200 * steps_per_turn);
-    advance(99); check_rotary_encoder(); assert(lcd_text == "unchanged");
+    advance(24); check_rotary_encoder(); assert(lcd_text == "unchanged");
     advance(1); check_rotary_encoder(); assert(lcd_text != "unchanged");
     lcd_text = "no repeat"; advance(100); check_rotary_encoder();
     assert(lcd_text == "no repeat");
   }
+  encoder_function = EncoderFunction::Master;
+  configuration.usb_play_volume = 100;
+  turn(false);
+  const auto pending_tail = encoder_event_tail;
+  lcd_text = "blocked";
+  for (uint8_t ptt : {0,1}) {
+    for (uint8_t key : {0,1}) {
+      if (!ptt && !key) continue;
+      ptt_line_activated = ptt; key_state = key;
+      const int draws = lcd.draws;
+      check_rotary_encoder(); show_encoder_function(); draw_encoder_mode(6, true);
+      assert(encoder_event_tail == pending_tail && configuration.usb_play_volume == 100);
+      assert(lcd_text == "blocked" && lcd.draws == draws);
+    }
+  }
+  ptt_line_activated = key_state = 0;
+  advance(25); check_rotary_encoder();
+  assert(encoder_event_tail != pending_tail && configuration.usb_play_volume < 100);
+  assert(lcd_text != "blocked");
   encoder_function = EncoderFunction::Vfo;
   mounted = false; service(); apply_encoder_step(1);
   assert(lcd_text == "MIDI unavailable");

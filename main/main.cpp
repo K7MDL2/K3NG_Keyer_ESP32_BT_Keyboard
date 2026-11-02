@@ -1830,9 +1830,15 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		#define ICON_COLUMN_WIDTH COLUMN_WIDTH-4    // width of mono-spaced status bar font in pixels
 		#define ICON_SPACING (ICON_COLUMN_WIDTH-1)
 		#define TIME_ANCHOR (4)
-		#define TX_NUM_ANCHOR (116)
-		#define GRID_ANCHOR (158)
-		#define WPM_ANCHOR (292)
+		#if defined(FEATURE_TFT_PICO_320x480_RES_LCD)
+			#define TX_NUM_ANCHOR (110)
+			#define GRID_ANCHOR (146)
+			#define WPM_ANCHOR (282)
+		#else
+			#define TX_NUM_ANCHOR (116)
+			#define GRID_ANCHOR (158)
+			#define WPM_ANCHOR (292)
+		#endif
 		#define ICON_ANCHOR (373)
 		#define STATUS_BAR_Y_CURSOR (8)
 
@@ -2578,10 +2584,10 @@ byte dit_buffer = 0;     // used for buffering paddle hits in iambic operation
 byte dah_buffer = 0;     // used for buffering paddle hits in iambic operation
 byte button0_buffer = 0;
 byte being_sent = 0;     // SENDING_NOTHING, SENDING_DIT, SENDING_DAH
-byte key_state = 0;      // 0 = key up, 1 = key down
+volatile byte key_state = 0;      // 0 = key up, 1 = key down
 byte config_dirty = 0;
 unsigned long ptt_time = 0;
-byte ptt_line_activated = 0;
+volatile byte ptt_line_activated = 0;
 byte speed_mode = SPEED_NORMAL;
 #if defined(FEATURE_COMMAND_LINE_INTERFACE) || defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_MEMORY_MACROS) || defined(FEATURE_MEMORIES) || defined(FEATURE_COMMAND_MODE)
 	unsigned int serial_number = 1;
@@ -2699,11 +2705,11 @@ static void bt_reconnect_scan_task(void *pvParameters)
 	tmElements_t tm;
 	TinyGPSPlus gps; // The TinyGPSPlus object
 	bool UTC = false;    // 0 local time, 1 UTC time
+	bool gps_time_active = false;
 	uint8_t hr_off;  // time offsets to apply to UTC time
 	uint8_t min_off;
 	int shift_dir;  // + or -
 	char time_str[27] = {};
-	bool time_disp_updated = false;
 	uint8_t gps_source = 0;
 #endif
 volatile bool do_process = false;
@@ -4604,6 +4610,46 @@ int touch_button_available() {
 	#endif
 }
 
+#ifdef FEATURE_GPS
+bool gps_updates_paused() {
+	return ptt_line_activated || key_state
+	    #if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+	      || wm8960_audio_tone_active()
+	    #endif
+	    ;
+}
+
+bool gps_data_fresh(bool valid, uint32_t age_ms) {
+	return valid && age_ms < 5000;
+}
+#endif
+
+#if defined(FEATURE_TFT_DISPLAY) && defined(FEATURE_GPS)
+void update_gps_clock_icon() {
+	if (gps_updates_paused()) return;
+	static char last_time[sizeof(time_str)] = {};
+	static uint16_t last_color = 0;
+	static bool drawn = false;
+	#ifdef FEATURE_BT_KEYBOARD
+		const uint16_t color = !configuration.ignore_gps && gps_time_active
+		    ? TFT_YELLOW : TFT_GREY;
+	#else
+		const uint16_t color = TFT_YELLOW;
+	#endif
+	char current_time[sizeof(time_str)];
+	memcpy(current_time, time_str, sizeof(current_time));
+	current_time[sizeof(current_time) - 1] = '\0';
+	if (drawn && color == last_color && strcmp(current_time, last_time) == 0) {
+		return;
+	}
+	lcd.setTextColor(color, TFT_BLACK);
+	lcd.drawString(current_time, TIME_ANCHOR, STATUS_BAR_Y_CURSOR, STATUS_BAR_FONT);
+	strcpy(last_time, current_time);
+	last_color = color;
+	drawn = true;
+}
+#endif
+
 void update_icons(void) {
 #ifdef FEATURE_TFT_DISPLAY
 		if (popup_active) return;  // bail, these screen writes below are outside the popup window
@@ -4625,22 +4671,7 @@ void update_icons(void) {
 		lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)
 
 		#ifdef FEATURE_GPS      // if not enabled leave the default grey 00:00:00 printed at init time.
-		if (!time_disp_updated && !configuration.ignore_gps && !stop_msg) {
-				lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-				time_disp_updated = true;
-			} else {
-				#ifndef FEATURE_BT_KEYBOARD
-					lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-				#else
-					lcd.setTextColor(TFT_GREY, TFT_BLACK);
-				#endif
-				time_disp_updated = true;
-			}
-
-			if (time_disp_updated) {
-				lcd.drawString(time_str, TIME_ANCHOR, STATUS_BAR_Y_CURSOR, STATUS_BAR_FONT);
-				time_disp_updated = false;
-			}
+			update_gps_clock_icon();
 		#endif
 
 		if (configuration.current_tx != last_tx || last_key_tx != key_tx) // TX state changed, update display
@@ -4658,7 +4689,11 @@ void update_icons(void) {
 			last_key_tx = key_tx;
 		}
 
-		if (stop_msg_changed || strcmp(grid_sq_str, last_GridSq) != 0)  // connect status and/or grid changed, update display
+		if (
+		    #ifdef FEATURE_GPS
+		      !gps_updates_paused() &&
+		    #endif
+		    (stop_msg_changed || strcmp(grid_sq_str, last_GridSq) != 0))  // connect status and/or grid changed, update display
 		{
 			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
 			lcd.drawString(last_GridSq, GRID_ANCHOR, row, STATUS_BAR_FONT);   // blank out space
@@ -4676,6 +4711,7 @@ void update_icons(void) {
 			}
 
 			strcpy(last_GridSq, grid_sq_str);  // write grid square
+			stop_msg_changed = false;
 		}
 
 //    GRID_ANCHOR (SCREEN_WIDTH/4)
@@ -4783,7 +4819,6 @@ void update_icons(void) {
 		lcd.setTextColor(TFT_WHITE, TFT_BLACK);   // set back to normal size and color
 		lcd.setFreeFont(TFT_FONT_MEDIUM);
 		lcd.setTextDatum(MY_DATUM);
-		stop_msg_changed = false;
 #endif
 }
 
@@ -4801,7 +4836,15 @@ void testlcd(char status, int x, int y) {
 //-------------------------------------------------------------------------------------------------------
 
 #ifdef FEATURE_DISPLAY
+bool lcd_timed_message_expired() {
+	return lcd_status == LCD_TIMED_MESSAGE &&
+	    static_cast<int32_t>(millis() - lcd_timed_message_clear_time) >= 0;
+}
+
 void service_display() {
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (ptt_line_activated || key_state || wm8960_audio_tone_active()) return;
+	#endif
 
 	#ifdef DEBUG_LOOP
 		debug_serial_port->println(F("loop: entering service_display"));
@@ -4820,6 +4863,11 @@ void service_display() {
 		update_icons();
 		if (popup_active) return;  // do not overwrite the window
 	#endif
+
+	if (lcd_timed_message_expired()) {
+		lcd_status = LCD_REVERT;
+		screen_refresh_status = SCREEN_REFRESH_IDLE;
+	}
 
 	if (screen_refresh_status == SCREEN_REFRESH_INIT) {   // active at beginning of an event like pause
 		#ifdef FEATURE_TFT_DISPLAY
@@ -4915,7 +4963,7 @@ void service_display() {
 			switch (lcd_status) {
 				case LCD_CLEAR : break;
 				case LCD_TIMED_MESSAGE:
-					if (millis() > lcd_timed_message_clear_time) {
+					if (lcd_timed_message_expired()) {
 						lcd_status = LCD_REVERT;
 					}
 					else {
@@ -6432,19 +6480,24 @@ char encoder_mode_letter() {
 }
 
 void draw_encoder_mode(int row, bool redraw) {
+	if (ptt_line_activated || key_state) return;
 	#ifdef FEATURE_TFT_DISPLAY
 		static char last_mode = '\0';
 		const char mode = encoder_mode_letter();
 		if (mode != last_mode || redraw) {
+			const char old_label[] = {last_mode, '\0'};
+			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+			lcd.drawString(old_label, ICON_ANCHOR, row, STATUS_BAR_FONT);  // erase last icon letter
 			lcd.setTextColor(lcd.color565(144, 238, 144), TFT_BLACK);
 			const char label[] = {mode, '\0'};
-			lcd.drawString(label, ICON_ANCHOR, row, STATUS_BAR_FONT);
+			lcd.drawString(label, ICON_ANCHOR, row, STATUS_BAR_FONT);  // draw new icon letter
 			last_mode = mode;
 		}
 	#endif
 }
 
 void show_encoder_function() {
+	if (ptt_line_activated || key_state) return;
 	#ifdef FEATURE_DISPLAY
 		String text;
 		switch (encoder_function) {
@@ -6462,11 +6515,12 @@ void show_encoder_function() {
 				text = "USB Mic " + String(configuration.usb_mic_volume) + "%"; break;
 			case EncoderFunction::Count: return;
 		}
-		lcd_center_print_timed(text, 0, 2000);
+		lcd_center_print_timed(text, 0, 1000);
 	#endif
 }
 
 void check_encoder_switch() {
+	if (ptt_line_activated || key_state) return;
 	#if rotary_switch != 0
 		const uint32_t now = millis();
 		const bool pressed = digitalRead(rotary_switch) == LOW;
@@ -6511,7 +6565,7 @@ void apply_encoder_step(int step) {
 		case EncoderFunction::Vfo:
 			if (!wm8960_midi_wheel_step(step * ENCODER_VFO_DIRECTION)) {
 				#ifdef FEATURE_DISPLAY
-					lcd_center_print_timed("MIDI unavailable", 0, 2000);
+					lcd_center_print_timed("MIDI unavailable", 0, 1000);
 				#else
 					debug_serial_port->println(F("Error: MIDI encoder output unavailable"));
 				#endif
@@ -6594,9 +6648,13 @@ int chk_rotary_encoder(){
 void check_rotary_encoder(){
 
 	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (ptt_line_activated || key_state) return;
 		static bool value_message_pending = false;
-		static uint32_t last_movement_ms = 0;
+		static uint32_t last_message_ms = 0;
 		static EncoderFunction message_function = encoder_function;
+		#ifdef FEATURE_DISPLAY
+			if (lcd_timed_message_expired()) service_display();
+		#endif
 		check_encoder_switch();
 		if (message_function != encoder_function) {
 			value_message_pending = false;
@@ -6610,16 +6668,17 @@ void check_rotary_encoder(){
 			moved = true;
 		}
 		if (moved) {
-			last_movement_ms = millis();
 			value_message_pending = encoder_function != EncoderFunction::Vfo;
 			service_keyer_midi();
 			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-				last_active_time = last_movement_ms;
+				last_active_time = millis();
 			#endif
-		} else if (value_message_pending &&
-		    static_cast<uint32_t>(millis() - last_movement_ms) >= 100) {
+		}
+		if (value_message_pending &&
+		    static_cast<uint32_t>(millis() - last_message_ms) >= 25) {
 			value_message_pending = false;
 			show_encoder_function();
+			last_message_ms = millis();
 		}
 	#else
 	int step = chk_rotary_encoder();
@@ -20764,19 +20823,10 @@ void initialize_bt_keyboard(){  // init the BT 4.2 stack for ESP32-WROOM-32 for 
 				// Consumer keys are the special function ones like "mute" or "home"
 			bt_keyboard.onConsumerKeyDown(ckb, (void *)true);
 			bt_keyboard.onConsumerKeyUp(ckb, (void *)false);
-			#if defined(FEATURE_WM8960_USB_AUDIO) && defined(FEATURE_DISPLAY)
-				lcd_center_print_timed("BT: saved address", 1, 2000);
-			#endif
 			check_last_bt_addr_in_EEPROM(); // See about reconnecting
 			bt_keyboard.setPasskeyCB(bt_pairing_passkey_handler);
-			#if defined(FEATURE_WM8960_USB_AUDIO) && defined(FEATURE_DISPLAY)
-				lcd_center_print_timed("BT: stack start", 1, 2000);
-			#endif
 			if (use_BLE) bt_keyboard.begin(true);   // BLE
 			else bt_keyboard.begin();  // BT Classic
-			#if defined(FEATURE_WM8960_USB_AUDIO) && defined(FEATURE_DISPLAY)
-				lcd_center_print_timed("BT: stack ready", 1, 2000);
-			#endif
 
 			// BTstack's default page timeout (0x6000, ~15.4s) is too short for a
 			// blind reconnect (no clock offset from inquiry, since a bonded K380
@@ -21503,6 +21553,41 @@ void process_buttons() { // (uint8_t button_ID) {
 }
 
 // Detects if a button is pressed and assign a button ID to it.
+#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_RES_TOUCH) && \
+    defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
+	static bool held = false;
+	const uint16_t pressure_threshold = held ? 20 : threshold;
+	myDelay(0);
+	if (lcd.getTouchRawZ() <= pressure_threshold) {
+		held = false;
+		return false;
+	}
+	uint16_t first_x, first_y, next_x, next_y;
+	lcd.getTouchRaw(&first_x, &first_y);
+	const uint32_t started = millis();
+	do {
+		myDelay(0);
+	} while (millis() - started < 3);
+	if (lcd.getTouchRawZ() <= pressure_threshold) {
+		held = false;
+		return false;
+	}
+	lcd.getTouchRaw(&next_x, &next_y);
+	myDelay(0);
+	if (abs(static_cast<int>(first_x) - next_x) > 20 ||
+	    abs(static_cast<int>(first_y) - next_y) > 20) {
+		return false;
+	}
+	lcd.convertRawXY(&next_x, &next_y);
+	if (next_x >= lcd.width() || next_y >= lcd.height()) return false;
+	*x = next_x;
+	*y = next_y;
+	held = true;
+	return true;
+}
+#endif
+
 #if defined(FEATURE_TOUCH_DISPLAY)
 
 	#ifndef USE_TOUCH_TASK
@@ -21563,7 +21648,11 @@ void process_buttons() { // (uint8_t button_ID) {
 							debug_serial_port->print(F("GetTouch1: Check for pressed - "));
 						#endif
 
-						pressed = lcd.getTouch(&t_x, &t_y, threshold);
+						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+							pressed = read_audio_safe_touch(&t_x, &t_y, threshold);
+						#else
+							pressed = lcd.getTouch(&t_x, &t_y, threshold);
+						#endif
 						
 						#ifdef DEBUG_TOUCH
 							int z = lcd.getTouchRawZ();
@@ -21594,7 +21683,11 @@ void process_buttons() { // (uint8_t button_ID) {
 
 									#ifdef USE_RES_TOUCH
 										//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
-										pressed = lcd.getTouch(&t_x, &t_y, threshold);
+										#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+											pressed = read_audio_safe_touch(&t_x, &t_y, threshold);
+										#else
+											pressed = lcd.getTouch(&t_x, &t_y, threshold);
+										#endif
 										#ifdef DEBUG_TOUCH
 											debug_serial_port->printf("GetTouch3: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed);
 										#endif
@@ -25650,6 +25743,22 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 		          (tone_wpm ? tone_wpm : 1)
 		    : 7000UL * qrss_dit_length;
 		wm8960_audio_start_tone(frequency, duration_ms, mute_release_ms);
+		if (duration_ms) {
+			const uint32_t started_ms = millis();
+			while (wm8960_audio_feedback_pending()) {
+				myDelay(0);
+				if (millis() - started_ms >= duration_ms + 1000UL) {
+					wm8960_audio_stop_tone();
+					debug_serial_port->println(F("Error: WM8960 feedback tone stalled"));
+					break;
+				}
+			}
+			// Drain the 256-frame DMA lead before callers draw on the LCD.
+			const uint32_t drain_started_ms = millis();
+			do {
+				myDelay(0);
+			} while (millis() - drain_started_ms < 6);
+		}
 	#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 		#ifdef FEATURE_M5STACK_CORE2
 				M5.Speaker.tone(frequency, configuration.hz_sidetone);
@@ -27338,19 +27447,20 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 
 		for(;;)
 		{
+			if (gps_updates_paused()) {
+				myDelay(10);
+				continue;
+			}
 
 #else
 
 	void check_gps() {
 		if (1)
 		{
-			#ifndef USE_CORE1
-				if (ptt_line_activated) return;  // do not interrupt CW send timing
-			#endif
+			if (gps_updates_paused()) return;
 
 #endif
 
-			static uint32_t lost_gps_timer = 0;
 			bool _do_process = false;
 			static char gps_grid[9];
 			struct tm timeinfo;
@@ -27364,23 +27474,29 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 			uint8_t gps_second = 0;
 
 			myDelay(10);
+			if (gps_updates_paused()) {
+				#ifdef USE_GPS_TASK
+					continue;
+				#else
+					return;
+				#endif
+			}
 
 			#ifdef GPS_TEST
 				// choose one of the 2 below to simulate NMEA data from either grid square
 				//auto gpsStream = gpsStream_EM10;
 				auto gpsStream = gpsStream_CN87;
 
-				while (*gpsStream) {
+				while (!gps_updates_paused() && *gpsStream) {
 					if (gps.encode(*gpsStream++)) {
 						//displayInfo();
 						if (gps.location.isValid()) {
 							//debug_serial_port->print(F("Grid Square = ")); debug_serial_port->println(grid_sq_str);
-							stop_msg = false;
 						}
 					}
 				}
 			#else
-				while (gps_serial_port.available() > 0) {										
+				while (!gps_updates_paused() && gps_serial_port.available() > 0) {
 
 					#ifdef DEBUG_GPS
 						char c;
@@ -27393,13 +27509,19 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 						#ifdef DEBUG_GPS_X
 							debug_serial_port->print(F("."));
 						#endif
-						stop_msg = false;
-						lost_gps_timer = millis();
 					//} else {
 					//  gps_serial_port.read();
 					//}
 				}
 			#endif
+
+			if (gps_updates_paused()) {
+				#ifdef USE_GPS_TASK
+					continue;
+				#else
+					return;
+				#endif
+			}
 
 			if (gps.time.isValid() && gps.time.isUpdated())
 			{
@@ -27422,37 +27544,34 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 				gps_minute = gps.time.minute();
 				gps_second = gps.time.second();
 				sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
-				stop_msg = false;
 				#ifdef DEBUG_GPS
 					debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
 				#endif
-			} else {
-				if (!gps.time.isValid()) stop_msg = true;
 			}
 
-			if (gps.location.isValid() && gps.location.isUpdated()) {
+			gps_time_active = gps_data_fresh(gps.time.isValid(), gps.time.age());
+			const bool location_active =
+			    gps_data_fresh(gps.location.isValid(), gps.location.age());
+			const bool location_lost = !stop_msg && !location_active;
+			stop_msg = !location_active;
+			if (location_active && gps.location.isUpdated()) {
 				Convert_to_MH(gps_grid);
 				if (strcmp(gps_grid, configuration.GPS_GridSq) != 0) {
 					strcpy(configuration.GPS_GridSq, gps_grid);         // if grid changed, store it in EEPROM
 					config_dirty = 1;
 				}
-				stop_msg = false;
 				#ifdef DEBUG_GPS
 					debug_serial_port->print(F("check_gps: Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq);
 				#endif
 				_do_process = true;
-			} else {
-				if (!gps.location.isValid()) stop_msg = true;
 			}
 
 			#ifndef GPS_TEST
-				if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
+				if (location_lost)
 				{
-					debug_serial_port->println(F("No GPS detected: Check wiring."));
-					if (!stop_msg) _do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid
+					debug_serial_port->println(F("GPS location unavailable or stale; using fallback grid."));
+					_do_process = true;
 					strcpy(gps_grid, "");
-					stop_msg = true;
-					lost_gps_timer = millis();
 				}
 			#endif
 
@@ -27505,6 +27624,7 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 
 	//void process_gps(char * memory_str, bool force_update, uint8_t source) {
 	void process_gps() {  // use temp_gps structure
+		if (gps_updates_paused()) return;
 		char * memory_str = g->grid;
 		uint8_t source = g->source;
 		static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
@@ -27933,7 +28053,6 @@ void setup_esp()
 		initialize_i2c();
 	#endif
 	initialize_pins();
-	initialize_gps_port();	
 	// initialize_debug_startup();       // Goody - this is available for testing startup issues
 	// debug_blink();                    // Goody - this is available for testing startup issues
 	initialize_keyer_state();
@@ -27953,6 +28072,7 @@ void setup_esp()
 			initialize_serial_ports();
 	#endif
 	initialize_display();
+	initialize_gps_port();
 	initialize_buttons();
 	initialize_ps2_keyboard();
 	initialize_usb();

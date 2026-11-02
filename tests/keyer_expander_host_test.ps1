@@ -55,7 +55,7 @@ int main() {
   TwoWire &bus = Wire;
   TwoWire &other = Wire1;
 #endif
-  assert(paddle_left == 0 && paddle_right == 1 && pin_straight_key == 2);
+  assert(paddle_left == 1 && paddle_right == 0 && pin_straight_key == 2);
   for (int tx = 0; tx < 6; ++tx) {
     assert(keys[tx] == 103 + tx * 2);
     assert(ptts[tx] == 104 + tx * 2);
