@@ -34,22 +34,23 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 
 #if defined (FEATURE_M5STACK_CORE2)
   #define bt_keyboard_LED 0
-  #define paddle_left    32  // Port A; not available for external I2C in this profile
-  #define paddle_right   27  // GPIO33 is wired to the ULN2803A output buffer
-  #define tx_key_line_1   25
-  #define ptt_tx_1        26
-  #define tx_key_line_2   33
+  extern bool core2_port_a_output;
+  #define paddle_left    33  // Port A; move the former ULN2803A input wire to GPIO27
+  #define paddle_right   32  // Port A; not available for external I2C in this profile
+  #define tx_key_line_1   (core2_port_a_output ? 33 : 25)
+  #define ptt_tx_1        (core2_port_a_output ? 32 : 26)
+  #define tx_key_line_2   27
   #define ptt_tx_2        19
-  #define sidetone_line   0  // Built-in I2S speaker is deferred to the audio stage
+  #define sidetone_line   0  // Built-in I2S speaker; no GPIO tone output
   #define audio_enable   0
   #define potentiometer  0
   #define tx_inhibit_pin 0
   #define tx_pause_pin   0
-  // GPIO14 is wired to the ULN2803A PTT input; reserved but not enabled.
+  // The buffered GPIO14 input is used as the straight key, not manual PTT.
   #ifdef FEATURE_STRAIGHT_KEY
-    #define pin_straight_key 35  // M-Bus, input only: external 10k pull-up to 3.3V required
+    #define pin_straight_key 14
   #endif //FEATURE_STRAIGHT_KEY
-  #define GPS_RX_PIN      0  // GPS disabled; GPIO13 spare, GPIO14 reserved for PTT input
+  #define GPS_RX_PIN      0  // GPS disabled; GPIO13 spare, GPIO35 reserved
   #define I2CDEV_SDA_PIN 21
   #define I2CDEV_SCL_PIN 22
   #define SD_SPI_CS_PIN   4

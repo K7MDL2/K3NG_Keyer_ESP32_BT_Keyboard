@@ -183,6 +183,7 @@ English code training word lists from gen_cw_words.pl by Andy Stewart, KB1OIQ
 	 CTRL-M           Set Farnsworth Speed (0 = disabled)  (requires FEATURE_FARNSWORTH)
 	 CTRL-N           Paddle Reverse
 	 CTRL-O           Toggle Sidetone On/Off
+	 CTRL-Q           Toggle saved beacon mode (repeat Memory 1)
 	 CTRL-S           CMOS Superkeyer Timing On/Off
 	 CTRL-T           Tune
 	 CTRL-U           Manual PTT Toggle
@@ -1763,14 +1764,15 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		M5GFX &lcd = M5.Display;
 		#define FM9 &fonts::FreeMono9pt7b
 		#define FMB12 &fonts::FreeMonoBold12pt7b
+		#define FMB18 &fonts::FreeMonoBold18pt7b
 		#define FS9 &fonts::FreeSans9pt7b
 		#define FS12 &fonts::FreeSans12pt7b
 		#define TFT_HEIGHT 320
 		#define TFT_WIDTH 240
 		#define TL_DATUM 0
-		#define BL_DATUM 9
-		#define BC_DATUM 10
-		#define MC_DATUM 4
+		#define BL_DATUM 8
+		#define BC_DATUM 9
+		#define MC_DATUM 5
 	#else
 		#include "SPI.h"
 		#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
@@ -1876,6 +1878,23 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#endif
 
+	#ifdef FEATURE_M5STACK_CORE2
+		#undef TFT_FONT_MEDIUM
+		#undef SCROLL_BOX_FONT
+		#undef COLUMN_WIDTH
+		#undef FONT_HEIGHT
+		#undef SCROLL_TEXT_TOP_LINE
+		#undef SCROLL_TEXT_LEFT_SIDE
+		#undef LINE_SPACER
+		#define TFT_FONT_MEDIUM FMB18
+		#define SCROLL_BOX_FONT FMB18
+		#define COLUMN_WIDTH 24
+		#define FONT_HEIGHT 44
+		#define LINE_SPACER 0
+		#define SCROLL_TEXT_TOP_LINE 67
+		#define SCROLL_TEXT_LEFT_SIDE 16
+	#endif
+
 	#define TFT_GREY 0x5AEB // New color
 
 	#if defined(FEATURE_M5STACK_CORE2)
@@ -1912,7 +1931,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#define SCROLL_BOX_ROW3 (SCROLL_TEXT_TOP_LINE+(2*FONT_HEIGHT)+LINE_SPACER)
 	#define SCROLL_BOX_ROW4 (SCROLL_TEXT_TOP_LINE+(3*FONT_HEIGHT)+LINE_SPACER)
 	#define SCROLL_BOX_ROW5 (SCROLL_TEXT_TOP_LINE+(4*FONT_HEIGHT)+LINE_SPACER)
-	#define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
+	#ifdef FEATURE_M5STACK_CORE2
+		#define SCROLL_BOX_CENTER (SCROLL_BOX_LEFT_SIDE + SCROLL_BOX_WIDTH/2)
+	#else
+		#define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
+	#endif
 	#define SCROLL_BOX_BOTTOM (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT)
 
 	#define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
@@ -2111,17 +2134,36 @@ struct config_t {
 	#endif
 } configuration;
 
-#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
 void print_audio_volumes(PRIMARY_SERIAL_CLS *port);
 bool apply_audio_levels();
-void service_keyer_midi();
-void service_host_ptt_feedback();
 void audio_consumer_key(uint16_t usage, uint8_t modifiers);
 int audio_volume(AudioVolumeTarget target);
 int step_audio_volume(int level, bool increase);
 void set_audio_volume(AudioVolumeTarget target, int level, bool muted);
 bool audio_muted(AudioVolumeTarget target);
+#endif
+#if defined(FEATURE_CORE2_AUDIO) && defined(FEATURE_DISPLAY)
+#include <atomic>
+void service_core2_audio_message();
+#endif
+#ifdef FEATURE_M5STACK_CORE2
+static_assert(CORE2_PORT_A_OUTPUT_DEFAULT == 0 || CORE2_PORT_A_OUTPUT_DEFAULT == 1);
+bool core2_port_a_output = CORE2_PORT_A_OUTPUT_DEFAULT;
+static bool core2_port_a_saved_output = CORE2_PORT_A_OUTPUT_DEFAULT;
+static_assert(CORE2_PORT_A_REVERSED_DEFAULT == 0 || CORE2_PORT_A_REVERSED_DEFAULT == 1);
+static bool core2_port_a_reversed = CORE2_PORT_A_REVERSED_DEFAULT;
+static bool core2_port_a_saved_reversed = CORE2_PORT_A_REVERSED_DEFAULT;
+static bool core2_port_a_key_active = false;
+static bool core2_port_a_ptt_active = false;
+#if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
+bool cli_core2_port_a(PRIMARY_SERIAL_CLS *port, String command);
+#endif
+#endif
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+void service_keyer_midi();
+void service_host_ptt_feedback();
 void sync_pod_volume();
 bool midi_pod_mode();
 // POD mode PC-side levels: sent to the PC only; local playback/mic levels stay fixed.
@@ -2200,6 +2242,9 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 void display_scroll_print_char(char charin);
 void service_display();
+#ifdef FEATURE_DISPLAY
+void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration);
+#endif
 void popup(bool show);
 void initialize_sinewave_generator();
 void myDelay(uint32_t _ms);
@@ -3758,6 +3803,15 @@ byte service_tx_inhibit_and_pause(){
 //-------------------------------------------------------------------------------------------------------
 
 #if defined(FEATURE_BEACON_SETTING)
+	void toggle_beacon_setting() {
+		configuration.beacon_mode_on_boot_up = !configuration.beacon_mode_on_boot_up;
+		config_dirty = 1;
+		#ifdef FEATURE_DISPLAY
+			lcd_center_print_timed(configuration.beacon_mode_on_boot_up ?
+			    "Beacon On" : "Beacon Off", 0, default_display_msg_delay);
+		#endif
+	}
+
 	void service_beacon(){
 		if ((configuration.beacon_mode_on_boot_up) && (!send_buffer_bytes)){
 			serial_play_memory(0);
@@ -5232,6 +5286,9 @@ void reset_display_scroll_text() {
 }
 
 void display_scroll_print_char(char charin){
+	#ifdef FEATURE_M5STACK_CORE2
+		if (static_cast<uint8_t>(charin) < 32 || charin == 127) return;
+	#endif
 
 	byte &column_pointer = lcd_scroll_column_pointer;
 	byte &row_pointer = lcd_scroll_row_pointer;
@@ -5334,6 +5391,9 @@ void clear_display_row(byte row_number)
 		default: y1 = SCROLL_BOX_ROW1; break;
 	}
 		y1 -= FONT_HEIGHT;
+		#ifdef FEATURE_M5STACK_CORE2
+			if (y1 < SCROLL_BOX_TOP) y1 = SCROLL_BOX_TOP;
+		#endif
 
 		// blank out line
 	#ifdef FEATURE_TFT_DISPLAY
@@ -5392,7 +5452,11 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 		clear_display_row(row_number);
 	}
 	#ifdef FEATURE_TFT_DISPLAY
-		lcd.setFreeFont(SCROLL_BOX_FONT);
+		#ifdef FEATURE_M5STACK_CORE2
+			lcd.setFreeFont(FMB12);
+		#else
+			lcd.setFreeFont(SCROLL_BOX_FONT);
+		#endif
 		lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
 		//uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT)+(FONT_HEIGHT/4);
 		uint32_t y1 = SCROLL_BOX_ROW1;
@@ -5406,7 +5470,12 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 		}
 		//debug_serial_port->print(F("lcd_center_print_timed(): string = ")); debug_serial_port->println(lcd_print_string);
 		lcd.setTextPadding(2);
+		#ifdef FEATURE_M5STACK_CORE2
+			const int clear_top = max(static_cast<int>(SCROLL_BOX_TOP), static_cast<int>(y1) - FONT_HEIGHT);
+			lcd.fillRect(SCROLL_BOX_LEFT_SIDE, clear_top, SCROLL_BOX_WIDTH, y1 - clear_top, TFT_BLACK);
+		#else
 		lcd.fillRect(SCROLL_BOX_LEFT_SIDE, y1-FONT_HEIGHT, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
+		#endif
 		lcd.setTextColor(TFT_WHITE);
 		lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, GFXFF);
 		//lcd.setTextDatum(SCROLL_BOX_DATUM);   // restore to generic datum
@@ -5987,6 +6056,12 @@ void check_ps2_keyboard()
 																config_dirty = 1;
 																break;
 
+
+																#ifdef FEATURE_BEACON_SETTING
+																case PS2_Q_CTRL:
+																		toggle_beacon_setting();
+																		break;
+																#endif
 
 																#if defined(FEATURE_CMOS_SUPER_KEYER_IAMBIC_B_TIMING)
 																case PS2_S_CTRL :
@@ -7482,6 +7557,15 @@ bool keyer_expander_register_write(uint8_t reg, uint8_t value) {
 #endif
 
 void keyer_output_write(uint8_t pin, uint8_t state) {
+	#ifdef FEATURE_M5STACK_CORE2
+		if (core2_port_a_output && (pin == 33 || pin == 32)) {
+			const bool active = state == (pin == 33 ? tx_key_line_active_state : ptt_line_active_state);
+			(pin == 33 ? core2_port_a_key_active : core2_port_a_ptt_active) = active;
+			ESP_ERROR_CHECK(gpio_set_level(static_cast<gpio_num_t>(pin),
+			    active != core2_port_a_reversed ? 0 : 1));
+			return;
+		}
+	#endif
 	#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
 		if (pin >= 100 && pin <= 115) {
 			const uint8_t port = (pin - 100) / 8;
@@ -7500,6 +7584,15 @@ void keyer_output_write(uint8_t pin, uint8_t state) {
 }
 
 void keyer_output_initialize(uint8_t pin, uint8_t inactive_state) {
+	#ifdef FEATURE_M5STACK_CORE2
+		if (core2_port_a_output && (pin == 33 || pin == 32)) {
+			(pin == 33 ? core2_port_a_key_active : core2_port_a_ptt_active) = false;
+			ESP_ERROR_CHECK(gpio_set_level(static_cast<gpio_num_t>(pin), core2_port_a_reversed ? 0 : 1));
+			ESP_ERROR_CHECK(gpio_set_pull_mode(static_cast<gpio_num_t>(pin), GPIO_FLOATING));
+			ESP_ERROR_CHECK(gpio_set_direction(static_cast<gpio_num_t>(pin), GPIO_MODE_OUTPUT_OD));
+			return;
+		}
+	#endif
 	#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
 		if (pin >= 100 && pin <= 115) {
 			const uint8_t port = (pin - 100) / 8;
@@ -14183,6 +14276,9 @@ void print_serial_help(PRIMARY_SERIAL_CLS * port_to_use,byte paged_help){
 	port_to_use->println(F("\\)\t\t: Send serial number with cut numbers, then increment")); //Added missing command(WD9DMP)
 	port_to_use->println(F("\\[\t\t: Set quiet paddle interruption - 0 to 20 element lengths; 0 = off")); //Added missing command(WD9DMP)
 	port_to_use->println(F("\\]\t\t: PTT disable/enable"));
+	#ifdef FEATURE_BEACON_SETTING
+		port_to_use->println(F("\\_\t\t: Toggle saved beacon mode (repeat Memory 1; Ctrl-Q)"));
+	#endif
 	#ifdef FEATURE_AMERICAN_MORSE
 		port_to_use->println(F("\\=\t\t: Toggle American Morse mode")); //Added missing command(WD9DMP)
 	#endif
@@ -14226,6 +14322,13 @@ void print_serial_help(PRIMARY_SERIAL_CLS * port_to_use,byte paged_help){
 	#if !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 		if (paged_help) {serial_page_pause(port_to_use,10);}
 		port_to_use->println(F("\r\n\\:\tExtended CLI commands"));
+		#ifdef FEATURE_M5STACK_CORE2
+			port_to_use->println(F("\t\tporta [PADDLES|OUTPUT|REVERSE] - saved mode/polarity; reboot to apply"));
+		#endif
+		#ifdef FEATURE_CORE2_AUDIO
+			port_to_use->println(F("\t\taudio - show saved speaker levels"));
+			port_to_use->println(F("\t\tsidetone [0..100|+|-|MUTE|UNMUTE|TOGGLE]"));
+		#endif
 		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 			port_to_use->println(F("\t\taudio - show saved device audio levels"));
 			port_to_use->println(F("\t\tusbplay|usbmic|sidetone [0..100|+|-|MUTE|UNMUTE|TOGGLE]"));
@@ -14616,15 +14719,13 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
 		#if defined(FEATURE_BEACON_SETTING)
 		case '_':
 				port_to_use->print(F("\r\nBeacon Mode At Boot Up "));
-				if (!configuration.beacon_mode_on_boot_up){
-					configuration.beacon_mode_on_boot_up = 1;
+				toggle_beacon_setting();
+				if (configuration.beacon_mode_on_boot_up){
 					port_to_use->print(F("En"));
 				} else {
-					configuration.beacon_mode_on_boot_up = 0;
 					port_to_use->print(F("Dis"));
 				}
 				port_to_use->println(F("abled"));
-				config_dirty = 1;
 				break;
 		#endif
 
@@ -14749,14 +14850,24 @@ void sync_pod_volume() {
 	pod_mic_volume = configuration.usb_mic_volume;
 	pod_mic_muted = configuration.usb_mic_muted;
 }
+#endif
 
+#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 int audio_volume(AudioVolumeTarget target) {
 	switch (target) {
 		case AudioVolumeTarget::Playback:
+			#ifdef FEATURE_CORE2_AUDIO
+			return configuration.sidetone_volume;
+			#else
 			return midi_pod_mode() ? pod_play_volume : configuration.usb_play_volume;
+			#endif
 		case AudioVolumeTarget::Sidetone: return configuration.sidetone_volume;
 		case AudioVolumeTarget::Microphone:
+			#ifdef FEATURE_CORE2_AUDIO
+			return 0;
+			#else
 			return midi_pod_mode() ? pod_mic_volume : configuration.usb_mic_volume;
+			#endif
 	}
 	return 0;
 }
@@ -14764,28 +14875,50 @@ int audio_volume(AudioVolumeTarget target) {
 bool audio_muted(AudioVolumeTarget target) {
 	switch (target) {
 		case AudioVolumeTarget::Playback:
+			#ifdef FEATURE_CORE2_AUDIO
+			return configuration.sidetone_muted;
+			#else
 			return midi_pod_mode() ? pod_play_muted : configuration.usb_play_muted;
+			#endif
 		case AudioVolumeTarget::Sidetone: return configuration.sidetone_muted;
 		case AudioVolumeTarget::Microphone:
+			#ifdef FEATURE_CORE2_AUDIO
+			return true;
+			#else
 			return midi_pod_mode() ? pod_mic_muted : configuration.usb_mic_muted;
+			#endif
 	}
 	return false;
 }
 
 bool apply_audio_levels() {
+	#ifdef FEATURE_CORE2_AUDIO
+	M5.Speaker.setVolume(configuration.sidetone_muted ? 0 :
+	    constrain(configuration.sidetone_volume, 0, 100) * CORE2_SPEAKER_VOLUME / 100);
+	return true;
+	#else
 	return wm8960_audio_set_levels(
 	    configuration.sidetone_volume, configuration.usb_play_volume,
 	    configuration.usb_mic_volume, configuration.sidetone_muted,
 	    configuration.usb_play_muted, configuration.usb_mic_muted);
+	#endif
 }
 
 void set_audio_volume(AudioVolumeTarget target, int level, bool muted) {
+	#ifdef FEATURE_CORE2_AUDIO
+	if (target == AudioVolumeTarget::Microphone) {
+		debug_serial_port->println(F("Error: Core2 microphone audio is not supported"));
+		return;
+	}
+	target = AudioVolumeTarget::Sidetone;
+	#else
 	if (target != AudioVolumeTarget::Sidetone && midi_pod_mode()) {
 		const bool mic = target == AudioVolumeTarget::Microphone;
 		(mic ? pod_mic_volume : pod_play_volume) = static_cast<uint8_t>(constrain(level, 0, 100));
 		(mic ? pod_mic_muted : pod_play_muted) = muted;
 		return;
 	}
+	#endif
 	switch (target) {
 		case AudioVolumeTarget::Playback:
 			configuration.usb_play_volume = level;
@@ -14802,11 +14935,17 @@ void set_audio_volume(AudioVolumeTarget target, int level, bool muted) {
 	}
 	if (apply_audio_levels()) {
 		config_dirty = 1;
-		config_changed_ms = millis();
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			config_changed_ms = millis();
+		#endif
 	}
 }
 
 void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
+	#ifdef FEATURE_CORE2_AUDIO
+	port->printf("SIDETONE %d%% %s\r\n", configuration.sidetone_volume,
+	    configuration.sidetone_muted ? "MUTED" : "ON");
+	#else
 	port->printf("USBPLAY %u%% %s\r\nSIDETONE %d%% %s\r\nUSBMIC %u%% %s\r\n",
 	    configuration.usb_play_volume,
 	    configuration.usb_play_muted ? "MUTED" : "ON",
@@ -14819,6 +14958,7 @@ void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
 		    pod_play_volume, pod_play_muted ? "MUTED" : "ON",
 		    pod_mic_volume, pod_mic_muted ? "MUTED" : "ON");
 	}
+	#endif
 }
 
 int step_audio_volume(int level, bool increase) {
@@ -14826,6 +14966,19 @@ int step_audio_volume(int level, bool increase) {
 	// were too coarse near full scale.
 	return constrain(level + (increase ? 2 : -2), 0, 100);
 }
+
+#if defined(FEATURE_CORE2_AUDIO) && defined(FEATURE_DISPLAY)
+// The BT task publishes a snapshot; only the main display path draws it.
+static std::atomic<int> core2_audio_message{-1};
+
+void service_core2_audio_message() {
+	if (popup_active || in_pairing_mode || ptt_line_activated || key_state) return;
+	const int message = core2_audio_message.exchange(-1);
+	if (message < 0) return;
+	lcd_center_print_timed((message & 128) ? String("Sidetone muted") :
+	    "Sidetone " + String(message & 127) + "%", 0, 1000);
+}
+#endif
 
 void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
 	if (usage != 0xE2 && usage != 0xE9 && usage != 0xEA) {
@@ -14837,14 +14990,27 @@ void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
 	if ((modifiers & 0xCC) || (shift && ctrl)) {
 		return;
 	}
+	#ifdef FEATURE_CORE2_AUDIO
+	if (ctrl) return;
+	const AudioVolumeTarget target = AudioVolumeTarget::Sidetone;
+	#else
 	const AudioVolumeTarget target = ctrl ? AudioVolumeTarget::Microphone :
 	    shift ? AudioVolumeTarget::Sidetone : AudioVolumeTarget::Playback;
+	#endif
 	if (usage == 0xE2) {
 		set_audio_volume(target, audio_volume(target), !audio_muted(target));
 	} else {
+		#ifdef FEATURE_CORE2_AUDIO
+		const int level = constrain(audio_volume(target) + (usage == 0xE9 ? 4 : -4), 0, 100);
+		#else
 		const int level = step_audio_volume(audio_volume(target), usage == 0xE9);
+		#endif
 		set_audio_volume(target, level, false);
 	}
+	#if defined(FEATURE_CORE2_AUDIO) && defined(FEATURE_DISPLAY)
+	core2_audio_message.store(configuration.sidetone_volume |
+	    (configuration.sidetone_muted ? 128 : 0));
+	#endif
 }
 
 #if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
@@ -14867,6 +15033,12 @@ bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 	} else {
 		return false;
 	}
+	#ifdef FEATURE_CORE2_AUDIO
+	if (target != AudioVolumeTarget::Sidetone) {
+		port->println(F("Error: Core2 supports SIDETONE only; USB audio is unavailable"));
+		return true;
+	}
+	#endif
 	String value = separator < 0 ? "" : command.substring(separator + 1);
 	value.trim();
 	int level = audio_volume(target);
@@ -14899,7 +15071,11 @@ bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 	print_audio_volumes(port);
 	return true;
 }
+#endif
+#endif
 
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+#if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 	command.trim();
 	if (command != "MIC" && !command.startsWith("MIC ")) {
@@ -15101,8 +15277,13 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 	if (userinput.startsWith("WIFI ")) { cli_wifi(port_to_use, userinputNoUpper.substring(5)); return; }
  else { userinput.toUpperCase();}
 #endif
-	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+	#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 		if (cli_audio_volume(port_to_use, userinput)) { return; }
+	#endif
+	#ifdef FEATURE_M5STACK_CORE2
+		if (cli_core2_port_a(port_to_use, userinput)) { return; }
+	#endif
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 		if (cli_midi(port_to_use, userinput)) { return; }
 		if (cli_mic(port_to_use, userinput)) { return; }
 		if (userinput == "I2CTEST" || userinput.startsWith("I2CTEST ")) {
@@ -19858,6 +20039,9 @@ void display_heading(void) {
 	void init_ESP32_GPIO_key_pins(void) {
 			// Setup CPU side GPIO interrupts for paddle pins
 			gpio_install_isr_service(0);
+			#ifdef FEATURE_M5STACK_CORE2
+			if (!core2_port_a_output) {
+			#endif
 			gpio_set_direction((gpio_num_t) paddle_left, GPIO_MODE_INPUT);
 			gpio_set_pull_mode((gpio_num_t) paddle_left, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
 			gpio_set_intr_type((gpio_num_t) paddle_left, GPIO_INTR_ANYEDGE);
@@ -19869,13 +20053,16 @@ void display_heading(void) {
 			gpio_isr_handler_add((gpio_num_t) paddle_right, right_paddle_intr_handler, (void *)(gpio_num_t) paddle_right);
 			paddle_left_state = gpio_get_level((gpio_num_t) paddle_left);
 			paddle_right_state = gpio_get_level((gpio_num_t) paddle_right);
+			#ifdef FEATURE_M5STACK_CORE2
+			} else {
+				paddle_left_state = paddle_right_state = true;
+			}
+			#endif
 
 			#ifdef FEATURE_STRAIGHT_KEY
 				// Setup CPU side GPIO interrupt for straight key
 				gpio_set_direction((gpio_num_t) pin_straight_key, GPIO_MODE_INPUT);
-				#ifndef FEATURE_M5STACK_CORE2
-					gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);
-				#endif
+				gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);
 				gpio_set_intr_type((gpio_num_t) pin_straight_key, GPIO_INTR_ANYEDGE);
 				gpio_isr_handler_add((gpio_num_t) pin_straight_key, straight_key_intr_handler, (void *)(gpio_num_t) pin_straight_key);
 				straight_key_state = gpio_get_level((gpio_num_t) pin_straight_key);
@@ -20039,10 +20226,85 @@ void display_heading(void) {
 //---------------------------------------------------------------------
 
 #ifdef FEATURE_M5STACK_CORE2
+void load_core2_port_a_mode() {
+	Preferences settings;
+	if (!settings.begin("keyer-core2", false)) {
+		debug_serial_port->println(F("Error: Core2 Port A settings could not be opened"));
+		ESP_ERROR_CHECK(ESP_FAIL);
+	}
+	const uint8_t mode = settings.getUChar("porta", CORE2_PORT_A_OUTPUT_DEFAULT);
+	const uint8_t reversed = settings.getUChar("porta-reverse", CORE2_PORT_A_REVERSED_DEFAULT);
+	settings.end();
+	if (mode > 1 || reversed > 1) {
+		debug_serial_port->println(F("Error: invalid saved Core2 Port A mode"));
+		ESP_ERROR_CHECK(ESP_FAIL);
+	}
+	core2_port_a_output = core2_port_a_saved_output = mode != 0;
+	core2_port_a_reversed = core2_port_a_saved_reversed = reversed != 0;
+	current_tx_key_line = tx_key_line_1;
+	configuration.current_ptt_line = ptt_tx_1;
+}
+
+#if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
+bool cli_core2_port_a(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	const int separator = command.indexOf(' ');
+	if ((separator < 0 ? command : command.substring(0, separator)) != "PORTA") return false;
+	String value = separator < 0 ? "" : command.substring(separator + 1);
+	value.trim();
+	if (value.length()) {
+		if (value != "PADDLES" && value != "OUTPUT" && value != "REVERSE") {
+			port->println(F("Error: use PORTA [PADDLES|OUTPUT|REVERSE]"));
+			return true;
+		}
+		if (value != "REVERSE" && (ptt_line_activated || key_state)) {
+			port->println(F("Error: stop transmitting before saving Port A mode"));
+			return true;
+		}
+		Preferences settings;
+		if (!settings.begin("keyer-core2", false)) {
+			port->println(F("Error: Core2 Port A settings could not be opened"));
+			return true;
+		}
+		const bool output = value == "OUTPUT";
+		const bool reverse = value == "REVERSE";
+		const bool reversed = !core2_port_a_saved_reversed;
+		const size_t written = reverse ?
+		    settings.putUChar("porta-reverse", reversed ? 1 : 0) :
+		    settings.putUChar("porta", output ? 1 : 0);
+		settings.end();
+		if (written != 1) {
+			port->println(F("Error: Core2 Port A mode was not saved"));
+			return true;
+		}
+		if (reverse) {
+			core2_port_a_reversed = core2_port_a_saved_reversed = reversed;
+			if (core2_port_a_output) {
+				keyer_output_write(33, core2_port_a_key_active ? tx_key_line_active_state : tx_key_line_inactive_state);
+				keyer_output_write(32, core2_port_a_ptt_active ? ptt_line_active_state : ptt_line_inactive_state);
+			}
+		}
+		else core2_port_a_saved_output = output;
+	}
+	port->printf("\r\nPORTA active %s; saved %s; polarity active GND on %s, saved GND on %s%s\r\n",
+	    core2_port_a_output ? "OUTPUT" : "PADDLES",
+	    core2_port_a_saved_output ? "OUTPUT" : "PADDLES",
+	    core2_port_a_reversed ? "RX" : "TX",
+	    core2_port_a_saved_reversed ? "RX" : "TX",
+	    core2_port_a_output != core2_port_a_saved_output ||
+	    core2_port_a_reversed != core2_port_a_saved_reversed ? "; reboot to apply" : "");
+	return true;
+}
+#endif
+
 void initialize_core2_board() {
 	auto board_config = M5.config();
 	board_config.fallback_board = m5::board_t::board_M5StackCore2;
-	board_config.internal_spk = false;
+	#ifdef FEATURE_CORE2_AUDIO
+		board_config.internal_spk = true;
+	#else
+		board_config.internal_spk = false;
+	#endif
 	board_config.internal_mic = false;
 	board_config.internal_imu = false;
 	board_config.internal_rtc = false;
@@ -20059,6 +20321,20 @@ void initialize_core2_board() {
 		ESP_ERROR_CHECK(ESP_FAIL);
 	}
 	lcd.setBrightness(128);
+	#ifdef FEATURE_CORE2_AUDIO
+		static_assert(CORE2_SPEAKER_VOLUME >= 0 && CORE2_SPEAKER_VOLUME <= 255);
+		auto speaker_config = M5.Speaker.config();
+		speaker_config.sample_rate = 48000;
+		speaker_config.dma_buf_len = 64;
+		speaker_config.dma_buf_count = 4;
+		speaker_config.task_priority = 3;
+		M5.Speaker.config(speaker_config);
+		M5.Speaker.setVolume(CORE2_SPEAKER_VOLUME);
+		if (!M5.Speaker.begin()) {
+			debug_serial_port->println(F("Error: Core2 speaker initialization failed"));
+			ESP_ERROR_CHECK(ESP_FAIL);
+		}
+	#endif
 }
 #endif
 
@@ -20066,6 +20342,7 @@ void initialize_pins() {
 	#ifdef FEATURE_M5STACK_CORE2
 		// Board detection/power setup must finish before configuring radio outputs.
 		initialize_core2_board();
+		load_core2_port_a_mode();
 	#endif
 #if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 	#if defined(FEATURE_MCP23017_EXPANDER)
@@ -20214,16 +20491,12 @@ void initialize_pins() {
 	#endif //FEATURE_PTT_INTERLOCK
 
 	#if defined(FEATURE_STRAIGHT_KEY) && !defined(USE_KEY_PIN_INTERRUPTS)
-		#ifdef FEATURE_M5STACK_CORE2
-			pinMode(pin_straight_key, INPUT);
-		#else
 		pinMode(pin_straight_key, INPUT_PULLUP);
 		if (STRAIGHT_KEY_ACTIVE_STATE == HIGH){
 			digitalWrite (pin_straight_key, LOW);
 		} else {
 			digitalWrite (pin_straight_key, HIGH);
 		}
-		#endif
 	#endif //FEATURE_STRAIGHT_KEY
 
 	#if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
@@ -20908,6 +21181,9 @@ void check_eeprom_for_initialization(){
 	if (read_settings_from_eeprom()) {
 	 initialize_eeprom();
 	}
+	#ifdef FEATURE_CORE2_AUDIO
+		apply_audio_levels();
+	#endif
 }
 
 //---------------------------------------------------------------------
@@ -21224,7 +21500,7 @@ void keyboard_connected_handler() {
 
 // Consumer keys are the special media keys on most modern keyboards (mute/etc.)
 void ckb(void *cbdata, int key) {
-		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 			if (cbdata && (key == 0xE2 || key == 0xE9 || key == 0xEA)) {
 				KeyInfo event = {};
 				event.consumer_usage = static_cast<uint16_t>(key);
@@ -21646,7 +21922,11 @@ void initialize_display() {
 		} else {
 			#ifdef FEATURE_TFT_DISPLAY
 				lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
+				#ifdef FEATURE_M5STACK_CORE2
+					lcd.setFreeFont(FMB12);
+				#else
 				lcd.setFreeFont(SCROLL_BOX_FONT);
+				#endif
 				//lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1+(FONT_HEIGHT/4), GFXFF);
 				lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1, GFXFF);
 				#ifdef FEATURE_BT_KEYBOARD
@@ -21770,10 +22050,31 @@ void popup(bool show)
 			lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
 		#endif
 		lcd.setTextWrap(true,true);
+		#ifdef FEATURE_M5STACK_CORE2
+		lcd.setFreeFont(FMB12);
+		lcd.setTextDatum(TL_DATUM);
+		lcd.setTextColor(TFT_WHITE, TFT_BLUE);
+		const int line_height = lcd.fontHeight() + 2;
+		int y = SCROLL_BOX_TOP + 4;
+		String line;
+		for (const char *p = popup_text; ; ++p) {
+			const bool newline = *p == '\n' || *p == '\0';
+			String next = line;
+			if (!newline && *p != '\r') next.concat(*p);
+			if (newline || lcd.textWidth(next) > SCROLL_BOX_WIDTH - 8) {
+				lcd.drawString(line, SCROLL_BOX_CENTER - lcd.textWidth(line)/2, y, GFXFF);
+				y += line_height;
+				line = "";
+			}
+			if (!*p) break;
+			if (*p != '\n' && *p != '\r') line.concat(*p);
+		}
+		#else
 		lcd.setCursor(SCROLL_BOX_LEFT_SIDE,SCROLL_BOX_TOP);
 		lcd.setFreeFont(TFT_FONT_MEDIUM);
 		lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 		lcd.print(popup_text);
+		#endif
 		//lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
 		//lcd.frameViewport(TFT_GREEN, 3);
 		//lcd.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -23514,6 +23815,9 @@ void update_led_ring(){
 
 //---------------------------------------------------------------------
 int paddle_pin_read(int pin_to_read) {
+	#ifdef FEATURE_M5STACK_CORE2
+		if (core2_port_a_output && (pin_to_read == paddle_left || pin_to_read == paddle_right)) return HIGH;
+	#endif
 	#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
 		read_io_handler();
 	#endif
@@ -26396,9 +26700,14 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 		}
 	#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 		#ifdef FEATURE_M5STACK_CORE2
-				// Silent bring-up stage: leave the built-in I2S pins untouched.
 				(void)sidetone_line_pin_num;
+				#ifdef FEATURE_CORE2_AUDIO
+				if (!M5.Speaker.tone(frequency, duration_ms ? duration_ms : UINT32_MAX, 0, true)) {
+					debug_serial_port->println(F("Error: Core2 tone playback failed"));
+				}
+				#else
 				(void)frequency;
+				#endif
 				if (duration_ms) myDelay(duration_ms);
 		#elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 			 //debug_serial_port->printf("pin:%d Freq:%d dur:%lu", sidetone_line_pin_num, frequency, duration_ms);
@@ -26420,6 +26729,9 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 		#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 			#ifdef FEATURE_M5STACK_CORE2
 				(void)sidetone_line_pin_num;
+				#ifdef FEATURE_CORE2_AUDIO
+					M5.Speaker.stop(0);
+				#endif
 			#elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 				noTone(sidetone_line_pin_num);
 			#endif
@@ -26968,7 +27280,7 @@ void tft_backlight(int state) {
 							else inf = bt_queuepop();							
 							#endif
 						#endif
-						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 							if (inf.consumer_usage) {
 								audio_consumer_key(inf.consumer_usage, inf.keys[0]);
 								continue;
@@ -28536,6 +28848,9 @@ void mainloop(void)
 					#endif
 					check_paddles();
 					service_send_buffer(PRINTCHAR);
+					#ifdef FEATURE_CORE2_AUDIO
+						service_core2_audio_message();
+					#endif
 					service_display();
 				#endif
 

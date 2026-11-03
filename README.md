@@ -710,36 +710,94 @@ actions, and may be set to 1-8 (eight pages exposes all sixteen actions).
 The default pages are Pause/TX enable, WPM up/down, Memory 1/2 and Memory 3/4.
 The left label shows the current page/total. Short and very-long presses retain
 the existing action behavior; touching the CW scroll box still aborts sending.
+Core2 CW text uses three rows of twelve characters in FreeMonoBold18.
+Startup text and timed messages use the smaller FreeMonoBold12 so prompts fit, centered in the
+scroll box; touch-popup text is wrapped and centered line by line.
 
 The provisional direct-GPIO map is:
 
 | Function | Core2 GPIO | Connection |
 |---|---:|---|
-| Left paddle | 32 | Port A / M-Bus |
-| Right paddle | 27 | M-Bus |
-| Straight key | 35 | M-Bus; external 10k pull-up to 3.3V required |
+| Left paddle | 33 | Port A / M-Bus |
+| Right paddle | 32 | Port A / M-Bus |
+| Straight key | 14 | Existing buffered input; active-low, internal pull-up enabled |
 | TX key 1 | 25 | ULN2803A; formerly BCD bit 0 |
 | PTT 1 | 26 | ULN2803A; formerly BCD bit 1 |
-| TX key 2 | 33 | ULN2803A; formerly BCD bit 2 |
+| TX key 2 | 27 | ULN2803A; move former GPIO33 buffer input here |
 | PTT 2 | 19 | ULN2803A; existing PTT output |
-| PTT input (disabled) | 14 | Existing buffered input; reserved |
+| Reserved input | 35 | Unused; input-only |
 
 Paddles/key close to ground. Use appropriate radio-interface circuitry
 (e.g. the existing ULN2803A Proto base), not radio voltages directly on GPIO.
-These output pins match the working Core2 CI-V band-decoder ULN2803A base.
+The ULN2803A base retains GPIO25/26/19 outputs; move its former GPIO33 input
+wire to GPIO27 to free Port A for paddles.
 GPIO HIGH turns on each ULN2803A channel, pulling its collector output LOW;
-GPIO LOW releases the output. GPIO14's reference PTT logic is active-low,
-but the input remains disabled (`ptt_input_pin = 0`) and is not assigned elsewhere.
-Port A is not available for external I2C. GPIO13 and input-only GPIO36
+GPIO LOW releases the output. GPIO14's reference PTT logic is active-low;
+it is now the straight-key input, not manual PTT (`ptt_input_pin = 0`).
+Both Port A paddle inputs have internal pull-ups, allowing the key to be
+unplugged for keyboard-only operation. Port A is not available for external I2C.
+Core2-only `\:PORTA` reports the active and saved connector mode.
+Use `\:PORTA PADDLES` (default) or `\:PORTA OUTPUT`, then reboot to apply.
+`\:PORTA REVERSE` toggles and saves polarity for both Port A outputs immediately,
+including currently active key/PTT outputs. Connector mode changes still require
+a reboot. Default OUTPUT polarity is GND on TX (key/PTT active), released on RX.
+Reversed polarity grounds the outputs on RX and releases them on TX.
+Both polarities use open-drain GPIO; a released output is not driven to 3.3V.
+Port A output initialization and writes both use ESP-IDF GPIO APIs; Arduino
+`digitalWrite` requires its own GPIO registration and cannot drive these pins.
+`CORE2_PORT_A_REVERSED_DEFAULT` is 0 for GND on TX or 1 for GND on RX,
+used when no polarity is saved. Paddle inputs and other TX outputs are unaffected.
+In OUTPUT mode Port A GPIO33 is TX key 1 and GPIO32 is PTT 1; paddle
+interrupts/reads are disabled and GPIO25/26 are left untouched. GPIO14 remains
+the straight-key input and TX2 remains GPIO27/19. Select TX1 for Port A output.
+`CORE2_PORT_A_OUTPUT_DEFAULT` in the ESP32 settings file is 0 for PADDLES or 1
+for OUTPUT and applies when no saved mode exists. The mode is saved immediately
+in separate NVS storage, preserving the existing EEPROM/memory layout.
+Disconnect paddles before rebooting into OUTPUT mode. Port A provides raw
+3.3V-rated open-drain GPIO, not protected radio connections; use suitable interface
+circuitry and never connect radio voltages directly to it.
+GPIO13 and input-only GPIO36
 remain spare; the serial programming port, internal SPI/I2C, touch IRQ and
 audio GPIO0/2/12/34 are not assigned to keyer inputs/outputs.
 
-GPS, compass and expanders are disabled in this profile. Built-in speaker
-and microphone support are deferred: this stage is silent, with no GPIO buzzer.
+GPS, compass and expanders are disabled in this profile.
+Ctrl-Q toggles the same saved beacon setting as serial `\_` when
+`FEATURE_BEACON_SETTING` is enabled: repeated Memory 1 playback, also enabled
+after reboot. A timed "Beacon On"/"Beacon Off" message confirms the setting.
+Serial help lists `\_`.
+
+`FEATURE_CORE2_AUDIO`
+enables the built-in I2S speaker for sidetone and feedback beeps, without a GPIO
+buzzer. `CORE2_SPEAKER_VOLUME` sets its maximum master level (0-255; default 96).
+Core2 low/high feedback tones are 1000/1500Hz.
+Existing sidetone enable/mode and frequency controls apply.
+The extended terminal commands `\:AUDIO` and
+`\:SIDETONE [0..100|+|-|MUTE|UNMUTE|TOGGLE]` now control Core2 speaker volume
+and mute. Levels are percentages of `CORE2_SPEAKER_VOLUME` and are saved using
+the normal delayed settings write. Plain consumer Mute/Volume Up/Volume Down
+keys control the same speaker, with four-percentage-point steps; up/down unmutes.
+Terminal `+`/`-` commands retain two-percentage-point steps.
+Bluetooth volume/mute keys show the sidetone percentage or mute state for one
+second using the same timed-message display as Pico encoder controls.
+The Bluetooth task queues the latest level/mute snapshot; the main display path
+renders it to avoid concurrent LCD font/alignment changes during rapid presses.
+This affects sidetone and feedback beeps. USB playback/mic commands are rejected
+on Core2 because those interfaces are not available.
+Use `\:SIDETONE 42` for approximately the earlier reduced 40/255 master level.
+Control characters such as a trailing LF from CR+LF terminal input are not
+rendered as CW glyphs.
+Disable
+`FEATURE_CORE2_AUDIO` for silent display/GPIO-only operation. The microphone
+remains disabled. Speaker DMA uses four 64-frame buffers at 48kHz for low latency;
+test tone edges at your operating WPM before connecting a transmitter.
+The Core2 ESP-IDF build overlays M5Unified's speaker task stack with a 4096-byte
+base plus its audio buffer; the upstream 1536-byte base overflowed with this
+ESP-IDF build. Managed library files are unchanged, and configuration fails
+explicitly if an updated library no longer matches the overlay.
 The microSD, IMU and RTC are not initialized. Do not attach a conflicting
 stacked module. Test without a connected transmitter first: screen orientation,
 touch buttons/long presses, abort and text restart, paddles/straight key, then
-both TX/PTT pairs. GPIO35 needs its pull-up even when no straight key is attached.
+both TX/PTT pairs. GPIO35 is reserved and is not sampled.
 
 Run `.\tests\core2_gpio_host_test.ps1` to check GPIO exclusions, four/eight-page
 action mapping, page cycling, short/long presses, abort and panel touch zones.

@@ -102,6 +102,7 @@ public:
     uint8_t     size;
     uint8_t     keys[MAX_KEY_DATA_SIZE];
     KeyModifier modifier;
+    uint16_t consumer_usage = 0;
   };
 
   BTKeyboard() : num_bt_scan_results_(0), num_ble_scan_results_(0), caps_lock_(false) {}

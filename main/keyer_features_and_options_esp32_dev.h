@@ -144,6 +144,7 @@
 #if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
     //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
     #define FEATURE_M5STACK_CORE2
+    #define FEATURE_CORE2_AUDIO
     #define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS
     #define FEATURE_TFT_DISPLAY
@@ -156,7 +157,7 @@
     #define USE_MAIN_TASK
     #define USE_BT_TASK
     #define MAX_TX_PORTS 2
-    // GPS, compass, external IO expanders and built-in audio are not enabled yet.
+    // GPS, compass, external IO expanders and microphone are not enabled.
 #endif
 
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)

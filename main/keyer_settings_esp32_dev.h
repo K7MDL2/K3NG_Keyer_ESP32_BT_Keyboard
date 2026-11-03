@@ -9,7 +9,11 @@
 #define sidetone_hz_limit_low 299
 #define sidetone_hz_limit_high 2001
 #define hz_high_beep 1500                // frequency in hertz of high beep
-#define hz_low_beep 400                  // frequency in hertz of low beep
+#ifdef FEATURE_M5STACK_CORE2
+  #define hz_low_beep 1000
+#else
+  #define hz_low_beep 400
+#endif
 #define initial_dah_to_dit_ratio 300     // 300 = 3 / normal 3:1 ratio
 #define initial_ptt_lead_time_tx1 30         // PTT lead time in mS
 #define initial_ptt_tail_time_tx1 30 //10         // PTT tail time in mS //SP5IOU - better to change it by CLI
@@ -45,7 +49,13 @@
 #define winkey_xon_threshold 10          // the number of chars in the buffer below which we deactivate XOFF
 #define default_memory_repeat_time 3000  // time in milliseconds
 
-#ifdef TFT_320_480   // for 480px wide display
+#ifdef FEATURE_M5STACK_CORE2
+  #define LCD_COLUMNS 12
+  #define LCD_ROWS 3
+  #define CORE2_SPEAKER_VOLUME 96  // M5Unified master volume: 0-255
+  #define CORE2_PORT_A_OUTPUT_DEFAULT 0  // 0: paddles; 1: TX1 key GPIO33 / PTT GPIO32
+  #define CORE2_PORT_A_REVERSED_DEFAULT 0  // 0: GND on TX; 1: GND on RX (open-drain)
+#elif defined(TFT_320_480)   // for 480px wide display
   #define LCD_COLUMNS 20  // sets the char per line in cw text scroll box
   #define LCD_ROWS 3      // number of rows in teh CW Scroill Box
 #elif defined(FEATURE_TFT_DISPLAY)  // all 320px wideTFT displays
