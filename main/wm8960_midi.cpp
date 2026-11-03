@@ -229,6 +229,16 @@ void flush_output() {
       ptt_session_active = false;
     }
     cleanup_pending = false;
+    if (faulted) {
+      // Cleanup packets went through, so the host is reading MIDI again
+      // (e.g. an application opened the port); resume output and re-sync.
+      faulted = false;
+      speed_reported = false;
+      for (uint16_t &input : last_control_inputs) {
+        input = UINT16_MAX;
+      }
+      enqueue_note(kKeyNote, local_key, PacketKind::Key);
+    }
   }
   for (uint16_t count = 0; count < 16 && queue_count; ++count) {
     const Packet &packet = queue[queue_read];
@@ -452,7 +462,7 @@ void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm,
     print_message_trace(port);
 #endif
     if (reported_fault_count != fault_count) {
-      port.println("[MIDI] output queue overflow/timeout; key/PTT release pending, reconnect USB to resume MIDI output");
+      port.println("[MIDI] output queue overflow/timeout; key/PTT release pending, output resumes when the host reads MIDI");
       reported_fault_count = fault_count;
     }
     if (reported_invalid_packets != invalid_packets) {
