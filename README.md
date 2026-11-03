@@ -65,8 +65,44 @@ _____________________________________________
  - Compiles under ESP-IDF v6.1.0 as of September 2026.  Addresses several deprecated issues in some libraries.  Review the Change Notes Wiki Page for some manual managed component library fixes required for v6.  Hopefully Espressif will catch these libs up.
  - FEATURE_BUTTONS and COMMAND_MODE now working.
  - Sept 2026 have BT Classic and BLE keyboards pairing with receonnection on both ESP32 and Pico2W. The BT Classic keyboard, Logitech K380, pairs with a PIN teh first time, then after, pairs to receonnct, no PIN required so it is reasonably fast.
+ 
+ > [!NOTE]
+ > On Pico only, USB sound card, MIDI functionality, encoder+switch, are now working in a test branch [test/pico2w-wm8960-usb-audio](https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/tree/test/pico2w-wm8960-usb-audio).  Compiles with Arduino IDE.
 
-Check out the latest changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
+- Uses common Waveshare WM8960 module with headphone, speakers and an onboard mic.  Can use as a soundcard for normal audio output. Sidetone is generated locally for zero latency and played into the USB audio output.  USB audio (play and mic) are muted for 7 dit lengths enabling full break-in if your hardware allows it.  Serial terminal commands, BT keyboard volume +/-/Mute keys work and are saved in EEPROM.  Adding touch controls later.  The USB MIDI/Audio/Serial configuration was developed as an overlay over standard libraries in this project https://github.com/pa3gsb/RP2350-SDR-CW-Interface using the Pico SDK.  Thank you to PA3GSB for working that out.  It was applied in this project with changes to make it work under Arduino IDE. The existing MIDI, serial lines, encoder were then wired up to the new USB interfaces.
+
+- MCP23017, GPS working.  Compass not wired to test yet, should work.
+ 
+- MIDI now sends note 17 for CWX key, 18 for CWX PTT, CC20 Wheel Tune, and CC21 slider (1-60WPM ==> 0-127) for CW speed.  Tested with Thetis mostly so far.  Set up CC21 in Thetis for CW Speed knob and it will report the keyer speed setting and stay sync'd to changes and current speed on the keyer side.
+
+   All locally generated messages use **MIDI channel 10**.
+
+   | Function | Message | Values |
+   |---|---|---|
+   | CW key | Note 17 | Down: 127; up: 0 |
+   | PTT | Note 18 | `OFF`: none; `ONOFF`: 127/0; `TOGGLE`: 127 on both edges |
+   | VFO encoder | CC20 | Positive direction: 127; negative: 1, after configured reversal |
+   | CW speed | CC21 | Thetis scaling: `round((WPM − 1) × 2.1333)`; WPM clamped to 1–60; minimum output value 1 |
+   | Master/USB playback volume | CC7 | 0–100% mapped to 0–127, rounded |
+   | Sidetone volume | CC22 | 0–100% mapped to 0–127, rounded |
+   | Sidetone frequency | CC3 | 300–1000 Hz mapped to 0–127, clamped and rounded |
+   | USB microphone level | CC23 | 0–100% mapped to 0–127, rounded |
+
+   - Key and PTT releases use Note On messages with velocity 0, except in PTT `TOGGLE` mode.
+   - Volume mute sends **0**; unmute reports the stored level.
+   - Audio controls report changes and USB connection/reconnection, without periodic repeats.
+   - CW speed reports changes, USB connection/reconnection, and every **five minutes**.
+   - Reconnection reports the current CW state but does not replay PTT.
+   - Accepted incoming cable-0 messages are echoed; matching recently transmitted messages are suppressed for 15 ms to prevent immediate loopback.
+   - Optimized to prevent key timing and tone distortions.  GPS and most screen updates are paused dering keying and PTT.
+
+- There are now 2 serial ports, one for Winkeyer and the 2nd keyer's terminal interface and debug info.
+
+- One encoder with push switch can be used to control USB Audio Volume, USB mic audio level, VFO tune, Sidetone level and frequency.  Tap the knob to cycle through each function.  Long press to return to VFO tune.  If there is no push switch configured, then the knob controls USB audio out volume.
+
+- When the MCP23017 is enabled, All 6 PTT_TX and 6 TX_Key_line outputs are mapped to MCP23017 expander pins freeing up local GPIO for encoders, serial GPS, and I2S lines for the audio module.  The Paddle and Straight key inputs were already mapped there.
+
+Check out the latest main branch changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
 > [!NOTE]
 > Arduino IDE Users with ESP32 see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE
