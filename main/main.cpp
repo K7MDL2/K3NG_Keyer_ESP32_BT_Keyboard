@@ -14778,6 +14778,7 @@ void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
 bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 	command.trim();
 	if (command == "AUDIO") {
+		port->println();
 		print_audio_volumes(port);
 		return true;
 	}
@@ -14821,6 +14822,7 @@ bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 	if (value.length()) {
 		set_audio_volume(target, level, muted);
 	}
+	port->println();
 	print_audio_volumes(port);
 	return true;
 }
@@ -14862,10 +14864,11 @@ bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 	uint32_t clips, samples;
 	wm8960_audio_take_mic_meter(&peak, &rms, &clips, &samples);
 	const float pga_db = -17.25f + 0.75f * pga;
-	port->printf(" MIC PGA %u (%+.2f dB) BOOST %u (+%u dB) total %+.2f dB, ALC %s, TONE %s\r\n",
+	port->println();
+	port->printf("MIC PGA %u (%+.2f dB) BOOST %u (+%u dB) total %+.2f dB, ALC %s, TONE %s\r\n",
 	             pga, pga_db, boost, boost_db[boost], pga_db + boost_db[boost],
 	             alc ? "ON" : "OFF", wm8960_audio_mic_test_tone() ? "ON" : "OFF");
-	port->printf(" since last MIC: %.1f s, peak %u (%.1f dBFS), rms %u (%.1f dBFS), clipped %lu\r\n",
+	port->printf("since last MIC: %.1f s, peak %u (%.1f dBFS), rms %u (%.1f dBFS), clipped %lu\r\n",
 	             samples / 48000.0f, peak, peak ? 20.0f * log10f(peak / 32768.0f) : -99.0f,
 	             rms, rms ? 20.0f * log10f(rms / 32768.0f) : -99.0f,
 	             static_cast<unsigned long>(clips));
@@ -14875,7 +14878,7 @@ bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
 	command.trim();
 	if (command == "MIDI") {
-		port->print(F(" "));
+		port->println();
 		wm8960_midi_print_status(*port);
 		return true;
 	}
@@ -14908,7 +14911,7 @@ bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
 			configuration.midi_control_mode = mode;
 			config_dirty = 1;
 		}
-		port->print(F(" "));
+		port->println();
 		wm8960_midi_print_status(*port);
 		return true;
 	}
@@ -14931,7 +14934,7 @@ bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
 		configuration.midi_ptt_mode = mode;
 		config_dirty = 1;
 	}
-	port->print(F(" "));
+	port->println();
 	wm8960_midi_print_status(*port);
 	return true;
 }
@@ -14994,6 +14997,17 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 		if (cli_audio_volume(port_to_use, userinput)) { return; }
 		if (cli_midi(port_to_use, userinput)) { return; }
 		if (cli_mic(port_to_use, userinput)) { return; }
+		if (userinput == "I2CTEST" || userinput.startsWith("I2CTEST ")) {
+			long count = userinput.length() > 8 ? userinput.substring(8).toInt() : 100;
+			if (count < 1 || count > 1000) count = 100;
+			port_to_use->println();
+			#ifdef FEATURE_MCP23017_EXPANDER
+				wm8960_audio_i2c_test(*port_to_use, count, MCP23X17_ADDR);
+			#else
+				wm8960_audio_i2c_test(*port_to_use, count, 0);
+			#endif
+			return;
+		}
 	#endif
 	if (userinput.startsWith("EEPROMDUMP")){cli_eeprom_dump(port_to_use);return;}
 	if (userinput.startsWith("TIMING")){cli_timing_print(port_to_use);return;}
@@ -19766,9 +19780,39 @@ void display_heading(void) {
 		void read_io_handler(void) {
 	 #endif	
 				uint8_t bits = 0x00;
+				#if defined(ARDUINO_ARCH_RP2040)
+					// INTA is active low and stays asserted until GPIOA is read; the
+					// CPU IRQ is edge-triggered, so recover a missed or failed read.
+					if (!paddle_irq && !gpio_get(MCP23017_INTA_GPIO)) {
+						paddle_irq = 1;
+					}
+				#endif
 				if (paddle_irq) {
 					paddle_irq = 0;		
-					bits = mcp23017.readPort(MCP23017Port::A);		
+					#if defined(ARDUINO_ARCH_RP2040)
+						#ifdef USE_WIRE1
+							TwoWire &bus = Wire1;
+						#else
+							TwoWire &bus = Wire;
+						#endif
+						bool read_ok = false;
+						for (uint8_t attempt = 0; attempt < 3 && !read_ok; ++attempt) {
+							bus.beginTransmission(MCP23X17_ADDR);
+							bus.write(static_cast<uint8_t>(MCP23017Register::GPIO_A));
+							if (bus.endTransmission(false) == 0 &&
+							    bus.requestFrom(static_cast<uint8_t>(MCP23X17_ADDR), static_cast<size_t>(1)) == 1) {
+								bits = bus.read();
+								read_ok = true;
+							}
+							while (bus.available()) bus.read();
+						}
+						if (!read_ok) {
+							paddle_irq = 1;  // keep previous paddle state; retry next pass
+							return;
+						}
+					#else
+						bits = mcp23017.readPort(MCP23017Port::A);
+					#endif
 					paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
 					paddle_right_state = bits & (1 << paddle_right);  // mask right paddle
 					#ifdef FEATURE_STRAIGHT_KEY

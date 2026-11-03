@@ -38,6 +38,7 @@ void wm8960_audio_set_external_ptt(bool active);
 bool wm8960_audio_external_ptt();
 void wm8960_audio_set_midi_input(bool keyed, bool ptt, uint16_t frequency);
 void wm8960_audio_pause_for_flash();
+void wm8960_audio_i2c_test(Print &port, uint16_t count, uint8_t expander_address);
 void wm8960_audio_resume_after_flash();
 void wm8960_audio_trace_keyer(uint8_t stage);
 void wm8960_audio_trace_key_edge(bool down, uint8_t element_dits,

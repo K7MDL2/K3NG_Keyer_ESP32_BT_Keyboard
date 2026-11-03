@@ -20,6 +20,7 @@
 #include <hardware/structs/watchdog.h>
 #include <hardware/exception.h>
 #include <hardware/gpio.h>
+#include <hardware/i2c.h>
 #include <hardware/irq.h>
 #include <pico/time.h>
 
@@ -280,7 +281,10 @@ class UsbCompositeRegistration {
 UsbCompositeRegistration usb_composite_registration;
 
 constexpr uint8_t kCodecI2cController = (WM8960_I2C_SDA_PIN >> 1) & 1;
-constexpr uint32_t kCodecI2cHz = 100000;
+#ifndef WM8960_I2C_HZ
+#define WM8960_I2C_HZ 100000
+#endif
+constexpr uint32_t kCodecI2cHz = WM8960_I2C_HZ;
 TwoWire &codec_bus = kCodecI2cController == 0 ? Wire : Wire1;
 
 bool validate_codec_pins() {
@@ -328,6 +332,8 @@ uint8_t failed_codec_register = 0xFF;
 uint8_t codec_i2c_error = 0;
 uint32_t codec_i2c_error_us = 0;
 uint8_t codec_i2c_error_lines = 0;
+bool codec_i2c_quiet = false;
+uint32_t codec_i2c_abort_reason = 0;
 volatile uint32_t i2s_receive_buffers = 0;
 volatile uint32_t i2s_transmit_buffers = 0;
 
@@ -527,7 +533,7 @@ bool recover_codec_bus() {
   const bool bus_released = clock_released &&
       gpio_get(WM8960_I2C_SDA_PIN) && gpio_get(WM8960_I2C_SCL_PIN);
   codec_bus.setClock(kCodecI2cHz);
-  codec_bus.setTimeout(5);
+  codec_bus.setTimeout(50);
   codec_bus.begin();
   if (!bus_released) {
     wm8960_audio_debug_port().printf("[WM8960] I2C recovery failed: SDA %u SCL %u\n",
@@ -537,30 +543,71 @@ bool recover_codec_bus() {
   return bus_released;
 }
 
-bool try_write_codec_register(uint8_t register_address, uint16_t value) {
-  codec_bus.beginTransmission(WM8960_I2C_ADDRESS);
-  const uint8_t first_byte =
-      static_cast<uint8_t>((register_address << 1) | ((value >> 8) & 0x01));
-  const uint8_t second_byte = static_cast<uint8_t>(value & 0xFF);
-  if (codec_bus.write(first_byte) != 1 ||
-      codec_bus.write(second_byte) != 1) {
-    failed_codec_register = register_address;
-    codec_i2c_error = 1;
-    codec_bus.endTransmission();
-    wm8960_audio_debug_port().printf("[WM8960] I2C write buffer error at register 0x%02X\n",
-                  register_address);
-    return false;
+// Same sequence as pico-sdk i2c_write_blocking_internal (what Wire uses), but
+// keeps the TX abort source, which the SDK clears before Wire can report it.
+int codec_i2c_write(const uint8_t *src, uint8_t len, uint32_t timeout_us,
+                    uint32_t &abort_reason, uint8_t &abort_byte) {
+  i2c_hw_t *hw = i2c_get_hw(kCodecI2cController == 0 ? i2c0 : i2c1);
+  hw->enable = 0;
+  hw->tar = WM8960_I2C_ADDRESS;
+  hw->enable = 1;
+  abort_reason = 0;
+  abort_byte = 0;
+  const uint32_t start = time_us_32();
+  for (uint8_t index = 0; index < len; ++index) {
+    const bool last = index + 1 == len;
+    hw->data_cmd = (last ? I2C_IC_DATA_CMD_STOP_BITS : 0) | src[index];
+    while (!(hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_TX_EMPTY_BITS)) {
+      if (time_us_32() - start > timeout_us) {
+        return PICO_ERROR_TIMEOUT;
+      }
+    }
+    abort_reason = hw->tx_abrt_source;
+    if (abort_reason) {
+      (void)hw->clr_tx_abrt;
+      abort_byte = index;
+    }
+    if (abort_reason || last) {
+      while (!(hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_STOP_DET_BITS)) {
+        if (time_us_32() - start > timeout_us) {
+          return PICO_ERROR_TIMEOUT;
+        }
+      }
+      (void)hw->clr_stop_det;
+    }
+    if (abort_reason) {
+      return PICO_ERROR_GENERIC;
+    }
   }
+  return len;
+}
+
+bool try_write_codec_register(uint8_t register_address, uint16_t value) {
+  const uint8_t bytes[2] = {
+      static_cast<uint8_t>((register_address << 1) | ((value >> 8) & 0x01)),
+      static_cast<uint8_t>(value & 0xFF)};
 
   const uint32_t transfer_start = micros();
-  const uint8_t result = codec_bus.endTransmission();
+  uint32_t abort_reason = 0;
+  uint8_t abort_byte = 0;
+  const int written = codec_i2c_write(bytes, 2, 50000, abort_reason, abort_byte);
+  const uint8_t result = written == 2 ? 0 :
+      written == PICO_ERROR_TIMEOUT ? 5 : 4;
   if (result != 0) {
+    i2c_hw_t *hw = i2c_get_hw(kCodecI2cController == 0 ? i2c0 : i2c1);
+    const uint32_t ic_status = hw->status;
+    const uint32_t ic_raw = hw->raw_intr_stat;
+    const uint32_t ic_txflr = hw->txflr;
     failed_codec_register = register_address;
     codec_i2c_error = result;
     codec_i2c_error_us = micros() - transfer_start;
     codec_i2c_error_lines =
         (gpio_get(WM8960_I2C_SDA_PIN) ? 1 : 0) |
         (gpio_get(WM8960_I2C_SCL_PIN) ? 2 : 0);
+    codec_i2c_abort_reason = abort_reason;
+    if (codec_i2c_quiet) {
+      return false;
+    }
     wm8960_audio_debug_port().printf("[WM8960] I2C error %u at register 0x%02X, %lu us, SDA %u SCL %u, functions %u/%u\n",
                   result, register_address,
                   static_cast<unsigned long>(codec_i2c_error_us),
@@ -568,6 +615,15 @@ bool try_write_codec_register(uint8_t register_address, uint16_t value) {
                   static_cast<unsigned>((codec_i2c_error_lines >> 1) & 1),
                   static_cast<unsigned>(gpio_get_function(WM8960_I2C_SDA_PIN)),
                   static_cast<unsigned>(gpio_get_function(WM8960_I2C_SCL_PIN)));
+    wm8960_audio_debug_port().printf("[WM8960] I2C diag: ABRT 0x%05lX at byte %u%s%s%s, IC_STATUS 0x%02lX, RAW_INTR 0x%03lX, TXFLR %lu\n",
+                  static_cast<unsigned long>(abort_reason),
+                  static_cast<unsigned>(abort_byte),
+                  (abort_reason & I2C_IC_TX_ABRT_SOURCE_ABRT_7B_ADDR_NOACK_BITS) ? " ADDR_NACK" : "",
+                  (abort_reason & I2C_IC_TX_ABRT_SOURCE_ABRT_TXDATA_NOACK_BITS) ? " DATA_NACK" : "",
+                  (abort_reason & I2C_IC_TX_ABRT_SOURCE_ARB_LOST_BITS) ? " ARB_LOST" : "",
+                  static_cast<unsigned long>(ic_status),
+                  static_cast<unsigned long>(ic_raw),
+                  static_cast<unsigned long>(ic_txflr));
     return false;
   }
   return true;
@@ -581,17 +637,18 @@ bool write_codec_register(uint8_t register_address, uint16_t value) {
   wm8960_audio_debug_port().printf("[WM8960] recovering I2C bus before retrying register 0x%02X\n",
                 register_address);
 #endif
-  if (!recover_codec_bus()) {
-    return false;
-  }
-  if (!try_write_codec_register(register_address, value)) {
-    return false;
-  }
+  for (uint8_t attempt = 1; attempt <= 3; ++attempt) {
+    delayMicroseconds(500);
+    if (recover_codec_bus() &&
+        try_write_codec_register(register_address, value)) {
 #if defined(DEBUG_WM8960_AUDIO)
-  wm8960_audio_debug_port().printf("[WM8960] I2C recovery succeeded for register 0x%02X\n",
-                register_address);
+      wm8960_audio_debug_port().printf("[WM8960] I2C recovery succeeded for register 0x%02X on retry %u\n",
+                    register_address, static_cast<unsigned>(attempt));
 #endif
-  return true;
+      return true;
+    }
+  }
+  return false;
 }
 
 bool write_mic_gain_registers() {
@@ -1269,7 +1326,7 @@ bool wm8960_audio_initialize(void (*report_progress)(const char *)) {
     return false;
   }
   codec_bus.setClock(kCodecI2cHz);
-  codec_bus.setTimeout(5);
+  codec_bus.setTimeout(50);
   codec_bus.begin();
 
 #if defined(DEBUG_WM8960_AUDIO)
@@ -1539,6 +1596,79 @@ bool wm8960_audio_tone_active() {
 
 void wm8960_audio_pause_for_flash() {
   if (codec_ready) wm8960_i2s::pause_for_flash();
+}
+
+namespace {
+struct I2cTestCounts {
+  uint16_t ok = 0, addr_nack = 0, data_nack = 0, arb_lost = 0, timeout = 0,
+           other = 0;
+};
+
+void count_codec_result(bool ok, I2cTestCounts &counts) {
+  if (ok) {
+    ++counts.ok;
+    return;
+  }
+  if (codec_i2c_error == 5) ++counts.timeout;
+  else if (codec_i2c_abort_reason & I2C_IC_TX_ABRT_SOURCE_ARB_LOST_BITS) ++counts.arb_lost;
+  else if (codec_i2c_abort_reason & I2C_IC_TX_ABRT_SOURCE_ABRT_7B_ADDR_NOACK_BITS) ++counts.addr_nack;
+  else if (codec_i2c_abort_reason & I2C_IC_TX_ABRT_SOURCE_ABRT_TXDATA_NOACK_BITS) ++counts.data_nack;
+  else ++counts.other;
+  recover_codec_bus();
+}
+
+void run_i2c_phase(Print &port, const char *label, uint16_t count,
+                   uint8_t expander_address) {
+  const uint16_t mic_signal_path = 0x108 | (mic_boost << 4);
+  I2cTestCounts codec, expander;
+  for (uint16_t index = 0; index < count; ++index) {
+    count_codec_result(try_write_codec_register(0x20, mic_signal_path), codec);
+    if (expander_address) {
+      // Read IODIRA: no side effects, unlike GPIO/INTCAP reads.
+      codec_bus.beginTransmission(expander_address);
+      codec_bus.write(static_cast<uint8_t>(0x00));
+      const uint8_t result = codec_bus.endTransmission(false);
+      const bool ok = result == 0 &&
+          codec_bus.requestFrom(expander_address, static_cast<size_t>(1)) == 1;
+      while (codec_bus.available()) codec_bus.read();
+      if (ok) ++expander.ok;
+      else if (result == 5) { ++expander.timeout; recover_codec_bus(); }
+      else { ++expander.other; recover_codec_bus(); }
+    }
+  }
+  port.printf("%s codec ok %u/%u (addr nack %u, data nack %u, arb lost %u, timeout %u, other %u)\r\n",
+              label, codec.ok, count, codec.addr_nack, codec.data_nack,
+              codec.arb_lost, codec.timeout, codec.other);
+  if (expander_address) {
+    port.printf("%s MCP 0x%02X ok %u/%u (timeout %u, nack/other %u)\r\n",
+                label, expander_address, expander.ok, count, expander.timeout,
+                expander.other);
+  }
+}
+}  // namespace
+
+void wm8960_audio_i2c_test(Print &port, uint16_t count,
+                           uint8_t expander_address) {
+  if (!codec_ready) {
+    port.println("Error: codec not ready");
+    return;
+  }
+  codec_i2c_quiet = true;
+  run_i2c_phase(port, "I2S clocks ON: ", count, expander_address);
+  // Hold BCLK/LRCLK low so only the codec's own MCLK oscillator is running.
+  const gpio_function_t bclk_function = gpio_get_function(WM8960_I2S_BCLK_PIN);
+  const gpio_function_t lrclk_function = gpio_get_function(WM8960_I2S_LRCLK_PIN);
+  gpio_put(WM8960_I2S_BCLK_PIN, 0);
+  gpio_put(WM8960_I2S_LRCLK_PIN, 0);
+  gpio_set_dir(WM8960_I2S_BCLK_PIN, GPIO_OUT);
+  gpio_set_dir(WM8960_I2S_LRCLK_PIN, GPIO_OUT);
+  gpio_set_function(WM8960_I2S_BCLK_PIN, GPIO_FUNC_SIO);
+  gpio_set_function(WM8960_I2S_LRCLK_PIN, GPIO_FUNC_SIO);
+  delay(2);
+  run_i2c_phase(port, "I2S clocks OFF:", count, expander_address);
+  gpio_set_function(WM8960_I2S_BCLK_PIN, bclk_function);
+  gpio_set_function(WM8960_I2S_LRCLK_PIN, lrclk_function);
+  codec_i2c_quiet = false;
 }
 
 void wm8960_audio_resume_after_flash() {

@@ -564,6 +564,18 @@ at -6 dBFS. If the tone is clean on air, the distortion is in the
 microphone/analog stage rather than in the USB, PC or transmit chain.
 `MIC TONE OFF` restores the microphone.
 
+The codec and MCP23017 share one I2C bus next to the I2S clock pins, so long
+or poorly grounded wiring lets the 3 MHz BCLK corrupt I2C transfers.
+`\:I2CTEST [n]` (default 100, max 1000) does n codec register writes and n
+MCP23017 register reads with the I2S clocks running, then repeats them with
+BCLK/LRCLK held low, and prints the success and error counts for each.
+Audio drops out briefly during the second half. Failures only while the clocks
+run point to wiring: keep I2C and I2S wires short, add a ground wire beside
+them and use 2.2k-4.7k I2C pull-ups. The firmware drives the I2S outputs with
+slow slew and 2 mA to reduce this coupling, retries failed codec writes, and
+retries failed paddle reads (keeping the MCP23017 interrupt pending until a
+read succeeds).
+
 Host PTT feedback also drives the keyer's PTT output, keeping the keyer and
 host in step:
 

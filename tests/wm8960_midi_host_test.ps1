@@ -196,6 +196,7 @@ struct HardwareSerial {
   }
   void print(const char *text) { output += text; }
   void println(const char *text) { output += text; output += '\n'; }
+  void println() { output += '\n'; }
   void printf(const char *format, ...) {
     char text[512]; va_list args; va_start(args, format);
     vsnprintf(text, sizeof(text), format, args); va_end(args); output += text;
@@ -486,10 +487,10 @@ int main() {
   assert(memcmp(&saved, &configuration, sizeof(saved)) == 0 && !config_dirty);
   terminal.output = "\\:midi-ptt";
   assert(cli_midi(&terminal, "MIDI-PTT"));
-  assert(terminal.output.find("\\:midi-ptt MIDI PTT ") == 0);
+  assert(terminal.output.find("\\:midi-ptt\nMIDI PTT ") == 0);
   terminal.output = "\\:midi";
   assert(cli_midi(&terminal, "MIDI"));
-  assert(terminal.output.find("\\:midi MIDI PTT ") == 0);
+  assert(terminal.output.find("\\:midi\nMIDI PTT ") == 0);
   assert(!cli_midi(&terminal, "UNRELATED"));
   assert(cli_midi(&terminal, "MIDIWHEEL +"));
   assert(cli_midi(&terminal, "MIDIWHEEL -")); service();

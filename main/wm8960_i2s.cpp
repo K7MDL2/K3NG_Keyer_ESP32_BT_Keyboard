@@ -168,6 +168,9 @@ bool begin(uint32_t sample_rate) {
   for (uint pin : {WM8960_I2S_BCLK_PIN, WM8960_I2S_LRCLK_PIN,
                    WM8960_I2S_DOUT_PIN}) {
     pio_gpio_init(tx_pio, pin);
+    // Soft edges: fast 3 MHz BCLK edges couple into the shared I2C bus.
+    gpio_set_slew_rate(pin, GPIO_SLEW_RATE_SLOW);
+    gpio_set_drive_strength(pin, GPIO_DRIVE_STRENGTH_2MA);
   }
   pio_gpio_init(rx_pio, WM8960_I2S_DIN_PIN);
   pio_sm_config tx = wm8960_i2s_tx_program_get_default_config(tx_offset);
