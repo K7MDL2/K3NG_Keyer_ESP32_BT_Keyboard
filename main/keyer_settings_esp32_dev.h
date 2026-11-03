@@ -340,8 +340,6 @@
 
 #define farnsworth_timing_calibration 1.15
 
-#define sidetone_volume_low_limit 10
-#define sidetone_volume_high_limit 500
 
 #define custom_startup_field CODE_VERSION "K7MDL" //"your custom text here"   // an example could be callsign and name, eg. "AB1XYZ Bob", (or "Worlds best operator" which requires a 20 column display), string length shouldo be no more than the number of columns on the display
 

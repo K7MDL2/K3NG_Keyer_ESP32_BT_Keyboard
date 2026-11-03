@@ -10,11 +10,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #define keyer_pin_settings_esdp32_dev_h
 
 #ifdef FEATURE_MCP23017_EXPANDER
-  // Add 100 o actual pin. 100 i sused o indicate an expansion pin and is subtracted in use
+  // TX/PTT identifiers use 100 + MCP pin; input identifiers use the raw MCP pin.
   #define MCP23017_PIN0     0  // paddle_left
   #define MCP23017_PIN1     1  // paddle right
   #define MCP23017_PIN2     2  // straight key
-  // These next pins are future usage ideas, not implemeted yet.
   #define MCP23017_PIN3     3  // tx_key_line_1
   #define MCP23017_PIN4     4  // ptt_tx_1
   #define MCP23017_PIN5     5  // tx_key_line_2
@@ -320,6 +319,25 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define GPS_RX_PIN        35 // will conflict with NCP23017 if used     
 #endif
 
+// TX/PTT output identifiers distinguish expander pins from CPU GPIO.
+#ifdef FEATURE_MCP23017_EXPANDER
+  #undef tx_key_line_1
+  #undef tx_key_line_2
+  #undef ptt_tx_1
+  #undef ptt_tx_2
+  #define tx_key_line_1 (100 + MCP23017_PIN3)
+  #define ptt_tx_1      (100 + MCP23017_PIN4)
+  #define tx_key_line_2 (100 + MCP23017_PIN5)
+  #define ptt_tx_2      (100 + MCP23017_PIN6)
+  #define tx_key_line_3 (100 + MCP23017_PIN7)
+  #define ptt_tx_3      (100 + MCP23017_PIN8)
+  #define tx_key_line_4 (100 + MCP23017_PIN9)
+  #define ptt_tx_4      (100 + MCP23017_PIN10)
+  #define tx_key_line_5 (100 + MCP23017_PIN11)
+  #define ptt_tx_5      (100 + MCP23017_PIN12)
+  #define tx_key_line_6 (100 + MCP23017_PIN13)
+  #define ptt_tx_6      (100 + MCP23017_PIN14)
+#else
 //  common pins
 #define tx_key_line_3 0
 #define tx_key_line_4 0
@@ -330,6 +348,7 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #define ptt_tx_4 0
 #define ptt_tx_5 0
 #define ptt_tx_6 0
+#endif
 #define tx_key_dit 0            // if defined, goes active for dit (any transmitter) - customized with tx_key_dit_and_dah_pins_active_state and tx_key_dit_and_dah_pins_inactive_state
 #define tx_key_dah 0            // if defined, goes active for dah (any transmitter) - customized with tx_key_dit_and_dah_pins_active_state and tx_key_dit_and_dah_pins_inactive_state
 

@@ -1007,7 +1007,6 @@ Recent Update History
 
 		2019.02.05.01
 			Fixed bug in command mode K command when in ultimatic mode (Thanks, Rich)
-			Under Development: FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1 and FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3 in keyer_features_and_options_test.h
 
 		2019.02.05.02
 			Improvement in how K1EL Winkey emulation buffered speed command speed changing and clearing is handled
@@ -1605,6 +1604,19 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#include "keyer_settings.h"
 #endif
 
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+	#include "wm8960_audio.h"
+	#include "wm8960_midi.h"
+#endif
+
+#if defined(potentiometer) && potentiometer == 0
+	#undef FEATURE_POTENTIOMETER
+#endif
+
+#if defined(FEATURE_ROTARY_ENCODER) && defined(ARDUINO_ARCH_RP2040)
+	#include "hardware/sync.h"
+#endif
+
 #ifdef ARDUINO_ARCH_ESP32
 	#include "esp32-hal-log.h"
 #endif
@@ -1684,9 +1696,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 			uint8_t     keys[MAX_KEY_DATA_SIZE];
 			uint8_t     state;
 			KeyModifier modifier;
+			uint16_t consumer_usage = 0;
 		};
 
 		KeyInfo inf;
+		uint8_t bt_audio_modifiers = 0;
 		//bool new_bt_key = false;
 		#ifdef USE_BLE
 			bool use_BLE = true;
@@ -1816,9 +1830,15 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 		#define ICON_COLUMN_WIDTH COLUMN_WIDTH-4    // width of mono-spaced status bar font in pixels
 		#define ICON_SPACING (ICON_COLUMN_WIDTH-1)
 		#define TIME_ANCHOR (4)
-		#define TX_NUM_ANCHOR (116)
-		#define GRID_ANCHOR (158)
-		#define WPM_ANCHOR (292)
+		#if defined(FEATURE_TFT_PICO_320x480_RES_LCD)
+			#define TX_NUM_ANCHOR (110)
+			#define GRID_ANCHOR (146)
+			#define WPM_ANCHOR (282)
+		#else
+			#define TX_NUM_ANCHOR (116)
+			#define GRID_ANCHOR (158)
+			#define WPM_ANCHOR (292)
+		#endif
 		#define ICON_ANCHOR (373)
 		#define STATUS_BAR_Y_CURSOR (8)
 
@@ -1991,7 +2011,7 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 // Variables and stuff
 const uint8_t grid_len_max = 9;
-struct config_t {  // 120 bytes total
+struct config_t {
 
 	uint8_t paddle_mode;
 	uint8_t keyer_mode;
@@ -2049,7 +2069,20 @@ struct config_t {  // 120 bytes total
 		// 44 bytes
 
 	int sidetone_volume;
-		// 2 bytes
+	uint8_t usb_play_volume;
+	uint8_t usb_mic_volume;
+	bool sidetone_muted;
+	bool usb_play_muted;
+	bool usb_mic_muted;
+	uint8_t midi_ptt_mode;
+	#if defined(FEATURE_WM8960_USB_AUDIO)
+		uint8_t midi_control_mode;
+		uint8_t mic_pga;
+		uint8_t mic_boost;
+		bool mic_alc;
+		bool midi_vfo_reversed;
+		uint8_t mic_gate_mode;
+	#endif
 
 	// GPS and Compass
 	uint8_t grid_digits;  // length of gridsquare to display
@@ -2073,6 +2106,26 @@ struct config_t {  // 120 bytes total
 		//40 bytes
 	#endif
 } configuration;
+
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
+void print_audio_volumes(PRIMARY_SERIAL_CLS *port);
+bool apply_audio_levels();
+void service_keyer_midi();
+void service_host_ptt_feedback();
+void audio_consumer_key(uint16_t usage, uint8_t modifiers);
+int audio_volume(AudioVolumeTarget target);
+int step_audio_volume(int level, bool increase);
+void set_audio_volume(AudioVolumeTarget target, int level, bool muted);
+bool audio_muted(AudioVolumeTarget target);
+void sync_pod_volume();
+bool midi_pod_mode();
+// POD mode PC-side levels: sent to the PC only; local playback/mic levels stay fixed.
+uint8_t pod_play_volume = 100;
+bool pod_play_muted = false;
+uint8_t pod_mic_volume = 100;
+bool pod_mic_muted = false;
+#endif
 
 // Forward declarations to make esp-idf happy
 
@@ -2100,6 +2153,13 @@ void check_dah_paddle();
 void clear_send_buffer();
 void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm_in);
 void speed_set(int wpm_set);
+void speed_change(int change);
+void speed_change_command_mode(int change);
+void check_rotary_encoder();
+#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+char encoder_mode_letter();
+void draw_encoder_mode(int row, bool redraw);
+#endif
 int convert_cw_number_to_ascii (long number_in);
 void cli_timing_print(PRIMARY_SERIAL_CLS * port_to_use);
 void cli_paddle_echo_factor(PRIMARY_SERIAL_CLS * port_to_use,String command_arguments);
@@ -2135,10 +2195,9 @@ void send_serial_number(byte cut_numbers,int increment_serial_number,byte buffer
 void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 void display_scroll_print_char(char charin);
+void service_display();
 void popup(bool show);
-void sinewave_interrupt_compute();
 void initialize_sinewave_generator();
-void initialize_tonsin();
 void myDelay(uint32_t _ms);
 void setup_esp();
 int print_memory(byte memory_number, char *mem_string);
@@ -2158,6 +2217,7 @@ void setup_1();
 void loop_1();
 void core1_run();
 void update_icons(void);
+void draw_tx_icon();
 
 #if defined(FEATURE_BT_KEYBOARD) && defined(USE_BT_TASK) && defined(HARDWARE_ESP32_DEV)
 void check_bt_keyboard(void * pvParameters);
@@ -2543,10 +2603,15 @@ byte dit_buffer = 0;     // used for buffering paddle hits in iambic operation
 byte dah_buffer = 0;     // used for buffering paddle hits in iambic operation
 byte button0_buffer = 0;
 byte being_sent = 0;     // SENDING_NOTHING, SENDING_DIT, SENDING_DAH
-byte key_state = 0;      // 0 = key up, 1 = key down
+volatile byte key_state = 0;      // 0 = key up, 1 = key down
 byte config_dirty = 0;
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+// Each flash write briefly drops audio, so settings must settle before saving.
+#define CONFIG_SETTLE_MS 2000
+unsigned long config_changed_ms = 0;
+#endif
 unsigned long ptt_time = 0;
-byte ptt_line_activated = 0;
+volatile byte ptt_line_activated = 0;
 byte speed_mode = SPEED_NORMAL;
 #if defined(FEATURE_COMMAND_LINE_INTERFACE) || defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_MEMORY_MACROS) || defined(FEATURE_MEMORIES) || defined(FEATURE_COMMAND_MODE)
 	unsigned int serial_number = 1;
@@ -2664,11 +2729,11 @@ static void bt_reconnect_scan_task(void *pvParameters)
 	tmElements_t tm;
 	TinyGPSPlus gps; // The TinyGPSPlus object
 	bool UTC = false;    // 0 local time, 1 UTC time
+	bool gps_time_active = false;
 	uint8_t hr_off;  // time offsets to apply to UTC time
 	uint8_t min_off;
 	int shift_dir;  // + or -
 	char time_str[27] = {};
-	bool time_disp_updated = false;
 	uint8_t gps_source = 0;
 #endif
 volatile bool do_process = false;
@@ -2714,6 +2779,12 @@ volatile bool do_process = false;
 	byte lcd_scroll_flag = 0;
 	byte lcd_paddle_echo = 1;
 	byte lcd_send_echo = 1;
+	#ifdef FEATURE_TFT_DISPLAY
+		// Scroll-box characters already on screen; only newer ones are drawn.
+		byte lcd_scroll_drawn_row = 0;
+		byte lcd_scroll_drawn_col = 0;
+		byte lcd_scroll_repaint_row = LCD_ROWS;  // < LCD_ROWS: rows still to repaint after a scroll
+	#endif
 #endif //FEATURE_DISPLAY
 
 #ifdef DEBUG_VARIABLE_DUMP
@@ -2818,7 +2889,30 @@ void open_eeprom() {
 
 void close_w_eeprom() {  // close after write
 #if defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-	EEPROM.commit();
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		// A flash commit stalls both cores and all IRQs for ~47 ms; fade the audio out first.
+		wm8960_audio_pause_for_flash();
+		#if defined(DEBUG_WM8960_AUDIO)
+		const uint32_t commit_start_us = micros();
+		#endif
+		const bool committed = EEPROM.commit();
+		wm8960_audio_resume_after_flash();
+		#if defined(DEBUG_WM8960_AUDIO)
+		const uint32_t commit_us = micros() - commit_start_us;
+		if (commit_us > 1000) {
+			HardwareSerial &port = wm8960_audio_debug_port();
+			if (port && port.availableForWrite() >= 80) {
+				port.printf("[EEPROM] commit ms=%lu took %lu us%s\r\n",
+				    static_cast<unsigned long>(millis()),
+				    static_cast<unsigned long>(commit_us), committed ? "" : " (failed)");
+			}
+		}
+		#else
+		(void)committed;
+		#endif
+	#else
+		EEPROM.commit();
+	#endif
 	myDelay(5);
 	EEPROM.end();
 	//interrupts();
@@ -3783,7 +3877,10 @@ void service_keypad(){
 
 		static byte last_straight_key_state = 0;
 
-		#if defined(USE_KEY_PIN_INTERRUPTS)
+		#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+			read_io_handler();
+		#endif
+		#if defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
 			if (straight_key_state == STRAIGHT_KEY_ACTIVE_STATE) {
 		#else
 			if (digitalRead(pin_straight_key) == STRAIGHT_KEY_ACTIVE_STATE){
@@ -4022,6 +4119,7 @@ void service_keypad(){
 							display_scroll_print_char(prosign_char[0]);
 							display_scroll_print_char(prosign_char[1]);
 						}
+						service_display();
 					}
 				#endif //FEATURE_DISPLAY
 
@@ -4039,7 +4137,7 @@ void service_keypad(){
 				#endif //defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE)
 
 				#if defined(FEATURE_DISPLAY) && defined(FEATURE_STRAIGHT_KEY_ECHO)
-					if (cli_straight_key_echo){display_scroll_print_char(convert_cw_number_to_ascii(decode_character));}
+					if (cli_straight_key_echo){display_scroll_print_char(convert_cw_number_to_ascii(decode_character)); service_display();}
 				#endif //FEATURE_DISPLAY
 
 			#endif //OPTION_PROSIGN_SUPPORT
@@ -4500,6 +4598,9 @@ void lcd_scroll_box_clear() {
 			//if (TFT_VIEWPORT_EXISTS) {
 			//    debug_serial_port->println(F("Close Viewport"));
 					lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
+					lcd_scroll_drawn_row = 0;
+					lcd_scroll_drawn_col = 0;
+					lcd_scroll_repaint_row = LCD_ROWS;
 					myDelay(0);
 			//    lcd.resetViewport();
 			//}
@@ -4566,6 +4667,75 @@ int touch_button_available() {
 	#endif
 }
 
+#ifdef FEATURE_GPS
+bool gps_updates_paused() {
+	return ptt_line_activated || key_state
+	    #if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+	      || wm8960_audio_tone_active()
+	    #endif
+	    ;
+}
+
+bool gps_data_fresh(bool valid, uint32_t age_ms) {
+	return valid && age_ms < 5000;
+}
+
+// Brief indoor fix dropouts keep the last GPS grid instead of writing the fallback to flash.
+bool gps_location_held(bool valid, uint32_t age_ms) {
+	return valid && age_ms < 60000;
+}
+
+#define GRID_BEEP_HOLDOFF_MS 300000UL  // at most one grid-change beep per 5 minutes
+#endif
+
+#if defined(FEATURE_TFT_DISPLAY) && defined(FEATURE_GPS)
+void update_gps_clock_icon() {
+	if (gps_updates_paused()) return;
+	static char last_time[sizeof(time_str)] = {};
+	static uint16_t last_color = 0;
+	static bool drawn = false;
+	#ifdef FEATURE_BT_KEYBOARD
+		const uint16_t color = !configuration.ignore_gps && gps_time_active
+		    ? TFT_YELLOW : TFT_GREY;
+	#else
+		const uint16_t color = TFT_YELLOW;
+	#endif
+	char current_time[sizeof(time_str)];
+	memcpy(current_time, time_str, sizeof(current_time));
+	current_time[sizeof(current_time) - 1] = '\0';
+	if (drawn && color == last_color && strcmp(current_time, last_time) == 0) {
+		return;
+	}
+	lcd.setTextColor(color, TFT_BLACK);
+	lcd.drawString(current_time, TIME_ANCHOR, STATUS_BAR_Y_CURSOR, STATUS_BAR_FONT);
+	strcpy(last_time, current_time);
+	last_color = color;
+	drawn = true;
+}
+#endif
+
+void draw_tx_icon() {
+#ifdef FEATURE_TFT_DISPLAY
+	if (popup_active) return;
+	static byte last_ptt_line_activated = 255;
+	if (last_ptt_line_activated == ptt_line_activated) return;
+	const int32_t row = STATUS_BAR_Y_CURSOR;
+	lcd.setTextDatum(MY_DATUM);
+	lcd.setTextFont(STATUS_BAR_FONT);
+	lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+	if (ptt_line_activated) {
+		lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
+		lcd.setTextColor(TFT_RED, TFT_BLACK);
+		lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
+	} else {
+		lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
+		lcd.setTextColor(TFT_GREEN, TFT_BLACK);
+		lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
+	}
+	last_ptt_line_activated = ptt_line_activated;
+#endif
+}
+
 void update_icons(void) {
 #ifdef FEATURE_TFT_DISPLAY
 		if (popup_active) return;  // bail, these screen writes below are outside the popup window
@@ -4587,22 +4757,7 @@ void update_icons(void) {
 		lcd.setTextFont(STATUS_BAR_FONT);  // &fonts::FreeMonoBold12pt7b)
 
 		#ifdef FEATURE_GPS      // if not enabled leave the default grey 00:00:00 printed at init time.
-		if (!time_disp_updated && !configuration.ignore_gps && !stop_msg) {
-				lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-				time_disp_updated = true;
-			} else {
-				#ifndef FEATURE_BT_KEYBOARD
-					lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-				#else
-					lcd.setTextColor(TFT_GREY, TFT_BLACK);
-				#endif
-				time_disp_updated = true;
-			}
-
-			if (time_disp_updated) {
-				lcd.drawString(time_str, TIME_ANCHOR, STATUS_BAR_Y_CURSOR, STATUS_BAR_FONT);
-				time_disp_updated = false;
-			}
+			update_gps_clock_icon();
 		#endif
 
 		if (configuration.current_tx != last_tx || last_key_tx != key_tx) // TX state changed, update display
@@ -4620,7 +4775,11 @@ void update_icons(void) {
 			last_key_tx = key_tx;
 		}
 
-		if (stop_msg_changed || strcmp(grid_sq_str, last_GridSq) != 0)  // connect status and/or grid changed, update display
+		if (
+		    #ifdef FEATURE_GPS
+		      !gps_updates_paused() &&
+		    #endif
+		    (stop_msg_changed || strcmp(grid_sq_str, last_GridSq) != 0))  // connect status and/or grid changed, update display
 		{
 			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
 			lcd.drawString(last_GridSq, GRID_ANCHOR, row, STATUS_BAR_FONT);   // blank out space
@@ -4638,6 +4797,7 @@ void update_icons(void) {
 			}
 
 			strcpy(last_GridSq, grid_sq_str);  // write grid square
+			stop_msg_changed = false;
 		}
 
 //    GRID_ANCHOR (SCREEN_WIDTH/4)
@@ -4647,8 +4807,9 @@ void update_icons(void) {
 
 		char WPM[7] = "\0";
 		static int last_WPM = 0;
+		const bool wpm_changed = last_WPM != (int) configuration.wpm;
 
-		if (last_WPM != (int) configuration.wpm)  // wpm changed, update display
+		if (wpm_changed)  // wpm changed, update display
 		{
 			lcd.setTextColor(TFT_CYAN, TFT_BLACK);
 			itoa(configuration.wpm, WPM, 10);
@@ -4657,6 +4818,10 @@ void update_icons(void) {
 			lcd.drawString(WPM,       WPM_ANCHOR, row, STATUS_BAR_FONT);  // WPM rate
 			last_WPM = configuration.wpm;
 		}
+
+		#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			draw_encoder_mode(row, wpm_changed);
+		#endif
 
 		#ifdef NOT_USING_THESE_NOW
 		if (last_sending_mode != sending_mode)    // modes are : Auto, Manual, Auto-Interrupted
@@ -4692,22 +4857,7 @@ void update_icons(void) {
 			last_keyer_machine_mode = keyer_machine_mode;
 		}
 
-		static byte last_ptt_line_activated= 255;
-
-		if (last_ptt_line_activated != ptt_line_activated)  // Tx state changed
-		{
-			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
-			if (ptt_line_activated) {
-					lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
-					lcd.setTextColor(TFT_RED, TFT_BLACK);
-					lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
-			} else {
-					lcd.drawChar('T', ICON_ANCHOR+(2*ICON_SPACING), row);
-					lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-					lcd.drawChar('R', ICON_ANCHOR+(2*ICON_SPACING), row);
-			}
-			last_ptt_line_activated = ptt_line_activated;
-		}
+		draw_tx_icon();
 
 		static byte last_pause_sending_buffer = 254;
 
@@ -4740,7 +4890,6 @@ void update_icons(void) {
 		lcd.setTextColor(TFT_WHITE, TFT_BLACK);   // set back to normal size and color
 		lcd.setFreeFont(TFT_FONT_MEDIUM);
 		lcd.setTextDatum(MY_DATUM);
-		stop_msg_changed = false;
 #endif
 }
 
@@ -4758,7 +4907,99 @@ void testlcd(char status, int x, int y) {
 //-------------------------------------------------------------------------------------------------------
 
 #ifdef FEATURE_DISPLAY
+bool lcd_timed_message_expired() {
+	return lcd_status == LCD_TIMED_MESSAGE &&
+	    static_cast<int32_t>(millis() - lcd_timed_message_clear_time) >= 0;
+}
+
+#ifdef FEATURE_TFT_DISPLAY
+int32_t tft_scroll_row_y(byte row) {
+	switch (row) {
+		case 1: return SCROLL_BOX_ROW2;
+		case 2: return SCROLL_BOX_ROW3;
+		case 3: return SCROLL_BOX_ROW4;
+		case 4: return SCROLL_BOX_ROW5;
+		default: return SCROLL_BOX_ROW1;
+	}
+}
+
+void tft_draw_scroll_char(byte row, byte col) {
+	const char c = lcd_scroll_buffer[row].charAt(col);
+	if (c > 0 && c != ' ') {
+		lcd.drawChar(c, SCROLL_TEXT_LEFT_SIDE+(col*COLUMN_WIDTH), tft_scroll_row_y(row), GFXFF);
+	}
+}
+
+// Brings the scroll box up to date in small steps: one row repaint after a
+// scroll, otherwise up to max_chars new characters. Returns true when done.
+bool tft_draw_pending_scroll_chars(byte max_chars) {
+	lcd.setTextDatum(SCROLL_BOX_DATUM);
+	lcd.setFreeFont(SCROLL_BOX_FONT);
+	lcd.setTextColor(TFT_WHITE);
+	#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+		tft_backlight(1);
+	#endif
+
+	if (lcd_scroll_repaint_row < LCD_ROWS) {
+		const byte row = lcd_scroll_repaint_row;
+		// Free-font glyphs sit on the baseline: about 3/4 of the row pitch above, 1/4 below.
+		const int32_t pitch = FONT_HEIGHT;
+		lcd.fillRect(SCROLL_BOX_LEFT_SIDE+3, tft_scroll_row_y(row)-(pitch*3/4),
+		             SCROLL_BOX_WIDTH-6, pitch, TFT_BLACK);
+		for (byte col = 0; col < lcd_scroll_buffer[row].length(); col++) {
+			tft_draw_scroll_char(row, col);
+		}
+		lcd_scroll_drawn_row = row;
+		lcd_scroll_drawn_col = lcd_scroll_buffer[row].length();
+		lcd_scroll_repaint_row++;
+		return false;
+	}
+
+	byte drawn = 0;
+	while (lcd_scroll_drawn_row < LCD_ROWS) {
+		const byte row = lcd_scroll_drawn_row;
+		const unsigned int length = lcd_scroll_buffer[row].length();
+		if (lcd_scroll_drawn_col < length) {
+			if (drawn >= max_chars) return false;
+			tft_draw_scroll_char(row, lcd_scroll_drawn_col);
+			lcd_scroll_drawn_col++;
+			drawn++;
+			continue;
+		}
+		bool later_text = false;
+		for (byte r = row + 1; r < LCD_ROWS; r++) {
+			if (lcd_scroll_buffer[r].length() > 0) later_text = true;
+		}
+		if (!later_text) {
+			if (lcd_scroll_drawn_col > length) lcd_scroll_drawn_col = length;  // buffer was cleared
+			return true;
+		}
+		lcd_scroll_drawn_row++;
+		lcd_scroll_drawn_col = 0;
+	}
+	return true;
+}
+#endif
+
 void service_display() {
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (key_state || wm8960_audio_tone_active()) return;
+		if (ptt_line_activated) {
+			// A held PTT still needs its T/R icon and live sent-text echo
+			// (audio is timer-rendered); other LCD work waits.
+			#ifdef FEATURE_TFT_DISPLAY
+				draw_tx_icon();
+				if (!popup_active && lcd_status == LCD_SCROLL_MSG && lcd_scroll_buffer_dirty) {
+					if (lcd_scroll_flag) {
+						lcd_scroll_flag = 0;
+						lcd_scroll_repaint_row = 0;
+					}
+					if (tft_draw_pending_scroll_chars(2)) lcd_scroll_buffer_dirty = 0;
+				}
+			#endif
+			return;
+		}
+	#endif
 
 	#ifdef DEBUG_LOOP
 		debug_serial_port->println(F("loop: entering service_display"));
@@ -4777,6 +5018,11 @@ void service_display() {
 		update_icons();
 		if (popup_active) return;  // do not overwrite the window
 	#endif
+
+	if (lcd_timed_message_expired()) {
+		lcd_status = LCD_REVERT;
+		screen_refresh_status = SCREEN_REFRESH_IDLE;
+	}
 
 	if (screen_refresh_status == SCREEN_REFRESH_INIT) {   // active at beginning of an event like pause
 		#ifdef FEATURE_TFT_DISPLAY
@@ -4863,16 +5109,20 @@ void service_display() {
 						break;
 				case LCD_SCROLL_MSG:   // this is called after a timed message clears the display and the buffer has to be redrawn onscreen.  Also at start of Pause
 						lcd_scroll_box_clear();
-						screen_refresh_status = SCREEN_REFRESH_INIT;
 						lcd_scroll_flag = 0;
-						lcd_scroll_buffer_dirty = 0;
+						#ifdef FEATURE_TFT_DISPLAY
+							lcd_scroll_buffer_dirty = 1;  // redrawn incrementally below
+						#else
+							screen_refresh_status = SCREEN_REFRESH_INIT;
+							lcd_scroll_buffer_dirty = 0;
+						#endif
 						break;
 			}
 		} else {
 			switch (lcd_status) {
 				case LCD_CLEAR : break;
 				case LCD_TIMED_MESSAGE:
-					if (millis() > lcd_timed_message_clear_time) {
+					if (lcd_timed_message_expired()) {
 						lcd_status = LCD_REVERT;
 					}
 					else {
@@ -4881,12 +5131,22 @@ void service_display() {
 					break;
 				case LCD_SCROLL_MSG:
 					if (lcd_scroll_buffer_dirty) {
-						if (lcd_scroll_flag) {
-							lcd_scroll_box_clear();
-							lcd_scroll_flag = 0;
-						}
-						lcd_scroll_buffer_dirty = 0;
-						screen_refresh_status = SCREEN_REFRESH_INIT;
+						#ifdef FEATURE_TFT_DISPLAY
+							// Repaint rows after a scroll and draw only new characters, a row per
+							// call at most, instead of the legacy one-character-per-pass redraw.
+							if (lcd_scroll_flag) {
+								lcd_scroll_flag = 0;
+								lcd_scroll_repaint_row = 0;
+							}
+							if (tft_draw_pending_scroll_chars(LCD_COLUMNS)) lcd_scroll_buffer_dirty = 0;
+						#else
+							if (lcd_scroll_flag) {
+								lcd_scroll_box_clear();
+								lcd_scroll_flag = 0;
+							}
+							lcd_scroll_buffer_dirty = 0;
+							screen_refresh_status = SCREEN_REFRESH_INIT;
+						#endif
 					}
 				break;
 			}
@@ -4898,11 +5158,31 @@ void service_display() {
 //-------------------------------------------------------------------------------------------------------
 
 #ifdef FEATURE_DISPLAY
+byte lcd_scroll_column_pointer = 0;
+byte lcd_scroll_row_pointer = 0;
+byte lcd_scroll_holding_space = 0;
+
+void reset_display_scroll_text() {
+	for (byte row = 0; row < LCD_ROWS; ++row) {
+		lcd_scroll_buffer[row] = "";
+	}
+	lcd_scroll_column_pointer = 0;
+	lcd_scroll_row_pointer = 0;
+	lcd_scroll_holding_space = 0;
+	lcd_scroll_flag = 0;
+	lcd_scroll_buffer_dirty = 1;
+	#ifdef FEATURE_TFT_DISPLAY
+		lcd_scroll_drawn_row = 0;
+		lcd_scroll_drawn_col = 0;
+		lcd_scroll_repaint_row = 0;
+	#endif
+}
+
 void display_scroll_print_char(char charin){
 
-	static byte column_pointer = 0;
-	static byte row_pointer = 0;
-	static byte holding_space = 0;
+	byte &column_pointer = lcd_scroll_column_pointer;
+	byte &row_pointer = lcd_scroll_row_pointer;
+	byte &holding_space = lcd_scroll_holding_space;
 	byte x = 0;
 
 	#ifdef DEBUG_DISPLAY_SCROLL_PRINT_CHAR
@@ -5102,8 +5382,17 @@ void check_for_dirty_configuration()
 			 (paddle_pin_read(paddle_left)  == HIGH), (paddle_pin_read(paddle_right) == HIGH));
 	#endif
 
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		static byte was_dirty = 0;
+		if (config_dirty && !was_dirty) config_changed_ms = millis();
+		was_dirty = config_dirty;
+		const bool config_settled = (millis() - config_changed_ms) > CONFIG_SETTLE_MS;
+	#else
+		const bool config_settled = true;
+	#endif
+
 	//if ((config_dirty) && ((millis()-last_config_write)>30000) && (!send_buffer_bytes) && (!ptt_line_activated)) {
-	if ((config_dirty) && ((millis()-last_config_write)>eeprom_write_time_ms) && (!send_buffer_bytes) && (!ptt_line_activated) && (!dit_buffer) && (!dah_buffer) && (!async_eeprom_write) && (paddle_pin_read(paddle_left) == HIGH)  && (paddle_pin_read(paddle_right) == HIGH) ) {
+	if ((config_dirty) && (config_settled) && ((millis()-last_config_write)>eeprom_write_time_ms) && (!send_buffer_bytes) && (!ptt_line_activated) && (!dit_buffer) && (!dah_buffer) && (!async_eeprom_write) && (paddle_pin_read(paddle_left) == HIGH)  && (paddle_pin_read(paddle_right) == HIGH) ) {
 		write_settings_to_eeprom(0);
 		last_config_write = millis();
 		#ifdef DEBUG_EEPROM
@@ -5350,16 +5639,8 @@ void check_ps2_keyboard()
 																#endif
 
 																#ifdef FEATURE_DISPLAY   // clear out the old text on the scrollable portion of display
+																		reset_display_scroll_text();
 																		lcd_center_print_timed("Abort", 0, default_display_msg_delay);
-																		for (uint16_t i = 0; i < (LCD_ROWS); i++) {
-
-																		#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-																				lcd_scroll_buffer[i] = "";
-																				//memset(lcd_scroll_buffer[i], 0, sizeof(lcd_scroll_buffer[i])); // .clear() not on Pico. Maybe use memset(received, 0, sizeof(received))
-																		#else
-																				lcd_scroll_buffer[i].clear();
-																		#endif
-																}
 																#endif
 																break;
 
@@ -6337,19 +6618,213 @@ void debug_capture_dump()
 
 //-------------------------------------------------------------------------------------------------------
 #ifdef FEATURE_ROTARY_ENCODER
+#if defined(ARDUINO_ARCH_RP2040)
+struct EncoderEvent {
+	uint8_t direction;
+	uint32_t time_ms;
+};
+volatile EncoderEvent encoder_events[128];
+volatile uint8_t encoder_event_head = 0;
+volatile uint8_t encoder_event_tail = 0;
+volatile bool encoder_event_overflow = false;
+
+void capture_encoder_transition() {
+	const uint8_t pins = (digitalRead(rotary_pin2) << 1) | digitalRead(rotary_pin1);
+	state = ttable[state & 0x0f][pins];
+	const uint8_t direction = state & 0x30;
+	if (!direction) return;
+	const uint8_t next = (encoder_event_head + 1) & 127;
+	if (next == encoder_event_tail) {
+		encoder_event_overflow = true;
+		return;
+	}
+	encoder_events[encoder_event_head].direction = direction;
+	encoder_events[encoder_event_head].time_ms = millis();
+	encoder_event_head = next;
+}
+#endif
+
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+enum class EncoderFunction : uint8_t {
+	Vfo, Master, Sidetone, Frequency, Speed, Microphone, Count
+};
+EncoderFunction encoder_function =
+    rotary_switch ? EncoderFunction::Vfo : EncoderFunction::Master;
+bool encoder_button_candidate = false;
+bool encoder_button_pressed = false;
+bool encoder_long_press = false;
+uint32_t encoder_button_changed_ms = 0;
+uint32_t encoder_button_down_ms = 0;
+
+char encoder_mode_letter() {
+	switch (encoder_function) {
+		case EncoderFunction::Vfo: return 'V';
+		case EncoderFunction::Master: return 'M';
+		case EncoderFunction::Sidetone: return 'S';
+		case EncoderFunction::Frequency: return 'F';
+		case EncoderFunction::Speed: return 'W';
+		case EncoderFunction::Microphone: return 'U';
+		case EncoderFunction::Count: return '?';
+	}
+	return '?';
+}
+
+void draw_encoder_mode(int row, bool redraw) {
+	if (ptt_line_activated || key_state) return;
+	#ifdef FEATURE_TFT_DISPLAY
+		static char last_mode = '\0';
+		const char mode = encoder_mode_letter();
+		if (mode != last_mode || redraw) {
+			const char old_label[] = {last_mode, '\0'};
+			lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+			lcd.drawString(old_label, ICON_ANCHOR, row, STATUS_BAR_FONT);  // erase last icon letter
+			lcd.setTextColor(lcd.color565(144, 238, 144), TFT_BLACK);
+			const char label[] = {mode, '\0'};
+			lcd.drawString(label, ICON_ANCHOR, row, STATUS_BAR_FONT);  // draw new icon letter
+			last_mode = mode;
+		}
+	#endif
+}
+
+void show_encoder_function() {
+	if (ptt_line_activated || key_state) return;
+	#ifdef FEATURE_DISPLAY
+		String text;
+		switch (encoder_function) {
+			case EncoderFunction::Vfo: return;
+			case EncoderFunction::Master:
+				text = String(midi_pod_mode() ? "PC Master " : "Master ") +
+				    String(audio_volume(AudioVolumeTarget::Playback)) + "%"; break;
+			case EncoderFunction::Sidetone:
+				text = "Sidetone " + String(configuration.sidetone_volume) + "%"; break;
+			case EncoderFunction::Frequency:
+				text = "Tone " + String(configuration.hz_sidetone) + " Hz"; break;
+			case EncoderFunction::Speed:
+				text = "Speed " + String(keyer_machine_mode == KEYER_COMMAND_MODE ?
+				    configuration.wpm_command_mode : configuration.wpm) + " WPM"; break;
+			case EncoderFunction::Microphone:
+				text = String(midi_pod_mode() ? "PC USB Mic " : "USB Mic ") +
+				    String(audio_volume(AudioVolumeTarget::Microphone)) + "%"; break;
+			case EncoderFunction::Count: return;
+		}
+		lcd_center_print_timed(text, 0, 1000);
+	#endif
+}
+
+void check_encoder_switch() {
+	if (ptt_line_activated || key_state) return;
+	#if rotary_switch != 0
+		const uint32_t now = millis();
+		const bool pressed = digitalRead(rotary_switch) == LOW;
+		if (pressed != encoder_button_candidate) {
+			encoder_button_candidate = pressed;
+			encoder_button_changed_ms = now;
+		}
+		if (encoder_button_candidate != encoder_button_pressed &&
+		    static_cast<uint32_t>(now - encoder_button_changed_ms) >= 20) {
+			encoder_button_pressed = encoder_button_candidate;
+			if (encoder_button_pressed) {
+				encoder_button_down_ms = now;
+				encoder_long_press = false;
+			} else if (!encoder_long_press) {
+				if (static_cast<uint32_t>(now - encoder_button_down_ms) >= 1000) {
+					encoder_function = EncoderFunction::Vfo;
+				} else {
+					encoder_function = static_cast<EncoderFunction>(
+					    (static_cast<uint8_t>(encoder_function) + 1) %
+					    static_cast<uint8_t>(EncoderFunction::Count));
+				}
+				show_encoder_function();
+			}
+			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+				last_active_time = now;
+			#endif
+		}
+		if (encoder_button_pressed && !encoder_long_press &&
+		    static_cast<uint32_t>(now - encoder_button_down_ms) >= 1000) {
+			encoder_long_press = true;
+			encoder_function = EncoderFunction::Vfo;
+			show_encoder_function();
+			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+				last_active_time = now;
+			#endif
+		}
+	#endif
+}
+
+void apply_encoder_step(int step) {
+	switch (encoder_function) {
+		case EncoderFunction::Vfo:
+			if (!wm8960_midi_wheel_step(step * ENCODER_VFO_DIRECTION *
+			        (configuration.midi_vfo_reversed ? -1 : 1))) {
+				#ifdef FEATURE_DISPLAY
+					lcd_center_print_timed("MIDI unavailable", 0, 1000);
+				#else
+					debug_serial_port->println(F("Error: MIDI encoder output unavailable"));
+				#endif
+				return;
+			}
+			break;
+		case EncoderFunction::Master:
+		case EncoderFunction::Sidetone:
+		case EncoderFunction::Microphone: {
+			const AudioVolumeTarget target =
+			    encoder_function == EncoderFunction::Master ? AudioVolumeTarget::Playback :
+			    encoder_function == EncoderFunction::Sidetone ? AudioVolumeTarget::Sidetone :
+			    AudioVolumeTarget::Microphone;
+			set_audio_volume(target, step_audio_volume(audio_volume(target), step > 0), false);
+			break;
+		}
+		case EncoderFunction::Frequency:
+			configuration.hz_sidetone = constrain(
+			    static_cast<int>(configuration.hz_sidetone) + (step > 0 ? 10 : -10),
+			    300, 1200);
+			config_dirty = 1;
+			break;
+		case EncoderFunction::Speed:
+			if (keyer_machine_mode == KEYER_COMMAND_MODE) speed_change_command_mode(step);
+			else speed_change(step);
+			#ifdef FEATURE_WINKEY_EMULATION
+				if ((primary_serial_port_mode == SERIAL_WINKEY_EMULATION) && winkey_host_open) {
+					winkey_port_write(((configuration.wpm-pot_wpm_low_value)|128),0);
+					winkey_last_unbuffered_speed_wpm = configuration.wpm;
+				}
+			#endif
+			break;
+		case EncoderFunction::Count: return;
+	}
+}
+#endif
+
 int chk_rotary_encoder(){
 
 	static unsigned long timestamp[5];
 
+	#if defined(ARDUINO_ARCH_RP2040)
+		uint8_t result = 0;
+		uint32_t event_time = 0;
+		const uint32_t irq_state = save_and_disable_interrupts();
+		const bool overflow = encoder_event_overflow;
+		encoder_event_overflow = false;
+		if (encoder_event_tail != encoder_event_head) {
+			result = encoder_events[encoder_event_tail].direction;
+			event_time = encoder_events[encoder_event_tail].time_ms;
+			encoder_event_tail = (encoder_event_tail + 1) & 127;
+		}
+		restore_interrupts(irq_state);
+		if (overflow) debug_serial_port->println(F("Error: encoder event queue overflow; steps lost"));
+	#else
 	unsigned char pinstate = (digitalRead(rotary_pin2) << 1) | digitalRead(rotary_pin1);
 	state = ttable[state & 0xf][pinstate];
 	unsigned char result = (state & 0x30);
+	const unsigned long event_time = millis();
+	#endif
 	if (result) {
 		timestamp[0] = timestamp[1];                    // Encoder step timer
 		timestamp[1] = timestamp[2];
 		timestamp[2] = timestamp[3];
 		timestamp[3] = timestamp[4];
-		timestamp[4] = millis();
+		timestamp[4] = event_time;
 
 		unsigned long elapsed_time = (timestamp[4] - timestamp[0]); // Encoder step time difference for 10's step
 
@@ -6365,15 +6840,45 @@ int chk_rotary_encoder(){
 
 void check_rotary_encoder(){
 
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (ptt_line_activated || key_state) return;
+		static bool value_message_pending = false;
+		static uint32_t last_message_ms = 0;
+		static EncoderFunction message_function = encoder_function;
+		#ifdef FEATURE_DISPLAY
+			if (lcd_timed_message_expired()) service_display();
+		#endif
+		check_encoder_switch();
+		if (message_function != encoder_function) {
+			value_message_pending = false;
+			message_function = encoder_function;
+		}
+		bool moved = false;
+		for (uint8_t count = 0; count < 16; ++count) {
+			const int step = chk_rotary_encoder();
+			if (!step) break;
+			apply_encoder_step(step);
+			moved = true;
+		}
+		if (moved) {
+			value_message_pending = encoder_function != EncoderFunction::Vfo;
+			service_keyer_midi();
+			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+				last_active_time = millis();
+			#endif
+		}
+		if (value_message_pending &&
+		    static_cast<uint32_t>(millis() - last_message_ms) >= 25) {
+			value_message_pending = false;
+			show_encoder_function();
+			last_message_ms = millis();
+		}
+	#else
 	int step = chk_rotary_encoder();
 
 	if (step != 0) {
 		if (keyer_machine_mode == KEYER_COMMAND_MODE) speed_change_command_mode(step);
 		else speed_change(step);
-
-		#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
-			last_active_time = millis();
-		#endif //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 
 		// Start of Winkey Speed change mod for Rotary Encoder -- VE2EVN
 		#ifdef FEATURE_WINKEY_EMULATION
@@ -6384,7 +6889,12 @@ void check_rotary_encoder(){
 		#endif
 		// End of Winkey Speed change mod for Rotary Encoder -- VE2EVN
 
+		#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+			last_active_time = millis();
+		#endif
+
 	} // if (step != 0)
+	#endif
 
 }
 #endif //FEATURE_ROTARY_ENCODER
@@ -6896,6 +7406,69 @@ void check_paddles()
 
 //-------------------------------------------------------------------------------------------------------
 
+#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
+uint8_t keyer_output_latches[2] = {};
+uint8_t keyer_output_directions[2] = {0xFF, 0xFF};
+
+bool keyer_expander_register_write(uint8_t reg, uint8_t value) {
+	#ifdef USE_WIRE1
+		TwoWire &bus = Wire1;
+	#else
+		TwoWire &bus = Wire;
+	#endif
+	bus.beginTransmission(MCP23X17_ADDR);
+	bus.write(reg);
+	bus.write(value);
+	const uint8_t error = bus.endTransmission();
+	if (error) {
+		debug_serial_port->printf("Error: MCP23017 register 0x%02X write failed (%u)\r\n", reg, error);
+		return false;
+	}
+	return true;
+}
+#endif
+
+void keyer_output_write(uint8_t pin, uint8_t state) {
+	#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
+		if (pin >= 100 && pin <= 115) {
+			const uint8_t port = (pin - 100) / 8;
+			const uint8_t mask = 1u << ((pin - 100) % 8);
+			const uint8_t value = state == HIGH ?
+			    keyer_output_latches[port] | mask :
+			    keyer_output_latches[port] & ~mask;
+			// OLAT writes preserve other outputs without reading/clearing paddle IRQs.
+			if (keyer_expander_register_write(0x14 + port, value)) {
+				keyer_output_latches[port] = value;
+			}
+			return;
+		}
+	#endif
+	digitalWrite(pin, state);
+}
+
+void keyer_output_initialize(uint8_t pin, uint8_t inactive_state) {
+	#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
+		if (pin >= 100 && pin <= 115) {
+			const uint8_t port = (pin - 100) / 8;
+			const uint8_t mask = 1u << ((pin - 100) % 8);
+			const uint8_t value = inactive_state == HIGH ?
+			    keyer_output_latches[port] | mask :
+			    keyer_output_latches[port] & ~mask;
+			if (!keyer_expander_register_write(0x14 + port, value)) {
+				return;
+			}
+			keyer_output_latches[port] = value;
+			const uint8_t direction = keyer_output_directions[port] & ~mask;
+			if (keyer_expander_register_write(port, direction)) {
+				keyer_output_directions[port] = direction;
+			}
+			return;
+		}
+	#endif
+	pinMode(pin, OUTPUT);
+	digitalWrite(pin, inactive_state);
+}
+
 void ptt_key(){
 
 	unsigned long ptt_activation_time = millis();
@@ -6917,10 +7490,10 @@ void ptt_key(){
 
 					#if defined(FEATURE_WINKEY_EMULATION) && defined(OPTION_WINKEY_PINCONFIG_PTT_CONTROLS_PTT_LINE)
 						if (winkey_pinconfig_ptt_bit){
-							digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
+							keyer_output_write (configuration.current_ptt_line, ptt_line_active_state);
 						}
 					#else
-						digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
+						keyer_output_write (configuration.current_ptt_line, ptt_line_active_state);
 					#endif // defined(FEATURE_WINKEY_EMULATION) && !defined(OPTION_WINKEY_PINCONFIG_PTT_CONTROLS_PTT_HOLD)
 
 
@@ -6936,17 +7509,17 @@ void ptt_key(){
 
 					#if defined(FEATURE_WINKEY_EMULATION) && defined(OPTION_WINKEY_PINCONFIG_PTT_CONTROLS_PTT_LINE)
 						if (winkey_pinconfig_ptt_bit){
-							digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
+							keyer_output_write (configuration.current_ptt_line, ptt_line_active_state);
 						}
 					#else
-						digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
+						keyer_output_write (configuration.current_ptt_line, ptt_line_active_state);
 					#endif // defined(FEATURE_WINKEY_EMULATION) && !defined(OPTION_WINKEY_PINCONFIG_PTT_CONTROLS_PTT_HOLD)
 
 				//digitalWrite (configuration.current_ptt_line, ptt_line_active_state);
 
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION)
 					if ((wk2_both_tx_activated) && (ptt_tx_2)) {
-						digitalWrite (ptt_tx_2, ptt_line_active_state);
+						keyer_output_write (ptt_tx_2, ptt_line_active_state);
 					}
 				#endif
 				 //myDelay(configuration.ptt_lead_time[configuration.current_tx-1]);
@@ -6957,6 +7530,9 @@ void ptt_key(){
 		#endif //FEATURE_SO2R_BASE
 
 		ptt_line_activated = 1;
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			wm8960_midi_ptt(true);
+		#endif
 
 		#ifdef FEATURE_SO2R_BASE
 			so2r_set_rx();
@@ -7084,18 +7660,21 @@ void ptt_unkey(){
 
 		#ifdef FEATURE_SO2R_BASE
 			if (current_tx_ptt_line) {
-				digitalWrite (current_tx_ptt_line, ptt_line_inactive_state);
+				keyer_output_write (current_tx_ptt_line, ptt_line_inactive_state);
 		#else
 			if (configuration.current_ptt_line) {
-				digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);
+				keyer_output_write (configuration.current_ptt_line, ptt_line_inactive_state);
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION)
 					if ((wk2_both_tx_activated) && (ptt_tx_2)) {
-						digitalWrite (ptt_tx_2, ptt_line_inactive_state);
+						keyer_output_write (ptt_tx_2, ptt_line_inactive_state);
 					}
 				#endif
 			#endif //FEATURE_SO2R_BASE
 		}
 		ptt_line_activated = 0;
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			wm8960_midi_ptt(false);
+		#endif
 		#ifdef FEATURE_SEQUENCER
 			sequencer_ptt_inactive_time = millis();
 		#endif
@@ -7127,6 +7706,10 @@ void check_ptt_tail()
 	#endif
 
 	//static byte manual_ptt_invoke_ptt_input_pin = 0;
+
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		service_host_ptt_feedback();
+	#endif
 
 	if (ptt_input_pin){
 		if ((digitalRead(ptt_input_pin) == ptt_input_pin_active_state)){
@@ -7434,6 +8017,10 @@ int read_settings_from_eeprom() {
 			#endif
 
 			close_r_eeprom();
+
+			#if defined(potentiometer) && potentiometer == 0
+				configuration.pot_activated = 0;
+			#endif
 
 			#ifndef FEATURE_SO2R_BASE
 				switch_to_tx_silent(configuration.current_tx);
@@ -7837,6 +8424,9 @@ void send_dah(){
 
 void tx_and_sidetone_key (int state)
 {
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		const bool previous_key_state = key_state;
+	#endif
 
 	#if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
 
@@ -7909,10 +8499,10 @@ void tx_and_sidetone_key (int state)
 			if (key_tx) {
 				byte previous_ptt_line_activated = ptt_line_activated;
 				ptt_key();
-				if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_active_state);}
+				if (current_tx_key_line) {keyer_output_write (current_tx_key_line, tx_key_line_active_state);}
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 					if ((wk2_both_tx_activated) && (tx_key_line_2)) {
-						digitalWrite (tx_key_line_2, HIGH);
+						keyer_output_write (tx_key_line_2, HIGH);
 					}
 				#endif
 				if ((first_extension_time) && (previous_ptt_line_activated == 0)) {
@@ -7926,10 +8516,10 @@ void tx_and_sidetone_key (int state)
 		} else {
 			if ((state == 0) && (key_state)) {
 				if (key_tx) {
-					if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_inactive_state);}
+					if (current_tx_key_line) {keyer_output_write (current_tx_key_line, tx_key_line_inactive_state);}
 					#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 						if ((wk2_both_tx_activated) && (tx_key_line_2)) {
-							digitalWrite (tx_key_line_2, LOW);
+							keyer_output_write (tx_key_line_2, LOW);
 						}
 					#endif
 					ptt_key();
@@ -7947,10 +8537,10 @@ void tx_and_sidetone_key (int state)
 				if (!ptt_interlock_active) {
 					ptt_key();
 				}
-				if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_active_state);}
+				if (current_tx_key_line) {keyer_output_write (current_tx_key_line, tx_key_line_active_state);}
 				#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 					if ((wk2_both_tx_activated) && (tx_key_line_2)) {
-						digitalWrite (tx_key_line_2, HIGH);
+						keyer_output_write (tx_key_line_2, HIGH);
 					}
 				#endif
 				if ((first_extension_time) && (previous_ptt_line_activated == 0)) {
@@ -7964,10 +8554,10 @@ void tx_and_sidetone_key (int state)
 		} else {
 			if ((state == 0) && (key_state)) {
 				if (key_tx) {
-					if (current_tx_key_line) {digitalWrite (current_tx_key_line, tx_key_line_inactive_state);}
+					if (current_tx_key_line) {keyer_output_write (current_tx_key_line, tx_key_line_inactive_state);}
 					#if defined(OPTION_WINKEY_2_SUPPORT) && defined(FEATURE_WINKEY_EMULATION) && !defined(FEATURE_SO2R_BASE)
 						if ((wk2_both_tx_activated) && (tx_key_line_2)) {
-							digitalWrite (tx_key_line_2, LOW);
+							keyer_output_write (tx_key_line_2, LOW);
 						}
 					#endif
 					if (!ptt_interlock_active) {
@@ -7981,6 +8571,26 @@ void tx_and_sidetone_key (int state)
 			}
 		}
 	#endif //FEATURE_PTT_INTERLOCK
+
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (previous_key_state != static_cast<bool>(key_state)) {
+			wm8960_midi_key(key_state && key_tx &&
+			    keyer_machine_mode != KEYER_COMMAND_MODE);
+			uint16_t timing_wpm = configuration.wpm;
+			#ifdef FEATURE_FARNSWORTH
+				if (sending_mode == AUTOMATIC_SENDING &&
+				    configuration.wpm_farnsworth > timing_wpm) {
+					timing_wpm = configuration.wpm_farnsworth;
+				}
+			#endif
+			if (keyer_machine_mode == KEYER_COMMAND_MODE) {
+				timing_wpm = configuration.wpm_command_mode;
+			}
+			wm8960_audio_trace_key_edge(key_state,
+			    being_sent == SENDING_DIT ? 1 :
+			    being_sent == SENDING_DAH ? 3 : 0, timing_wpm);
+		}
+	#endif
 
 	#if defined(FEATURE_INTERNET_LINK)
 		link_key(state);
@@ -10389,11 +10999,6 @@ void service_dit_dah_buffers()
 
 void beep()
 {
-	// #if defined(FEATURE_SINEWAVE_SIDETONE)
-	//   tone(sidetone_line, hz_high_beep);
-	//   myDelay(200);
-	//   noTone(sidetone_line);
-	// #else
 	s_tone(sidetone_line, hz_high_beep, 200);
 }
 
@@ -13311,6 +13916,10 @@ void service_command_line_interface(PRIMARY_SERIAL_CLS * port_to_use) {
 				port_to_use->write(incoming_serial_byte);
 			} else {  // escape
 				clear_send_buffer();
+				#ifdef FEATURE_DISPLAY
+					reset_display_scroll_text();
+					lcd_scroll_box_clear();
+				#endif
 				#ifdef FEATURE_MEMORIES
 					play_memory_prempt = 1;
 					repeat_memory = 255;
@@ -13564,6 +14173,15 @@ void print_serial_help(PRIMARY_SERIAL_CLS * port_to_use,byte paged_help){
 	#if !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 		if (paged_help) {serial_page_pause(port_to_use,10);}
 		port_to_use->println(F("\r\n\\:\tExtended CLI commands"));
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			port_to_use->println(F("\t\taudio - show saved device audio levels"));
+			port_to_use->println(F("\t\tusbplay|usbmic|sidetone [0..100|+|-|MUTE|UNMUTE|TOGGLE]"));
+			port_to_use->println(F("\t\tmidi - show MIDI status"));
+			port_to_use->println(F("\t\tmidi-ptt [OFF|ONOFF|TOGGLE] - saved MIDI PTT mode (OFF for Thetis)"));
+			port_to_use->println(F("\t\tmidi-mode [LOCAL|REPORT|POD] - saved MIDI control mode (POD: master volume and USB mic to PC only)"));
+			port_to_use->println(F("\t\tmidiwheel +|- - send one relative CC20 step"));
+			port_to_use->println(F("\t\tmic [PGA 0..63|BOOST 0..3|ALC ON|OFF|TONE ON|OFF] - mic meter/tuning (not saved)"));
+		#endif
 		port_to_use->println(F("\t\teepromdump\t\t- do a byte dump of EEPROM for troubleshooting"));
 		port_to_use->println(F("\t\tsaveeeprom <filename>\t- store EEPROM in a file"));
 		port_to_use->println(F("\t\tloadeeprom <filename> \t- load into EEPROM from a file"));
@@ -13973,6 +14591,411 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
 
 //---------------------------------------------------------------------
 
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+// Host PTT feedback drives the keyer PTT output without sending MIDI back.
+void service_host_ptt_feedback() {
+	static bool last_host_ptt = false;
+	const bool host_ptt = wm8960_audio_external_ptt();
+	if (host_ptt == last_host_ptt) {
+		return;
+	}
+	last_host_ptt = host_ptt;
+	const uint8_t ptt_before = ptt_line_activated;
+	const uint8_t manual_before = manual_ptt_invoke;
+	if (host_ptt) {
+		if (!ptt_line_activated) {
+			manual_ptt_invoke = 1;
+			wm8960_midi_ptt_from_host(true);
+			ptt_key();
+		}
+	} else if (ptt_line_activated) {
+		// The host is already off; a later local release must not toggle it back on.
+		wm8960_midi_ptt_from_host(false);
+		if (manual_ptt_invoke && !manual_ptt_invoke_ptt_input_pin) {
+			manual_ptt_invoke = 0;
+			if (!key_state) {
+				ptt_unkey();
+			}
+		}
+	}
+	#if defined(DEBUG_MIDI_MESSAGES)
+		HardwareSerial &port = wm8960_audio_debug_port();
+		if (port && port.availableForWrite() >= 96) {
+			port.printf("[PTT] host %s: keyer PTT %u->%u, manual %u->%u, ptt_disabled %u, key %u\r\n",
+			    host_ptt ? "ON" : "OFF", ptt_before, ptt_line_activated,
+			    manual_before, manual_ptt_invoke,
+			    static_cast<unsigned>(configuration.ptt_disabled), key_state);
+		}
+	#endif
+}
+
+void service_keyer_midi() {
+	// Core 1 also reaches this through myDelay; MIDI and settings belong to core 0.
+	if (get_core_num() != 0) return;
+	wm8960_audio_set_local_ptt(manual_ptt_invoke && ptt_line_activated);
+	uint8_t host_mic_level, host_mic_value;
+	if (!midi_pod_mode() &&
+	    wm8960_midi_take_host_mic_level(&host_mic_level, &host_mic_value)) {
+		// A host level change implies the mic is wanted, so it also unmutes.
+		if (host_mic_level != configuration.usb_mic_volume || configuration.usb_mic_muted) {
+			set_audio_volume(AudioVolumeTarget::Microphone, host_mic_level, false);
+		}
+		#if defined(DEBUG_MIDI_MESSAGES)
+			HardwareSerial &port = wm8960_audio_debug_port();
+			if (port && port.availableForWrite() >= 64) {
+				port.printf("[MIC] host level %u -> keyer mic %u%%\r\n",
+				    host_mic_value, host_mic_level);
+			}
+		#endif
+	}
+	// POD mode mirrors PC-side levels; the local WM8960 playback/mic gains stay fixed.
+	uint16_t pod_value;
+	if (wm8960_midi_take_host_control(Wm8960MidiHostControl::MasterVolume, &pod_value)) {
+		pod_play_volume = pod_value;
+		pod_play_muted = false;
+	}
+	if (wm8960_midi_take_host_control(Wm8960MidiHostControl::MicLevel, &pod_value)) {
+		pod_mic_volume = pod_value;
+		pod_mic_muted = false;
+	}
+	// Keyer-owned settings from the PC update the local keyer and WM8960 sidetone.
+	if (wm8960_midi_take_host_control(Wm8960MidiHostControl::Speed, &pod_value) &&
+	    pod_value != configuration.wpm) {
+		speed_set(pod_value);
+		#ifdef FEATURE_WINKEY_EMULATION
+			if ((primary_serial_port_mode == SERIAL_WINKEY_EMULATION) && winkey_host_open) {
+				winkey_port_write(((configuration.wpm-pot_wpm_low_value)|128),0);
+				winkey_last_unbuffered_speed_wpm = configuration.wpm;
+			}
+		#endif
+	}
+	if (wm8960_midi_take_host_control(Wm8960MidiHostControl::SidetoneLevel, &pod_value) &&
+	    (pod_value != configuration.sidetone_volume || configuration.sidetone_muted)) {
+		set_audio_volume(AudioVolumeTarget::Sidetone, pod_value, false);
+	}
+	if (wm8960_midi_take_host_control(Wm8960MidiHostControl::SidetoneFrequency, &pod_value) &&
+	    pod_value != configuration.hz_sidetone) {
+		configuration.hz_sidetone = pod_value;
+		config_dirty = 1;
+		config_changed_ms = millis();
+	}
+	wm8960_midi_service(configuration.hz_sidetone, configuration.wpm,
+	    audio_muted(AudioVolumeTarget::Playback) ? 0 : audio_volume(AudioVolumeTarget::Playback),
+	    configuration.sidetone_muted ? 0 : configuration.sidetone_volume,
+	    audio_muted(AudioVolumeTarget::Microphone) ? 0 : audio_volume(AudioVolumeTarget::Microphone));
+}
+
+bool midi_pod_mode() {
+	return wm8960_midi_control_mode() == Wm8960MidiControlMode::Pod;
+}
+
+void sync_pod_volume() {
+	// Entering POD mode starts the PC-side levels from the fixed local levels.
+	pod_play_volume = configuration.usb_play_volume;
+	pod_play_muted = configuration.usb_play_muted;
+	pod_mic_volume = configuration.usb_mic_volume;
+	pod_mic_muted = configuration.usb_mic_muted;
+}
+
+int audio_volume(AudioVolumeTarget target) {
+	switch (target) {
+		case AudioVolumeTarget::Playback:
+			return midi_pod_mode() ? pod_play_volume : configuration.usb_play_volume;
+		case AudioVolumeTarget::Sidetone: return configuration.sidetone_volume;
+		case AudioVolumeTarget::Microphone:
+			return midi_pod_mode() ? pod_mic_volume : configuration.usb_mic_volume;
+	}
+	return 0;
+}
+
+bool audio_muted(AudioVolumeTarget target) {
+	switch (target) {
+		case AudioVolumeTarget::Playback:
+			return midi_pod_mode() ? pod_play_muted : configuration.usb_play_muted;
+		case AudioVolumeTarget::Sidetone: return configuration.sidetone_muted;
+		case AudioVolumeTarget::Microphone:
+			return midi_pod_mode() ? pod_mic_muted : configuration.usb_mic_muted;
+	}
+	return false;
+}
+
+bool apply_audio_levels() {
+	return wm8960_audio_set_levels(
+	    configuration.sidetone_volume, configuration.usb_play_volume,
+	    configuration.usb_mic_volume, configuration.sidetone_muted,
+	    configuration.usb_play_muted, configuration.usb_mic_muted);
+}
+
+void set_audio_volume(AudioVolumeTarget target, int level, bool muted) {
+	if (target != AudioVolumeTarget::Sidetone && midi_pod_mode()) {
+		const bool mic = target == AudioVolumeTarget::Microphone;
+		(mic ? pod_mic_volume : pod_play_volume) = static_cast<uint8_t>(constrain(level, 0, 100));
+		(mic ? pod_mic_muted : pod_play_muted) = muted;
+		return;
+	}
+	switch (target) {
+		case AudioVolumeTarget::Playback:
+			configuration.usb_play_volume = level;
+			configuration.usb_play_muted = muted;
+			break;
+		case AudioVolumeTarget::Sidetone:
+			configuration.sidetone_volume = level;
+			configuration.sidetone_muted = muted;
+			break;
+		case AudioVolumeTarget::Microphone:
+			configuration.usb_mic_volume = level;
+			configuration.usb_mic_muted = muted;
+			break;
+	}
+	if (apply_audio_levels()) {
+		config_dirty = 1;
+		config_changed_ms = millis();
+	}
+}
+
+void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
+	port->printf("USBPLAY %u%% %s\r\nSIDETONE %d%% %s\r\nUSBMIC %u%% %s\r\n",
+	    configuration.usb_play_volume,
+	    configuration.usb_play_muted ? "MUTED" : "ON",
+	    configuration.sidetone_volume,
+	    configuration.sidetone_muted ? "MUTED" : "ON",
+	    configuration.usb_mic_volume,
+	    configuration.usb_mic_muted ? "MUTED" : "ON");
+	if (midi_pod_mode()) {
+		port->printf("PC MASTER %u%% %s\r\nPC USBMIC %u%% %s (MIDI POD)\r\n",
+		    pod_play_volume, pod_play_muted ? "MUTED" : "ON",
+		    pod_mic_volume, pod_mic_muted ? "MUTED" : "ON");
+	}
+}
+
+int step_audio_volume(int level, bool increase) {
+	// Linear taper, +/-2 per step; the earlier ~1 dB multiplicative steps
+	// were too coarse near full scale.
+	return constrain(level + (increase ? 2 : -2), 0, 100);
+}
+
+void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
+	if (usage != 0xE2 && usage != 0xE9 && usage != 0xEA) {
+		return;
+	}
+	// Combined prefixes are deliberately ignored rather than changing two paths.
+	const bool shift = (modifiers & 0x22) != 0;
+	const bool ctrl = (modifiers & 0x11) != 0;
+	if ((modifiers & 0xCC) || (shift && ctrl)) {
+		return;
+	}
+	const AudioVolumeTarget target = ctrl ? AudioVolumeTarget::Microphone :
+	    shift ? AudioVolumeTarget::Sidetone : AudioVolumeTarget::Playback;
+	if (usage == 0xE2) {
+		set_audio_volume(target, audio_volume(target), !audio_muted(target));
+	} else {
+		const int level = step_audio_volume(audio_volume(target), usage == 0xE9);
+		set_audio_volume(target, level, false);
+	}
+}
+
+#if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
+bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	if (command == "AUDIO") {
+		port->println();
+		print_audio_volumes(port);
+		return true;
+	}
+	const int separator = command.indexOf(' ');
+	const String name = separator < 0 ? command : command.substring(0, separator);
+	AudioVolumeTarget target;
+	if (name == "USBPLAY") {
+		target = AudioVolumeTarget::Playback;
+	} else if (name == "SIDETONE") {
+		target = AudioVolumeTarget::Sidetone;
+	} else if (name == "USBMIC") {
+		target = AudioVolumeTarget::Microphone;
+	} else {
+		return false;
+	}
+	String value = separator < 0 ? "" : command.substring(separator + 1);
+	value.trim();
+	int level = audio_volume(target);
+	bool muted = audio_muted(target);
+	if (value == "MUTE") {
+		muted = true;
+	} else if (value == "UNMUTE") {
+		muted = false;
+	} else if (value == "TOGGLE") {
+		muted = !muted;
+	} else if (value == "+" || value == "-") {
+		level = step_audio_volume(level, value == "+");
+		muted = false;
+	} else if (value.length()) {
+		bool valid = value.length() <= 3;
+		for (unsigned int index = 0; index < value.length(); ++index) {
+			valid = valid && value[index] >= '0' && value[index] <= '9';
+		}
+		if (!valid || value.toInt() > 100) {
+			port->println(F("Error: use 0..100, +, -, MUTE, UNMUTE or TOGGLE"));
+			return true;
+		}
+		level = value.toInt();
+		muted = false;
+	}
+	if (value.length()) {
+		set_audio_volume(target, level, muted);
+	}
+	port->println();
+	print_audio_volumes(port);
+	return true;
+}
+
+bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	if (command != "MIC" && !command.startsWith("MIC ")) {
+		return false;
+	}
+	String args = command.substring(3);
+	args.trim();
+	uint8_t pga, boost;
+	bool alc;
+	wm8960_audio_get_mic_gain(&pga, &boost, &alc);
+	if (args.length()) {
+		const int separator = args.indexOf(' ');
+		const String name = separator < 0 ? args : args.substring(0, separator);
+		String value = separator < 0 ? "" : args.substring(separator + 1);
+		value.trim();
+		const long number = value.toInt();
+		bool ok = true;
+		if (name == "PGA" && value.length() && number >= 0 && number <= 63) pga = number;
+		else if (name == "BOOST" && value.length() && number >= 0 && number <= 3) boost = number;
+		else if (name == "ALC" && (value == "ON" || value == "OFF")) alc = value == "ON";
+		else if (name == "TONE" && (value == "ON" || value == "OFF")) {
+			wm8960_audio_set_mic_test_tone(value == "ON");
+		} else if (name == "GATE" && value.length() && value.length() <= 1 &&
+		           isdigit(value[0]) && number >= 0 && number <= 3) {
+			wm8960_audio_set_mic_gate_mode(number);
+			configuration.mic_gate_mode = number;
+			config_dirty = 1;
+			config_changed_ms = millis();
+		} else ok = false;
+		if (!ok) {
+			port->println(F("Error: use MIC, MIC PGA 0..63, MIC BOOST 0..3, MIC ALC ON|OFF, MIC TONE ON|OFF, MIC GATE 0..3 (0=always, 1=local PTT, 2=feedback, 3=either)"));
+			return true;
+		}
+		if (name != "TONE" && name != "GATE" && !wm8960_audio_set_mic_gain(pga, boost, alc)) {
+			port->println(F("Error: codec write failed"));
+			return true;
+		}
+		if (name != "TONE" && name != "GATE") {
+			configuration.mic_pga = pga;
+			configuration.mic_boost = boost;
+			configuration.mic_alc = alc;
+			config_dirty = 1;
+			config_changed_ms = millis();
+		}
+	}
+	static const uint8_t boost_db[] = {0, 13, 20, 29};
+	static const char *gate_names[] = {"ALWAYS", "LOCAL PTT", "FEEDBACK", "EITHER"};
+	uint16_t peak, rms;
+	uint32_t clips, samples;
+	wm8960_audio_take_mic_meter(&peak, &rms, &clips, &samples);
+	const float pga_db = -17.25f + 0.75f * pga;
+	port->println();
+	port->printf("MIC PGA %u (%+.2f dB) BOOST %u (+%u dB) total %+.2f dB, ALC %s, TONE %s, GATE %u (%s)\r\n",
+	             pga, pga_db, boost, boost_db[boost], pga_db + boost_db[boost],
+	             alc ? "ON" : "OFF", wm8960_audio_mic_test_tone() ? "ON" : "OFF",
+	             wm8960_audio_mic_gate_mode(), gate_names[wm8960_audio_mic_gate_mode() & 3]);
+	port->printf("since last MIC: %.1f s, peak %u (%.1f dBFS), rms %u (%.1f dBFS), clipped %lu\r\n",
+	             samples / 48000.0f, peak, peak ? 20.0f * log10f(peak / 32768.0f) : -99.0f,
+	             rms, rms ? 20.0f * log10f(rms / 32768.0f) : -99.0f,
+	             static_cast<unsigned long>(clips));
+	return true;
+}
+
+void print_midi_status(PRIMARY_SERIAL_CLS *port) {
+	wm8960_midi_print_status(*port);
+	port->printf("MIDI VFO tune direction %s\r\n",
+	    configuration.midi_vfo_reversed ? "REV" : "NORM");
+}
+
+bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	if (command == "MIDI") {
+		port->println();
+		print_midi_status(port);
+		return true;
+	}
+	const int separator = command.indexOf(' ');
+	const String name = separator < 0 ? command : command.substring(0, separator);
+	String value = separator < 0 ? "" : command.substring(separator + 1);
+	value.trim();
+	if (name == "MIDIWHEEL") {
+		if (value != "+" && value != "-") {
+			port->println(F("Error: use MIDIWHEEL + or -"));
+		} else if (!wm8960_midi_wheel_step(value == "+" ? 1 : -1)) {
+			port->println(F("Error: MIDI USB disconnected or output queue faulted"));
+		}
+		return true;
+	}
+	if (name == "MIDI-VFO") {
+		if (value.length()) {
+			if (value == "NORM") configuration.midi_vfo_reversed = false;
+			else if (value == "REV") configuration.midi_vfo_reversed = true;
+			else {
+				port->println(F("Error: use MIDI-VFO NORM or REV"));
+				return true;
+			}
+			config_dirty = 1;
+		}
+		port->println();
+		print_midi_status(port);
+		return true;
+	}
+	if (name == "MIDI-MODE") {
+		if (value.length()) {
+			uint8_t mode;
+			if (value == "LOCAL") mode = 0;
+			else if (value == "REPORT") mode = 1;
+			else if (value == "POD") mode = 2;
+			else {
+				port->println(F("Error: use MIDI-MODE LOCAL, REPORT or POD"));
+				return true;
+			}
+			if (mode == 2 && configuration.midi_control_mode != 2) {
+				sync_pod_volume();
+			}
+			wm8960_midi_set_control_mode(mode);
+			configuration.midi_control_mode = mode;
+			config_dirty = 1;
+		}
+		port->println();
+		print_midi_status(port);
+		return true;
+	}
+	if (name != "MIDI-PTT") {
+		return false;
+	}
+	if (value.length()) {
+		uint8_t mode;
+		if (value == "OFF") mode = 0;
+		else if (value == "ONOFF") mode = 1;
+		else if (value == "TOGGLE") mode = 2;
+		else {
+			port->println(F("Error: use MIDI-PTT OFF, ONOFF or TOGGLE"));
+			return true;
+		}
+		if (!wm8960_midi_set_ptt_mode(mode)) {
+			port->println(F("Error: release PTT and wait for the MIDI queue to drain before changing mode"));
+			return true;
+		}
+		configuration.midi_ptt_mode = mode;
+		config_dirty = 1;
+	}
+	port->println();
+	print_midi_status(port);
+	return true;
+}
+#endif
+#endif
+
 #if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 {
@@ -14025,6 +15048,22 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 	if (userinput.startsWith("WIFI ")) { cli_wifi(port_to_use, userinputNoUpper.substring(5)); return; }
  else { userinput.toUpperCase();}
 #endif
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (cli_audio_volume(port_to_use, userinput)) { return; }
+		if (cli_midi(port_to_use, userinput)) { return; }
+		if (cli_mic(port_to_use, userinput)) { return; }
+		if (userinput == "I2CTEST" || userinput.startsWith("I2CTEST ")) {
+			long count = userinput.length() > 8 ? userinput.substring(8).toInt() : 100;
+			if (count < 1 || count > 1000) count = 100;
+			port_to_use->println();
+			#ifdef FEATURE_MCP23017_EXPANDER
+				wm8960_audio_i2c_test(*port_to_use, count, MCP23X17_ADDR);
+			#else
+				wm8960_audio_i2c_test(*port_to_use, count, 0);
+			#endif
+			return;
+		}
+	#endif
 	if (userinput.startsWith("EEPROMDUMP")){cli_eeprom_dump(port_to_use);return;}
 	if (userinput.startsWith("TIMING")){cli_timing_print(port_to_use);return;}
 	if (userinput.startsWith("PL ")){cli_timing_command(port_to_use,userinput.substring(3),COMMAND_PL);return;}
@@ -14327,6 +15366,25 @@ void sd_card_load_eeprom_from_file(PRIMARY_SERIAL_CLS * port_to_use,String filen
 	sdfile.close();
 	port_to_use->println(F("\r\nReading settings from eeprom."));
 	read_settings_from_eeprom();
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (!apply_audio_levels()) {
+			port_to_use->println(F("Error: loaded audio levels are invalid"));
+			return;
+		}
+		if (!wm8960_midi_set_ptt_mode(configuration.midi_ptt_mode)) {
+			port_to_use->println(F("Error: loaded MIDI PTT mode is invalid or PTT/MIDI output is busy"));
+			return;
+		}
+		if (!wm8960_midi_set_control_mode(configuration.midi_control_mode)) {
+			port_to_use->println(F("Error: loaded MIDI control mode is invalid"));
+			return;
+		}
+		if (!wm8960_audio_set_mic_gate_mode(configuration.mic_gate_mode)) {
+			port_to_use->println(F("Error: loaded MIC gate mode is invalid"));
+			return;
+		}
+		sync_pod_volume();
+	#endif
 	port_to_use->println(F("Done."));
 }
 
@@ -14709,6 +15767,7 @@ void service_paddle_echo()
 						display_scroll_print_char(ascii_temp);
 					#endif //OPTION_DISPLAY_NON_ENGLISH_EXTENSIONS
 				#endif //OPTION_PROSIGN_SUPPORT
+				service_display();  // show the decoded character now, like keyboard text
 			}
 		#endif //FEATURE_DISPLAY
 
@@ -16809,12 +17868,10 @@ void serial_status(PRIMARY_SERIAL_CLS * port_to_use) {
 	port_to_use->print(configuration.hz_sidetone,DEC);
 	port_to_use->println(F(" hz"));
 
-	#if defined(FEATURE_SINEWAVE_SIDETONE)
-		 port_to_use->print(F("Sidetone Volume: "));
-		 port_to_use->print(map(configuration.sidetone_volume,sidetone_volume_low_limit,sidetone_volume_high_limit,0,100));
-		 port_to_use->println(F("%"));
-		 port_to_use->println(configuration.sidetone_volume);
-	#endif //FEATURE_SINEWAVE_SIDETONE
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		print_audio_volumes(port_to_use);
+		wm8960_midi_print_status(*port_to_use);
+	#endif
 
 	#ifdef FEATURE_SIDETONE_SWITCH
 		port_to_use->print(F("Sidetone Switch: "));
@@ -18715,7 +19772,9 @@ void display_heading(void) {
 			attachInterrupt(paddle_left, left_paddle_intr_handler, CHANGE);
 			attachInterrupt(paddle_right, right_paddle_intr_handler, CHANGE);
 			#ifdef FEATURE_STRAIGHT_KEY
+				pinMode(pin_straight_key, INPUT_PULLUP);
 				attachInterrupt(pin_straight_key, straight_key_intr_handler, CHANGE);
+				straight_key_state = digitalRead(pin_straight_key);
 			#endif
 	}
 #endif // non ESP32 local pin interrupt setup
@@ -18755,6 +19814,8 @@ void display_heading(void) {
 			gpio_set_pull_mode((gpio_num_t) paddle_right, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
 			gpio_set_intr_type((gpio_num_t) paddle_right, GPIO_INTR_ANYEDGE);
 			gpio_isr_handler_add((gpio_num_t) paddle_right, right_paddle_intr_handler, (void *)(gpio_num_t) paddle_right);
+			paddle_left_state = gpio_get_level((gpio_num_t) paddle_left);
+			paddle_right_state = gpio_get_level((gpio_num_t) paddle_right);
 
 			#ifdef FEATURE_STRAIGHT_KEY
 				// Setup CPU side GPIO interrupt for straight key
@@ -18762,6 +19823,7 @@ void display_heading(void) {
 				gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);  // no pullup on pin 35
 				gpio_set_intr_type((gpio_num_t) pin_straight_key, GPIO_INTR_ANYEDGE);
 				gpio_isr_handler_add((gpio_num_t) pin_straight_key, straight_key_intr_handler, (void *)(gpio_num_t) pin_straight_key);
+				straight_key_state = gpio_get_level((gpio_num_t) pin_straight_key);
 			#endif
 			// Now any pin state change will call the handler.
 	}
@@ -18777,12 +19839,42 @@ void display_heading(void) {
 			while (1) {
 				myDelay(0);
 	 #else
-		void read_io_handler(void) {  // otherwise called from an interrrupt
+		void read_io_handler(void) {
 	 #endif	
 				uint8_t bits = 0x00;
+				#if defined(ARDUINO_ARCH_RP2040)
+					// INTA is active low and stays asserted until GPIOA is read; the
+					// CPU IRQ is edge-triggered, so recover a missed or failed read.
+					if (!paddle_irq && !gpio_get(MCP23017_INTA_GPIO)) {
+						paddle_irq = 1;
+					}
+				#endif
 				if (paddle_irq) {
 					paddle_irq = 0;		
-					bits = mcp23017.readPort(MCP23017Port::A);		
+					#if defined(ARDUINO_ARCH_RP2040)
+						#ifdef USE_WIRE1
+							TwoWire &bus = Wire1;
+						#else
+							TwoWire &bus = Wire;
+						#endif
+						bool read_ok = false;
+						for (uint8_t attempt = 0; attempt < 3 && !read_ok; ++attempt) {
+							bus.beginTransmission(MCP23X17_ADDR);
+							bus.write(static_cast<uint8_t>(MCP23017Register::GPIO_A));
+							if (bus.endTransmission(false) == 0 &&
+							    bus.requestFrom(static_cast<uint8_t>(MCP23X17_ADDR), static_cast<size_t>(1)) == 1) {
+								bits = bus.read();
+								read_ok = true;
+							}
+							while (bus.available()) bus.read();
+						}
+						if (!read_ok) {
+							paddle_irq = 1;  // keep previous paddle state; retry next pass
+							return;
+						}
+					#else
+						bits = mcp23017.readPort(MCP23017Port::A);
+					#endif
 					paddle_left_state = bits & (1 << paddle_left);  // mask left paddle
 					paddle_right_state = bits & (1 << paddle_right);  // mask right paddle
 					#ifdef FEATURE_STRAIGHT_KEY
@@ -18807,8 +19899,10 @@ void display_heading(void) {
 	#else   // for other CPUs each interrupt queries the MCP pins
 		static void paddle_intr_handler(void) {
 			paddle_irq = 1;
+			#if !defined(ARDUINO_ARCH_RP2040)
 			read_io_handler();
 			yield();
+			#endif
 		}
 	#endif		
 
@@ -18819,6 +19913,10 @@ void display_heading(void) {
 		// could be bus 1 if board has a touch controller. else normally bus 0
 		//debug_serial_port->println("MCP23107: Start setup");
 		mcp23017.init();
+		#if defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)
+			keyer_expander_register_write(0x00, 0xFF);
+			keyer_expander_register_write(0x01, 0xFF);
+		#endif
 		mcp23017.interruptMode(MCP23017InterruptMode::Or);  // MCP23017InterruptMode::Separated
 		mcp23017.interrupt(MCP23017Port::A, CHANGE);   // port A change only, not port B
 		mcp23017.pinMode(paddle_left, INPUT_PULLUP, false);
@@ -18826,8 +19924,20 @@ void display_heading(void) {
 		#ifdef FEATURE_STRAIGHT_KEY
 			mcp23017.pinMode(pin_straight_key, INPUT_PULLUP, false);
 		#endif
+		#if defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)
+			keyer_output_latches[0] = keyer_output_latches[1] = 0;
+			keyer_output_directions[0] = keyer_output_directions[1] = 0xFF;
+			const uint8_t input_interrupts = (1u << paddle_left) |
+			    (1u << paddle_right)
+			    #ifdef FEATURE_STRAIGHT_KEY
+			      | (1u << pin_straight_key)
+			    #endif
+			    ;
+			keyer_expander_register_write(0x04, input_interrupts);
+			keyer_expander_register_write(0x05, 0);
+		#endif
 		mcp23017.clearInterrupts();
-		
+
 		#if defined(HARDWARE_ESP32_DEV)			
 			// Setup CPU side GPIO interrupt for IntA
 			gpio_set_direction((gpio_num_t) MCP23017_INTA_GPIO, GPIO_MODE_INPUT);
@@ -18850,6 +19960,10 @@ void display_heading(void) {
 		//val = mcp23017.readPort(MCP23017Port::A);
 		//debug_serial_port->print(F("MCP23107: Port A read:")); debug_serial_port->println(val, HEX);
 		mcp23017.clearInterrupts();
+		#if defined(ARDUINO_ARCH_RP2040)
+			paddle_irq = 1;
+			read_io_handler();
+		#endif
 
 		#ifdef HARDWARE_ESP32_DEV
 			BaseType_t xReturned;
@@ -18905,54 +20019,42 @@ void initialize_pins() {
 	}
 
 	if (tx_key_line_1) {
-		pinMode (tx_key_line_1, OUTPUT);
-		digitalWrite (tx_key_line_1, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_1, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_2) {
-		pinMode (tx_key_line_2, OUTPUT);
-		digitalWrite (tx_key_line_2, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_2, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_3) {
-		pinMode (tx_key_line_3, OUTPUT);
-		digitalWrite (tx_key_line_3, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_3, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_4) {
-		pinMode (tx_key_line_4, OUTPUT);
-		digitalWrite (tx_key_line_4, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_4, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_5) {
-		pinMode (tx_key_line_5, OUTPUT);
-		digitalWrite (tx_key_line_5, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_5, tx_key_line_inactive_state);
 	}
 	if (tx_key_line_6) {
-		pinMode (tx_key_line_6, OUTPUT);
-		digitalWrite (tx_key_line_6, tx_key_line_inactive_state);
+		keyer_output_initialize(tx_key_line_6, tx_key_line_inactive_state);
 	}
 
 
 	if (ptt_tx_1) {
-		pinMode (ptt_tx_1, OUTPUT);
-		digitalWrite (ptt_tx_1, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_1, ptt_line_inactive_state);
 	}
 	if (ptt_tx_2) {
-		pinMode (ptt_tx_2, OUTPUT);
-		digitalWrite (ptt_tx_2, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_2, ptt_line_inactive_state);
 	}
 	if (ptt_tx_3) {
-		pinMode (ptt_tx_3, OUTPUT);
-		digitalWrite (ptt_tx_3, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_3, ptt_line_inactive_state);
 	}
 	if (ptt_tx_4) {
-		pinMode (ptt_tx_4, OUTPUT);
-		digitalWrite (ptt_tx_4, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_4, ptt_line_inactive_state);
 	}
 	if (ptt_tx_5) {
-		pinMode (ptt_tx_5, OUTPUT);
-		digitalWrite (ptt_tx_5, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_5, ptt_line_inactive_state);
 	}
 	if (ptt_tx_6) {
-		pinMode (ptt_tx_6, OUTPUT);
-		digitalWrite (ptt_tx_6, ptt_line_inactive_state);
+		keyer_output_initialize(ptt_tx_6, ptt_line_inactive_state);
 	}
 	if (sidetone_line) {
 		pinMode (sidetone_line, OUTPUT);
@@ -19156,9 +20258,11 @@ void initialize_pins() {
 		pinMode(tx_pause_pin,INPUT_PULLUP);
 	}
 
+	#ifdef FEATURE_POTENTIOMETER
 	if (potentiometer_enable_pin){
 		pinMode(potentiometer_enable_pin,INPUT_PULLUP);
 	}
+	#endif
 
 	if (pin_sending_mode_automatic){
 		pinMode(pin_sending_mode_automatic,OUTPUT);
@@ -19516,7 +20620,21 @@ void initialize_keyer_state(){
 	configuration.cli_mode = CLI_NORMAL_MODE;
 	configuration.wpm_command_mode = initial_command_mode_speed_wpm;
 	configuration.ptt_buffer_hold_active = 0;
-	configuration.sidetone_volume = sidetone_volume_low_limit + ((sidetone_volume_high_limit - sidetone_volume_low_limit) / 2);
+	configuration.sidetone_volume = 100;
+	configuration.usb_play_volume = 100;
+	configuration.usb_mic_volume = 100;
+	configuration.sidetone_muted = false;
+	configuration.usb_play_muted = false;
+	configuration.usb_mic_muted = false;
+	configuration.midi_ptt_mode = 0;
+	#if defined(FEATURE_WM8960_USB_AUDIO)
+		configuration.midi_control_mode = WM8960_MIDI_CONTROL_MODE;
+		configuration.mic_pga = WM8960_MIC_PGA;
+		configuration.mic_boost = WM8960_MIC_BOOST;
+		configuration.mic_alc = WM8960_MIC_ALC;
+		configuration.midi_vfo_reversed = false;
+		configuration.mic_gate_mode = WM8960_MIC_GATE_MODE;
+	#endif
 	configuration.ptt_disabled = 0;
 	configuration.beacon_mode_on_boot_up = 0;
 	configuration.cw_echo_timing_factor = 100 * default_cw_echo_timing_factor;
@@ -19588,6 +20706,8 @@ void initialize_potentiometer(){
 		last_pot_wpm_read = pot_value_wpm();
 		configuration.pot_activated = 1;
 //    Serial.print(pot_value_wpm());//SP5IOU 20220129
+	#elif defined(potentiometer) && potentiometer == 0
+		configuration.pot_activated = 0;
 	#endif
 
 }
@@ -19597,7 +20717,7 @@ void initialize_rotary_encoder(){
 
 	#ifdef FEATURE_ROTARY_ENCODER
 		#ifdef OPTION_ENCODER_ENABLE_PULLUPS
-			#if defined (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) ||defined(HARDWARE_ESP32_DEV)//sp5iou 20180329 //SP5IOU 20220129
+			#if defined (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) ||defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_ARCH_RP2040)
 				pinMode(rotary_pin1, INPUT_PULLUP);//sp5iou 20180329
 				pinMode(rotary_pin2, INPUT_PULLUP);//sp5iou 20180329
 			#else // (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) //sp5iou 20180329
@@ -19606,7 +20726,27 @@ void initialize_rotary_encoder(){
 				digitalWrite(rotary_pin1, HIGH);
 				digitalWrite(rotary_pin2, HIGH);
 			 #endif
+		#else
+			pinMode(rotary_pin1, INPUT);
+			pinMode(rotary_pin2, INPUT);
 		#endif //OPTION_ENCODER_ENABLE_PULLUPS
+		#if defined(ARDUINO_ARCH_RP2040)
+			encoder_event_head = encoder_event_tail = 0;
+			encoder_event_overflow = false;
+			state = 0;
+			capture_encoder_transition();
+			attachInterrupt(digitalPinToInterrupt(rotary_pin1), capture_encoder_transition, CHANGE);
+			attachInterrupt(digitalPinToInterrupt(rotary_pin2), capture_encoder_transition, CHANGE);
+		#endif
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			#if rotary_switch != 0
+				pinMode(rotary_switch, INPUT_PULLUP);
+				encoder_button_candidate = encoder_button_pressed =
+				    digitalRead(rotary_switch) == LOW;
+				encoder_button_changed_ms = encoder_button_down_ms = millis();
+				encoder_long_press = false;
+			#endif
+		#endif
 	#endif //FEATURE_ROTARY_ENCODER
 
 }
@@ -19691,9 +20831,6 @@ void initialize_eeprom(){
 			EEPROM.format();//sp5iou 20180328 to reinitialize / format EEPROM
 	 #endif
 	 write_settings_to_eeprom(1);
-	#if defined(FEATURE_SINEWAVE_SIDETONE)
-		 initialize_tonsin();
-	#endif
 	beep_boop();
 	myDelay(100);
 	boop_beep();
@@ -19756,6 +20893,9 @@ void initialize_gps_port(void) {
 					debug_serial_port->print(F("Intialized GPS Serial Port on Pin ")); debug_serial_port->println(GPS_RX_PIN);
 				#endif
 			#else
+				if (gps_serial_port.setRxBufferSize(1024) != 1024) {
+					debug_serial_port->println(F("Error: GPS RX buffer could not be set to 1024 bytes"));
+				}
 				gps_serial_port.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
 			#endif
 			gps_serial_port.flush();  // move the read string queue char ptr to the front so the next read works
@@ -19967,6 +21107,9 @@ void bt_pairing_passkey_handler(uint32_t passkey) {
 
 #ifdef FEATURE_BT_KEYBOARD  // these are used by both ESP32 and Pico
 void keyboard_lost_connection_handler() {
+		#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
+			bt_audio_modifiers = 0;
+		#endif
 		//debug_serial_port->println(F("\n====> Lost connection with keyboard <===="));
 		BT_Keyboard_Lost = true;
 		if (bt_keyboard_LED) digitalWrite(bt_keyboard_LED, bt_keyboard_LED_pin_inactive_state);
@@ -19994,14 +21137,16 @@ void keyboard_connected_handler() {
 
 // Consumer keys are the special media keys on most modern keyboards (mute/etc.)
 void ckb(void *cbdata, int key) {
-		bool state = (bool)cbdata;
-		debug_serial_port->printf("Consumer: %02x %s \n", key, state ? "DOWN" : "UP");
-		inf.size = 8;  // fake the size to pass through the
-		inf.state = state;
-		if (state) inf.keys[2] = key;
-		else inf.keys[2] = 0;
-		//new_bt_key = true;
-		last_active_time = millis();  // reset backlight timeout timer
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			if (cbdata && (key == 0xE2 || key == 0xE9 || key == 0xEA)) {
+				KeyInfo event = {};
+				event.consumer_usage = static_cast<uint16_t>(key);
+				event.keys[0] = bt_audio_modifiers;
+				event.state = 1;
+				bt_queueadd(event);
+				last_active_time = millis();
+			}
+		#endif
 }
 
 // We get make/break for every key which lets us hold modifier keys while a regular key is depressed
@@ -20010,6 +21155,15 @@ void kb(void *cbdata, int key) {
 		static bool _holding = false;
 		static uint8_t _heldKey = 0;
 		bool state = (bool) cbdata;
+		inf.consumer_usage = 0;
+		if (key >= 0xE0 && key <= 0xE7) {
+			const uint8_t mask = 1u << (key - 0xE0);
+			if (state) {
+				bt_audio_modifiers |= mask;
+			} else {
+				bt_audio_modifiers &= ~mask;
+			}
+		}
 		inf.size = 8;  // fake the size to match the ESP32 bt_keyboard class string info to pass through the key value translation code
 		inf.state = state;
 		last_active_time = millis();   // reset backlight tomeout timer
@@ -20301,11 +21455,24 @@ void myDelay(uint32_t _ms)
 			vTaskDelay(pdMS_TO_TICKS(_ms));
 		}
 	#else
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			const uint32_t audio_delay_start = millis();
+			do {
+				service_keyer_midi();
+				wm8960_audio_service();
+				if (_ms != 0) {
+					delay(1);
+				} else {
+					yield();
+				}
+			} while (millis() - audio_delay_start < _ms);
+		#else
 		if (_ms == 0) {
 			yield();
 		} else {
 			delay(_ms);
 		}
+		#endif
 	#endif
 }
 
@@ -20488,6 +21655,9 @@ void popup(bool show)
 			lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
 			lcd.resetViewport();
 			lcd.setFreeFont(TFT_FONT_MEDIUM);
+			lcd_scroll_drawn_row = 0;  // box was blanked; redraw all scroll text
+			lcd_scroll_drawn_col = 0;
+			lcd_scroll_repaint_row = LCD_ROWS;
 			display_scroll_print_char('~');
 			popup_active = false;
 			update_heading_display_flag = false;
@@ -20873,6 +22043,41 @@ void process_buttons() { // (uint8_t button_ID) {
 }
 
 // Detects if a button is pressed and assign a button ID to it.
+#if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_RES_TOUCH) && \
+    defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
+	static bool held = false;
+	const uint16_t pressure_threshold = held ? 20 : threshold;
+	myDelay(0);
+	if (lcd.getTouchRawZ() <= pressure_threshold) {
+		held = false;
+		return false;
+	}
+	uint16_t first_x, first_y, next_x, next_y;
+	lcd.getTouchRaw(&first_x, &first_y);
+	const uint32_t started = millis();
+	do {
+		myDelay(0);
+	} while (millis() - started < 3);
+	if (lcd.getTouchRawZ() <= pressure_threshold) {
+		held = false;
+		return false;
+	}
+	lcd.getTouchRaw(&next_x, &next_y);
+	myDelay(0);
+	if (abs(static_cast<int>(first_x) - next_x) > 20 ||
+	    abs(static_cast<int>(first_y) - next_y) > 20) {
+		return false;
+	}
+	lcd.convertRawXY(&next_x, &next_y);
+	if (next_x >= lcd.width() || next_y >= lcd.height()) return false;
+	*x = next_x;
+	*y = next_y;
+	held = true;
+	return true;
+}
+#endif
+
 #if defined(FEATURE_TOUCH_DISPLAY)
 
 	#ifndef USE_TOUCH_TASK
@@ -20933,7 +22138,11 @@ void process_buttons() { // (uint8_t button_ID) {
 							debug_serial_port->print(F("GetTouch1: Check for pressed - "));
 						#endif
 
-						pressed = lcd.getTouch(&t_x, &t_y, threshold);
+						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+							pressed = read_audio_safe_touch(&t_x, &t_y, threshold);
+						#else
+							pressed = lcd.getTouch(&t_x, &t_y, threshold);
+						#endif
 						
 						#ifdef DEBUG_TOUCH
 							int z = lcd.getTouchRawZ();
@@ -20964,7 +22173,11 @@ void process_buttons() { // (uint8_t button_ID) {
 
 									#ifdef USE_RES_TOUCH
 										//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
-										pressed = lcd.getTouch(&t_x, &t_y, threshold);
+										#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+											pressed = read_audio_safe_touch(&t_x, &t_y, threshold);
+										#else
+											pressed = lcd.getTouch(&t_x, &t_y, threshold);
+										#endif
 										#ifdef DEBUG_TOUCH
 											debug_serial_port->printf("GetTouch3: x:%d y:%d z:%d pressed:%d\n", t_x, t_y, threshold, pressed);
 										#endif
@@ -21757,6 +22970,7 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key)
 			repeat_memory = 255;
 			#endif
 			#ifdef FEATURE_DISPLAY
+			reset_display_scroll_text();
 			lcd_center_print_timed("Abort", 0, default_display_msg_delay);
 			#endif
 			return;
@@ -22156,6 +23370,9 @@ void update_led_ring(){
 
 //---------------------------------------------------------------------
 int paddle_pin_read(int pin_to_read) {
+	#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+		read_io_handler();
+	#endif
 
 	// Updated code provided by Fred, VK2EFL
 	// Modified to read memory var updated by IO interrupt reads by K7MDL. When Pin_interrupts or MCP23017 is enabled.
@@ -22194,7 +23411,7 @@ int paddle_pin_read(int pin_to_read) {
 				}                                                     // end switch
 		#endif                                                  // OPTION_SAVE_MEMORY_NANOKEYER
 		#if !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA) && !defined(OPTION_SAVE_MEMORY_NANOKEYER)
-				#if defined(USE_KEY_PIN_INTERRUPTS)
+				#if defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
 						// !OPTION_INVERT_PADDLE_PIN_LOGIC
 						if (pin_to_read == paddle_left) {
 							//debug_serial_port->print(F("Paddle Left  Val = ")); debug_serial_port->println(paddle_left_state);
@@ -22209,7 +23426,7 @@ int paddle_pin_read(int pin_to_read) {
 				#endif
 		#endif                                                  // !defined(OPTION_DIRECT_PADDLE_PIN_READS_UNO) && !defined(OPTION_DIRECT_PADDLE_PIN_READS_MEGA)
 	#else                                               // !OPTION_INVERT_PADDLE_PIN_LOGIC
-			#if defined(USE_KEY_PIN_INTERRUPTS)
+			#if defined(USE_KEY_PIN_INTERRUPTS) || defined(FEATURE_MCP23017_EXPANDER)
 						if (pin_to_read == paddle_left) {
 							//debug_serial_port->print(F("Paddle Left  Val = ")); debug_serial_port->println(paddle_left_state);
 							return (int) !paddle_left_state;
@@ -25008,7 +26225,32 @@ void so2r_command() {
 // eventually replace tone() with a better adjustable volume version
 void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration_ms)
 {
-	#if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		(void)sidetone_line_pin_num;
+		const uint32_t tone_wpm = keyer_machine_mode == KEYER_COMMAND_MODE
+		    ? configuration.wpm_command_mode : configuration.wpm;
+		const uint32_t mute_release_ms = speed_mode == SPEED_NORMAL
+		    ? (8400UL + (tone_wpm ? tone_wpm : 1) - 1) /
+		          (tone_wpm ? tone_wpm : 1)
+		    : 7000UL * qrss_dit_length;
+		wm8960_audio_start_tone(frequency, duration_ms, mute_release_ms);
+		if (duration_ms) {
+			const uint32_t started_ms = millis();
+			while (wm8960_audio_feedback_pending()) {
+				myDelay(0);
+				if (millis() - started_ms >= duration_ms + 1000UL) {
+					wm8960_audio_stop_tone();
+					debug_serial_port->println(F("Error: WM8960 feedback tone stalled"));
+					break;
+				}
+			}
+			// Drain the 256-frame DMA lead before callers draw on the LCD.
+			const uint32_t drain_started_ms = millis();
+			do {
+				myDelay(0);
+			} while (millis() - drain_started_ms < 6);
+		}
+	#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 		#ifdef FEATURE_M5STACK_CORE2
 				M5.Speaker.tone(frequency, configuration.hz_sidetone);
 				myDelay(duration_ms);
@@ -25030,7 +26272,10 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 
  void s_noTone(uint8_t sidetone_line_pin_num)
  {
-		#if !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			(void)sidetone_line_pin_num;
+			wm8960_audio_stop_tone();
+		#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 			#ifdef FEATURE_M5STACK_CORE2
 				if (M5.Speaker.isPlaying(0))
 				{
@@ -25046,137 +26291,6 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 		#endif
  }
 
-
-// DL2DBG contributed code (adapted into code by Goody K3NG)
-// Based on https://forum.arduino.cc/index.php?topic=446209.15
-
-
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-#include <driver/dac_oneshot.h>
-#include <driver/dac_cosine.h>
-#include <driver/dac_continuous.h>
-
-const float pi = 3.14159265359;  // Define Pi as a constant
-const float T = 100;  // sample time in microseconds
-float freq = 600;  // frquency of tone in Hz
-float omega = 2*pi*1;  // part of sine wave conversion factor
-const float A = 490;  // amplitude
-// next line initializes oscillation with amplitude A
-float a[]={(float) 0.0, ((float) A) * (float) (sin(omega*T/1000000.0)), (float) 0.0};
-// c1 is the difference equation coefficient
-const float c1 = (8.0 - 2.0*pow(omega*T/1000000.0,2))/(4.0+pow(omega*T/1000000.0,2));
-const int resolution = 8;
-
-//#define FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1
-
-void compute_sinetone(int hz, int volume){ //dl2dbg
-	omega = omega*hz;
-
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.detachInterrupt();
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.detachInterrupt();
-	#endif
-	a[0]= 0.0;
-	a[1]= volume*sin(omega*T/1000000.0);
-	a[2]= 0.0;
-	sinewave_interrupt_compute();
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.attachInterrupt(sinewave_interrupt_compute);
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.attachInterrupt(sinewave_interrupt_compute);
-	#endif
-}
-#endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
-
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-
-void sinewave_interrupt_compute(){ //dl2dbg
-	a[2] = c1 * a[1] - a[0];
-	a[0] = a[1] ;
-	a[1] = a[2] ;
-	dacWrite(sidetone_line, map( a[2],-512, 512, 0, 1000));
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.setPwmDuty(sidetone_line, map( a[2],-512, 512, 0, 1000));
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.setPwmDuty(sidetone_line, map( a[2],-512, 512, 0, 1000));
-	#endif
-}
-#endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-
-void initialize_tonsin(){ //dl2dbg
-
-	configuration.sidetone_volume = sidetone_volume_low_limit + ((sidetone_volume_high_limit - sidetone_volume_low_limit) / 2);
-	compute_sinetone(configuration.hz_sidetone,configuration.sidetone_volume);
-	ledcAttach(sidetone_line, configuration.hz_sidetone, 255);
-
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.initialize(T);  // set sample time for discrete tone signal
-		Timer1.pwm(sidetone_line, 0, T);
-		Timer1.attachInterrupt(sinewave_interrupt_compute);
-		Timer1.stop();
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.initialize(T);  // set sample time for discrete tone signal
-		Timer3.pwm(sidetone_line, 0, T);
-		Timer3.attachInterrupt(sinewave_interrupt_compute);
-		Timer3.stop();
-	#endif
-}
-#endif //FEATURE_SINEWAVE_SIDETONE
-//-------------------------------------------------------------------------------------------------------
-
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-void sinetone(uint8_t pin_dummy_variable, unsigned short freq){  //dl2dbg
-	static int last_freq;
-	static int last_volume;
-
-	if ((freq != last_freq) || (configuration.sidetone_volume != last_volume)){
-		compute_sinetone(freq,configuration.sidetone_volume);
-		last_freq = freq;
-		last_volume = configuration.sidetone_volume;
-	}
-
-	//delay (2); compute_sinetone(freq,sidetone_volume/4);
-	//delay (2); compute_sinetone(freq,sidetone_volume/2);
-	//compute_sinetone(freq,configuration.sidetone_volume);
-
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.restart();
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.restart();
-	#endif
-}
-#endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
-
-#if defined(FEATURE_SINEWAVE_SIDETONE)
-void nosineTone(uint8_t pin_dummy_variable) {    // disable tone on specified pin, if any    dl2dbg
-	//delay (2); compute_sinetone(freq,sidetone_volume/2);
-	//delay (2); compute_sinetone(freq,sidetone_volume/4);
-	compute_sinetone(configuration.hz_sidetone,0);
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_1)
-		Timer1.stop();
-	#endif
-	#if defined(FEATURE_SINEWAVE_SIDETONE_USING_TIMER_3)
-		Timer3.stop();
-	#endif
-	//digitalWrite(sidetone_line,LOW);
-}
-
-#endif //FEATURE_SINEWAVE_SIDETONE
-
-//-------------------------------------------------------------------------------------------------------
 
 void debug_blink(){
 	#if defined(DEBUG_STARTUP_BLINKS)
@@ -25710,6 +26824,12 @@ void tft_backlight(int state) {
 							#ifdef ARDUINO_RASPBERRY_PI_PICO_W
 							else inf = bt_queuepop();							
 							#endif
+						#endif
+						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+							if (inf.consumer_usage) {
+								audio_consumer_key(inf.consumer_usage, inf.keys[0]);
+								continue;
+							}
 						#endif
 						myDelay(10);
 
@@ -26818,19 +27938,20 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 
 		for(;;)
 		{
+			if (gps_updates_paused()) {
+				myDelay(10);
+				continue;
+			}
 
 #else
 
 	void check_gps() {
 		if (1)
 		{
-			#ifndef USE_CORE1
-				if (ptt_line_activated) return;  // do not interrupt CW send timing
-			#endif
+			if (gps_updates_paused()) return;
 
 #endif
 
-			static uint32_t lost_gps_timer = 0;
 			bool _do_process = false;
 			static char gps_grid[9];
 			struct tm timeinfo;
@@ -26844,23 +27965,29 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 			uint8_t gps_second = 0;
 
 			myDelay(10);
+			if (gps_updates_paused()) {
+				#ifdef USE_GPS_TASK
+					continue;
+				#else
+					return;
+				#endif
+			}
 
 			#ifdef GPS_TEST
 				// choose one of the 2 below to simulate NMEA data from either grid square
 				//auto gpsStream = gpsStream_EM10;
 				auto gpsStream = gpsStream_CN87;
 
-				while (*gpsStream) {
+				while (!gps_updates_paused() && *gpsStream) {
 					if (gps.encode(*gpsStream++)) {
 						//displayInfo();
 						if (gps.location.isValid()) {
 							//debug_serial_port->print(F("Grid Square = ")); debug_serial_port->println(grid_sq_str);
-							stop_msg = false;
 						}
 					}
 				}
 			#else
-				while (gps_serial_port.available() > 0) {										
+				while (!gps_updates_paused() && gps_serial_port.available() > 0) {
 
 					#ifdef DEBUG_GPS
 						char c;
@@ -26873,13 +28000,19 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 						#ifdef DEBUG_GPS_X
 							debug_serial_port->print(F("."));
 						#endif
-						stop_msg = false;
-						lost_gps_timer = millis();
 					//} else {
 					//  gps_serial_port.read();
 					//}
 				}
 			#endif
+
+			if (gps_updates_paused()) {
+				#ifdef USE_GPS_TASK
+					continue;
+				#else
+					return;
+				#endif
+			}
 
 			if (gps.time.isValid() && gps.time.isUpdated())
 			{
@@ -26902,37 +28035,38 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 				gps_minute = gps.time.minute();
 				gps_second = gps.time.second();
 				sprintf(time_str, "%02d:%02d:%02d", gps_hour, gps_minute, gps_second);
-				stop_msg = false;
 				#ifdef DEBUG_GPS
 					debug_serial_port->print(F("check_gps: time = ")); debug_serial_port->println(time_str);
 				#endif
-			} else {
-				if (!gps.time.isValid()) stop_msg = true;
 			}
 
-			if (gps.location.isValid() && gps.location.isUpdated()) {
+			gps_time_active = gps_data_fresh(gps.time.isValid(), gps.time.age());
+			const bool location_active =
+			    gps_data_fresh(gps.location.isValid(), gps.location.age());
+			static bool grid_fallback = false;
+			const bool location_held =
+			    gps_location_held(gps.location.isValid(), gps.location.age());
+			const bool location_lost = !grid_fallback && !location_held;
+			grid_fallback = !location_held;
+			stop_msg = !location_active;
+			if (location_active && gps.location.isUpdated()) {
 				Convert_to_MH(gps_grid);
 				if (strcmp(gps_grid, configuration.GPS_GridSq) != 0) {
 					strcpy(configuration.GPS_GridSq, gps_grid);         // if grid changed, store it in EEPROM
 					config_dirty = 1;
 				}
-				stop_msg = false;
 				#ifdef DEBUG_GPS
 					debug_serial_port->print(F("check_gps: Grid Square = ")); debug_serial_port->println(configuration.GPS_GridSq);
 				#endif
 				_do_process = true;
-			} else {
-				if (!gps.location.isValid()) stop_msg = true;
 			}
 
 			#ifndef GPS_TEST
-				if (!stop_msg && (millis() > (lost_gps_timer + 5000))) //&& gps.charsProcessed() < 10)
+				if (location_lost)
 				{
-					debug_serial_port->println(F("No GPS detected: Check wiring."));
-					if (!stop_msg) _do_process = true;  // comment out to leave the last known grid up rather than fall back to default file config grid
+					debug_serial_port->println(F("GPS location unavailable or stale; using fallback grid."));
+					_do_process = true;
 					strcpy(gps_grid, "");
-					stop_msg = true;
-					lost_gps_timer = millis();
 				}
 			#endif
 
@@ -26985,6 +28119,7 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 
 	//void process_gps(char * memory_str, bool force_update, uint8_t source) {
 	void process_gps() {  // use temp_gps structure
+		if (gps_updates_paused()) return;
 		char * memory_str = g->grid;
 		uint8_t source = g->source;
 		static char last_grid_sq_str[GRIDSQUARE_LEN] = "";
@@ -27084,7 +28219,14 @@ To run it “./geo lat long”, e.g. “./geo 43.999 -79.495” which yields FN0
 		close_w_eeprom();
 		update_icons();
 		//beep();
-		s_tone(sidetone_line,300,10);
+		// Beep only if no grid beep in the last 5 minutes; a GPS near a grid border can flip often.
+		static bool grid_beeped = false;
+		static unsigned long last_grid_beep_ms = 0;
+		if (!grid_beeped || (millis() - last_grid_beep_ms) >= GRID_BEEP_HOLDOFF_MS) {
+			grid_beeped = true;
+			last_grid_beep_ms = millis();
+			s_tone(sidetone_line,300,60);
+		}
 		#else
 			debug_serial_port->println(F("GPS Location not written because the Memories feature is disabled"));
 		#endif
@@ -27112,6 +28254,11 @@ void mainloop(void)
 		//debug_serial_port->print(F("."));
 		myDelay(0);
 
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			service_keyer_midi();
+			wm8960_audio_service();
+		#endif
+
 		#ifdef OPTION_WATCHDOG_TIMER
 			wdt_reset();
 		#endif  //OPTION_WATCHDOG_TIMER
@@ -27134,7 +28281,7 @@ void mainloop(void)
 						#ifdef OPTION_BEACON_MODE_PTT_TAIL_TIME
 							myDelay(configuration.ptt_tail_time[configuration.current_tx - 1]);         // after memory 1 has played, this holds the PTT line active for the ptt tail time of the current tx
 							check_ptt_tail();                                                         // this resets things so that the ptt line will go high during the next playout
-							digitalWrite (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
+							keyer_output_write (configuration.current_ptt_line, ptt_line_inactive_state);   // forces the ptt line of the current tx to be inactive
 						#endif                                                                      // OPTION_BEACON_MODE_PTT_TAIL_TIME
 
 						#ifdef FEATURE_SERIAL
@@ -27164,6 +28311,9 @@ void mainloop(void)
 				service_dit_dah_buffers();
 
 				#if defined(FEATURE_SERIAL)
+						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+							wm8960_audio_trace_keyer(10);
+						#endif
 						check_serial();
 						check_paddles();
 						service_dit_dah_buffers();
@@ -27185,6 +28335,9 @@ void mainloop(void)
 				#endif
 
 				#if defined(FEATURE_TOUCH_DISPLAY)
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(11);
+					#endif
 					#ifndef USE_TOUCH_TASK
 						check_touch_buttons();
 					#endif
@@ -27192,6 +28345,9 @@ void mainloop(void)
 				#endif
 
 				#ifdef FEATURE_BT_KEYBOARD
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(12);
+					#endif
 					BT_Keyboard_Status();
 					#ifndef USE_BT_TASK
 						check_bt_keyboard();// check for BT events before PS2 events
@@ -27199,6 +28355,9 @@ void mainloop(void)
 				#endif
 
 				#if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(13);
+					#endif
 					check_ps2_keyboard();
 				#endif
 
@@ -27217,6 +28376,9 @@ void mainloop(void)
 					service_usb();
 				#endif
 
+				#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+					wm8960_audio_trace_keyer(14);
+				#endif
 				check_for_dirty_configuration();
 
 				#ifdef FEATURE_DEAD_OP_WATCHDOG
@@ -27228,6 +28390,9 @@ void mainloop(void)
 				#endif
 
 				#ifdef FEATURE_DISPLAY
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(15);
+					#endif
 					check_paddles();
 					service_send_buffer(PRINTCHAR);
 					service_display();
@@ -27390,7 +28555,6 @@ void setup_esp()
 		initialize_i2c();
 	#endif
 	initialize_pins();
-	initialize_gps_port();	
 	// initialize_debug_startup();       // Goody - this is available for testing startup issues
 	// debug_blink();                    // Goody - this is available for testing startup issues
 	initialize_keyer_state();
@@ -27410,10 +28574,48 @@ void setup_esp()
 			initialize_serial_ports();
 	#endif
 	initialize_display();
+	initialize_gps_port();
 	initialize_buttons();
 	initialize_ps2_keyboard();
 	initialize_usb();
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		if (!apply_audio_levels()) {
+			debug_serial_port->println(F("Error: saved audio levels are invalid"));
+		}
+		if (!wm8960_midi_set_ptt_mode(configuration.midi_ptt_mode)) {
+			debug_serial_port->println(F("Error: saved MIDI PTT mode is invalid"));
+		}
+		if (!wm8960_midi_set_control_mode(configuration.midi_control_mode)) {
+			debug_serial_port->println(F("Error: saved MIDI control mode is invalid"));
+		}
+		if (!wm8960_audio_set_mic_gate_mode(configuration.mic_gate_mode)) {
+			debug_serial_port->println(F("Error: saved MIC gate mode is invalid"));
+		}
+		sync_pod_volume();
+		if (!wm8960_audio_preset_mic_gain(configuration.mic_pga, configuration.mic_boost,
+		                                  configuration.mic_alc)) {
+			debug_serial_port->println(F("Error: saved MIC gain is invalid"));
+		}
+		wm8960_midi_initialize();
+		#ifdef FEATURE_DISPLAY
+			if (!wm8960_audio_initialize([](const char *status) {
+				if (strncmp(status, "WM8960:", 7) == 0) {
+					return;
+				}
+				const byte row = (strncmp(status, "LR:", 3) == 0 ||
+				                  strncmp(status, "WD ", 3) == 0) ? 0 : 1;
+				lcd_center_print_timed(status, row, 2000);
+			})) {
+				lcd_center_print_timed("WM8960: init failed", 1, 2000);
+			}
+		#else
+			(void)wm8960_audio_initialize();
+		#endif
+	#endif
 	initialize_cw_keyboard();
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		wm8960_audio_trace_keyer(9);
+	#endif
 	initialize_bt_keyboard();
 	#if defined(FEATURE_WIFI) && defined(HARDWARE_ESP32_DEV) //SP5IOU 20220129
 			wifiConnect(configuration.wifissid,configuration.wifipassword);

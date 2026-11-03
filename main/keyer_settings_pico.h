@@ -189,7 +189,11 @@
 #define GPS_SERIAL_PORT_BAUD 38400     // This applies only when the port is in Command Line Interface mode.  In Winkey mode it will default to 1200.
 
 #ifdef FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT
-  #define SECONDARY_SERIAL_PORT &Serial1
+  #if defined(FEATURE_WM8960_USB_AUDIO)
+    #define SECONDARY_SERIAL_PORT &Wm8960Terminal
+  #else
+    #define SECONDARY_SERIAL_PORT &Serial1
+  #endif
   #define SECONDARY_SERIAL_PORT_BAUD 115200
 #endif
 
@@ -273,6 +277,13 @@
 
 #define initial_sidetone_mode 1            // Sidetone mode, 0=OFF, 1=ON, 2=PADDLE_ONLY
 
+#ifndef ENCODER_VFO_DIRECTION
+  #define ENCODER_VFO_DIRECTION -1 // -1 reverses VFO tuning only; +1 uses normal encoder direction
+#endif
+#if ENCODER_VFO_DIRECTION != -1 && ENCODER_VFO_DIRECTION != 1
+  #error "ENCODER_VFO_DIRECTION must be -1 or +1"
+#endif
+
 #define sd_card_spi_ss_line 4
 
 #if defined(OPTION_DFROBOT_LCD_COMMAND_BUTTONS)
@@ -340,8 +351,6 @@
 #define tx_pause_pin_inactive_state HIGH
 #define button_value_factor 1023
 #define farnsworth_timing_calibration 1.15
-#define sidetone_volume_low_limit 10
-#define sidetone_volume_high_limit 500
 
 #define custom_startup_field CODE_VERSION "K7MDL" //"your custom text here"   // an example could be callsign and name, eg. "AB1XYZ Bob", (or "Worlds best operator" which requires a 20 column display), string length shouldo be no more than the number of columns on the display
 

@@ -3,6 +3,10 @@
 
 #include <Arduino.h>
 
+#if defined(ARDUINO_ARCH_RP2040)
+  #include "keyer_features_and_options_pico.h"
+#endif
+
 #ifndef PROJECT_ESP32_COMPILER
 
   void setup_esp(); // call actual setup
@@ -10,7 +14,8 @@
   extern void setup_1();
   extern void loop_1();
 
-  #ifdef PICO_PLATFORM
+  #if (defined(PICO_PLATFORM) || defined(ARDUINO_ARCH_RP2040)) && \
+      (defined(USE_CORE1) || defined(USE_CONNECT_ON_CORE1))
     void setup1() {
       delay(3200);  // long delay while we wait for main setup terminal to be ready
       //Serial.println("Calling Setup_1 on Core 1");

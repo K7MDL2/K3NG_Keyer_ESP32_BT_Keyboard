@@ -5,8 +5,70 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "V:K7MDL-2026.9.15"
-#define eeprom_magic_number 41          // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "V:K7MDL-2026.11.3"
+#ifndef WM8960_MIC_GATE_MODE
+  #define WM8960_MIC_GATE_MODE 3 // 0=always, 1=manual local PTT, 2=external feedback, 3=either
+#endif
+#ifndef WM8960_PTT_FEEDBACK_CHANNEL
+  #define WM8960_PTT_FEEDBACK_CHANNEL 10 // SDRoxide PTT LED feedback; 0 disables matching, otherwise 1..16
+#endif
+#ifndef WM8960_PTT_FEEDBACK_TYPE
+  #define WM8960_PTT_FEEDBACK_TYPE 9 // 11=CC, 9=Note On/Off
+#endif
+#ifndef WM8960_PTT_FEEDBACK_NUMBER
+  #define WM8960_PTT_FEEDBACK_NUMBER 18 // Controller or note number; ignored when channel is 0
+#endif
+#if WM8960_MIC_GATE_MODE < 0 || WM8960_MIC_GATE_MODE > 3 || \
+    WM8960_PTT_FEEDBACK_CHANNEL < 0 || WM8960_PTT_FEEDBACK_CHANNEL > 16 || \
+    (WM8960_PTT_FEEDBACK_TYPE != 9 && WM8960_PTT_FEEDBACK_TYPE != 11) || \
+    WM8960_PTT_FEEDBACK_NUMBER < 0 || WM8960_PTT_FEEDBACK_NUMBER > 127
+  #error "Invalid WM8960 microphone gate or PTT feedback configuration"
+#endif
+// Host mic-level feedback (CC) sets the keyer USB mic level, saved to EEPROM.
+// Off by default: SDR apps treat the incoming level as fixed and adjust their own gain.
+#ifndef WM8960_MIC_LEVEL_FEEDBACK_CHANNEL
+  #define WM8960_MIC_LEVEL_FEEDBACK_CHANNEL 0 // 0 disables matching, otherwise 1..16
+#endif
+#ifndef WM8960_MIC_LEVEL_FEEDBACK_CC
+  #define WM8960_MIC_LEVEL_FEEDBACK_CC 23 // Matches the keyer's own mic-level CC
+#endif
+#if WM8960_MIC_LEVEL_FEEDBACK_CHANNEL < 0 || WM8960_MIC_LEVEL_FEEDBACK_CHANNEL > 16 || \
+    WM8960_MIC_LEVEL_FEEDBACK_CC < 0 || WM8960_MIC_LEVEL_FEEDBACK_CC > 127
+  #error "Invalid WM8960 mic level feedback configuration"
+#endif
+// Default MIDI control mode (runtime MIDI-MODE command, saved to EEPROM). Keys, PTT and VFO tune always work.
+// 0=LOCAL: all controls local, no control reports
+// 1=REPORT: all controls local and reported to the PC
+// 2=POD: master volume goes only to the PC (local level stays fixed); the rest stay local and are reported
+#ifndef WM8960_MIDI_CONTROL_MODE
+  #define WM8960_MIDI_CONTROL_MODE 2
+#endif
+#if WM8960_MIDI_CONTROL_MODE < 0 || WM8960_MIDI_CONTROL_MODE > 2
+  #error "Invalid WM8960_MIDI_CONTROL_MODE"
+#endif
+// Analog mic gain ahead of the ADC; lower these if the [MIC] input peak reaches 32768.
+#ifndef WM8960_MIC_BOOST
+  #define WM8960_MIC_BOOST 2 // 0=0 dB, 1=+13 dB, 2=+20 dB, 3=+29 dB
+#endif
+#ifndef WM8960_MIC_PGA
+  #define WM8960_MIC_PGA 33 // 0..63: -17.25 dB + 0.75 dB per step (23 = 0 dB, 33 = +7.5 dB, 63 = +30 dB)
+#endif
+// Optional codec ALC: adjusts the PGA automatically (WM8960_MIC_PGA becomes only the start gain).
+#ifndef WM8960_MIC_ALC
+  #define WM8960_MIC_ALC 0 // 0=off (fixed gain), 1=on
+#endif
+#ifndef WM8960_MIC_ALC_TARGET
+  #define WM8960_MIC_ALC_TARGET 7 // 0..15: -22.5 dBFS + 1.5 dB per step (7 = -12 dBFS)
+#endif
+#ifndef WM8960_MIC_ALC_MAX_GAIN
+  #define WM8960_MIC_ALC_MAX_GAIN 4 // 0..7: -12 dB + 6 dB per step (4 = +12 dB PGA)
+#endif
+#if WM8960_MIC_BOOST < 0 || WM8960_MIC_BOOST > 3 || WM8960_MIC_PGA < 0 || WM8960_MIC_PGA > 63 || \
+    (WM8960_MIC_ALC != 0 && WM8960_MIC_ALC != 1) || WM8960_MIC_ALC_TARGET < 0 || WM8960_MIC_ALC_TARGET > 15 || \
+    WM8960_MIC_ALC_MAX_GAIN < 0 || WM8960_MIC_ALC_MAX_GAIN > 7
+  #error "Invalid WM8960 microphone gain configuration"
+#endif
+#define eeprom_magic_number 47          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -96,14 +158,15 @@
 
 #if (DISPLAY_TYPE == TFT_PICO_320x480_RES_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_PICO_320x480_RES_LCD)
     //#define CONFIG_DISPLAY_TYPE  TFT_PICO_320x480_RES_LCD
-    #define FEATURE_TFT_PICO_320x480_RES_LCD     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus         
+    #define FEATURE_TFT_PICO_320x480_RES_LCD  // Waveshare RP2350B Plus W, 3.5" 320x480 ILI9488 with XPT2046 touch
     #define FEATURE_TFT_DISPLAY   // graphics, does not require touch
     #define FEATURE_TOUCH_DISPLAY  // requires FEATURE_TFT_DISPLAY
+    #define FEATURE_WM8960_USB_AUDIO  // enable with configured WM8960 hardware and a supported Pico display profile
     #define LCD_ROTATION 3
     //#define TOUCH_BUTTON_16   Must have FEATURE_TOUCH_DISPLAY enabled
     #define BUTTON_ROWS 4 // 1-4 rows allowed. Ignored if TOUCH_BUTTON_16 enabled. Must have FEATURE_TOUCH_DISPLAY enabled.
     #define TFT_320_480  // sets screen layout appropriate for this resolution
-    //#define FEATURE_STRAIGHT_KEY
+    #define FEATURE_STRAIGHT_KEY
     #define USE_KEY_PIN_INTERRUPTS  // Use interrupts instead of direct pin polling. Is ON when FEATURE_MCP23017_EXPANDER enabled
     #define FEATURE_MCP23017_EXPANDER  // Add 16 external IO pins over I2C bus paddles and key on PA0-2
     #define USE_RES_TOUCH // For XPT2046 resistive Touch Controller
@@ -113,16 +176,21 @@
     //#define USE_TOUCH_TASK  // Not ready for Pico yet! - Runs check_touch_buttons in a task - works only for GT911 i2c controller. ResTouch runs on core 0 only.
     //#define SCAN_ONCE  // Only look for keyboard at startup, do to try to do a blocking reconnect.  Undefine to always requires a keyboard to be connected.
     #define USE_CONNECT_ON_CORE1  // run ConnectOrPair on core 1 - allows connect and reconnect in the background; touch remains on core 0
-    //#define USE_BLE  // uncomment to use BLE, else use BT Classic keyboard
-    #define FEATURE_COMPASS  // read magnetic compass and temperature on a GPS https://www.amazon.com/dp/B08NY9JSZ3 - depends on MCP23017
+    #define USE_BLE  // use BLE instead of a BT Classic keyboard
+    //#define FEATURE_COMPASS  // IST8310 on the shared I2C bus; MCP23017 is not required
     #define FEATURE_GPS  // if enabled and not GPS, use DEFAULT_GRID = "" and supply memory 9 with a grid manually.
     #define GPS_BAUD_RATE 38400    // for the hardware serial port for GPS connection if used.
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87xs"  // substitute for GPS supplied grid square. This and GPS time will display on status row. Must be between 4 and 8 chars
-    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
+    #define MAX_TX_PORTS 6  // nunmber of transmitter lines (TX) for TX Select touch button
     //#define OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR  // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder 
     //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  
+#endif
+
+#if defined(FEATURE_MCP23017_EXPANDER)
+  #undef MAX_TX_PORTS
+  #define MAX_TX_PORTS 6
 #endif
 
 //#define FEATURE_LCD_FABO_PCF8574  // https://github.com/FaBoPlatform/FaBoLCD-PCF8574-Library
@@ -133,7 +201,7 @@
 //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  
 //#define FEATURE_SLEEP                   // go to sleep after x minutes to conserve battery power (not compatible with Arduino DUE, may have mixed results with Mega and Mega ADK)
 #define FEATURE_LCD_BACKLIGHT_AUTO_DIM  // turn off LCD backlight and/or dim Power Indicator LED after x minutes (LED requires a PWM pin)
-//#define FEATURE_ROTARY_ENCODER          // rotary encoder speed control
+#define FEATURE_ROTARY_ENCODER          // speed control; WM8960 builds use the multifunction menu
 #define FEATURE_CMOS_SUPER_KEYER_IAMBIC_B_TIMING
 // #define FEATURE_USB_MOUSE               // Uncomment three lines in k3ng_keyer.ino (search for note_usb_uncomment_lines)
 //#define FEATURE_TOUCH_PADDLE_PINS //SP5IOU 20220201 Works on ESP32_DEV platform. Uses same pins as paddles if pins are touch capable. Dissactivates normal paddles
@@ -156,19 +224,21 @@
 //#define FEATURE_WEB_SERVER      // Details: https://github.com/k3ng/k3ng_cw_keyer/wiki/390-Feature:-Ethernet,-Web-Server,-and-Internet-Linking
 //#define FEATURE_INTERNET_LINK   // Details: https://github.com/k3ng/k3ng_cw_keyer/wiki/390-Feature:-Ethernet,-Web-Server,-and-Internet-Linking
 
-// #define FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT     // Activate the Command Line interface on the secondary serial port
-//#define OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION  // Use when activating both FEATURE_WINKEY_EMULATION and FEATURE_COMMAND_LINE_INTERFACE 
+#define FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT     // Activate the Command Line interface on the secondary serial port
+#define OPTION_PRIMARY_SERIAL_PORT_DEFAULT_WINKEY_EMULATION  // Use with FEATURE_WINKEY_EMULATION and FEATURE_COMMAND_LINE_INTERFACE
                                                              //    simultaneously.  This will make Winkey emulation be the default at boot up; 
                                                              //    hold command button down at boot up to activate CLI mode
 
 // #define OPTION_SUPPRESS_SERIAL_BOOT_MSG
 ///#define OPTION_INCLUDE_PTT_TAIL_FOR_MANUAL_SENDING
 ///#define OPTION_EXCLUDE_PTT_HANG_TIME_FOR_MANUAL_SENDING
-/// #define OPTION_WINKEY_DISCARD_BYTES_AT_STARTUP     // if ASR is not disabled, you may need this to discard errant serial port bytes at startup
+#if !defined(FEATURE_WM8960_USB_AUDIO)
+  #define OPTION_WINKEY_DISCARD_BYTES_AT_STARTUP     // Legacy serial reset-byte filtering; not needed on native USB.
+#endif
 #define OPTION_WINKEY_STRICT_EEPROM_WRITES_MAY_WEAR_OUT_EEPROM // with this activated the unit will write non-volatile settings to EEPROM when set by Winkey commands
 // #define OPTION_WINKEY_SEND_WORDSPACE_AT_END_OF_BUFFER
 //#define OPTION_WINKEY_STRICT_HOST_OPEN               // require an admin host open Winkey command before doing any other commands
-#define OPTION_WINKEY_2_SUPPORT                      // comment out to revert to Winkey version 1 emulation
+//#define OPTION_WINKEY_2_SUPPORT                      // comment out to revert to Winkey version 1 emulation
 #define OPTION_WINKEY_SEND_BREAKIN_STATUS_BYTE
 #define OPTION_WINKEY_INTERRUPTS_MEMORY_REPEAT
 //#define OPTION_WINKEY_UCXLOG_9600_BAUD              // use this only with UCXLog configured for Winkey 9600 baud mode

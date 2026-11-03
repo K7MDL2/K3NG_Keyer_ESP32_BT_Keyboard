@@ -10,11 +10,10 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 #define keyer_pin_settings_pico_h
 
 #ifdef FEATURE_MCP23017_EXPANDER
-  // Add 100 o actual pin. 100 i sused o indicate an expansion pin and is subtracted in use
+  // Input identifiers are raw MCP pins; TX/PTT identifiers below add 100.
   #define MCP23017_PIN0     0  // paddle_left
   #define MCP23017_PIN1     1  // paddle right
   #define MCP23017_PIN2     2  // straight key
-  // These next pins are future usage ideas, not implemeted yet.
   #define MCP23017_PIN3     3  // tx_key_line_1
   #define MCP23017_PIN4     4  // ptt_tx_1
   #define MCP23017_PIN5     5  // tx_key_line_2
@@ -34,6 +33,44 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 //#define M5STACK_CORE2 // provides sound and LCD touchscreen in one module
 
 #if defined (FEATURE_TFT_PICO_320x480_RES_LCD)
+  #ifdef FEATURE_WM8960_USB_AUDIO
+    // WM8960 defaults for this display profile; edit to match the codec wiring.
+    #ifndef WM8960_I2C_SDA_PIN
+      #ifdef USE_WIRE1
+        #define WM8960_I2C_SDA_PIN 16
+      #else
+        #define WM8960_I2C_SDA_PIN 20
+      #endif
+    #endif
+    #ifndef WM8960_I2C_SCL_PIN
+      #ifdef USE_WIRE1
+        #define WM8960_I2C_SCL_PIN 17
+      #else
+        #define WM8960_I2C_SCL_PIN 21
+      #endif
+    #endif
+    #ifndef WM8960_I2S_BCLK_PIN
+      #define WM8960_I2S_BCLK_PIN 18
+    #endif
+    #ifndef WM8960_I2S_LRCLK_PIN
+      #define WM8960_I2S_LRCLK_PIN 19
+    #endif
+    #ifndef WM8960_I2S_DOUT_PIN   // RXSDA pin for I2S data output
+      #define WM8960_I2S_DOUT_PIN 6
+    #endif
+    #ifndef WM8960_I2S_DIN_PIN   // TXSDA pin for I2S data input
+      #define WM8960_I2S_DIN_PIN 7
+    #endif
+    #ifndef WM8960_I2C_ADDRESS
+      #define WM8960_I2C_ADDRESS 0x1A
+    #endif
+    #ifndef WM8960_MCLK_HZ
+      #define WM8960_MCLK_HZ 24000000UL  // Waveshare Audio Board onboard oscillator
+    #endif
+    #ifndef WM8960_USE_PLL
+      #define WM8960_USE_PLL 1
+    #endif
+  #endif
     // For the BT Connected LED, when runnig in a task on Core 1, the LED_BUILTIN cannot be used
     // Instead choose any other CPU GPIO. 
     #ifdef USE_CORE1  
@@ -41,41 +78,46 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
     #else
       #define bt_keyboard_LED    0 //LED_BUILTIN   //LED_BUILTIN  //64 // indicates BT keyboard connection status - GPIO17 is Blue LED
     #endif
-    #if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
+    //#if defined (FEATURE_MCP23017_EXPANDER) || defined (FEATURE_COMPASS)
       #define I2CDEV_SDA_PIN  20   // override the sdkconfig pair of 21, 22
       #define I2CDEV_SCL_PIN  21
-    #endif
+    //#endif
 
     #ifdef FEATURE_MCP23017_EXPANDER
       #define MCP23X17_ADDR 0x27      
       #define MCP23017_INTA_GPIO 22 // input only, no pullup on this pin
-      #define paddle_left     MCP23017_PIN0 // expander pin PA0
-      #define paddle_right    MCP23017_PIN1 // expander pin PA1
+      #define paddle_left     MCP23017_PIN1 // expander pin PA0 or 1, swap to put dash and dit on correct paddle when paddle reverse setting is off.
+      #define paddle_right    MCP23017_PIN0 // expander pin PA1 or 0
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  MCP23017_PIN2 // expander pin PA2
       #endif //FEATURE_STRAIGHT_KEY
     #else
-      #define paddle_left      2 // Must have pullup internal or external
-      #define paddle_right     3 // Must have pullup internal or external.
+      #define paddle_left      3 // Must have pullup internal or external
+      #define paddle_right     2 // Must have pullup internal or external.
       #ifdef FEATURE_STRAIGHT_KEY
         #define pin_straight_key  4
       #endif //FEATURE_STRAIGHT_KEY          
+      #define tx_key_line_1   0//14 // (high = key down/tx on)
+      #define ptt_tx_1        0//22 //for PTT ("push to talk") lines, GPIO22 is RED LED
+      #define tx_key_line_2    0
+      #define ptt_tx_2         0 //7  //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #endif
     
-    #define GPS_RX_PIN      5   // UART1 TX = 4   UART1 RX = 5
+    #define GPS_RX_PIN       5   // UART1 TX = 4   UART1 RX = 5
     #define GPS_TX_PIN      -1   //4 Note: -1 free up pin fo other GPIO use - requires arduino-pico lib 5.6.1+
     #define TOUCH_X         300   // raw X minimum
     #define TOUCH_X1        3600  // raw X span
     #define TOUCH_Y         300   // raw Y minimum
     #define TOUCH_Y1        3600  // raw Y span
     #define TOUCH_BITS      (0x05) // param bits are bool: rotate=bit0, invertx=bit1, inverty=bit2
-    #define potentiometer   26 // ADC0 = Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-    #define tx_key_line_1    6 // (high = key down/tx on)
-    #define tx_key_line_2   14  
-    #define sidetone_line   42 // 18  //26 connect a passive buzzer for sidetone   42 is RP2350B
+    #define potentiometer   0//26 // ADC0 = Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
+
+    #if defined(FEATURE_WM8960_USB_AUDIO)
+      #define sidetone_line  0
+    #else
+      #define sidetone_line 42 // connect a passive buzzer for GPIO sidetone
+    #endif
     #define audio_enable     0  // audio amp enable - 0 for Pico config
-    #define ptt_tx_1        19  // 22 for PTT ("push to talk") lines, GPIO22 is RED LED
-    #define ptt_tx_2         7  //   Can be used for keying fox transmitter, T/R switch, or keying slow boatanchors
     #define tx_inhibit_pin   0 
     #define tx_pause_pin     0 
     // free pins are 7, 14, 16 (UART1 TX), 27 and more on RP2350B boards.
@@ -136,16 +178,37 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
   #define GPS_TX_PIN        -1   //4 Note: -1 free up pin fo other GPIO use - requires arduino-pico lib 5.6.1+
 #endif
 
-//  common pins
-#define tx_key_line_3 0
-#define tx_key_line_4 0
-#define tx_key_line_5 0
-#define tx_key_line_6 0
+// TX/PTT output identifiers use 100 + MCP pin to distinguish them from CPU GPIO.
+#ifdef FEATURE_MCP23017_EXPANDER
+  #undef tx_key_line_1
+  #undef tx_key_line_2
+  #undef ptt_tx_1
+  #undef ptt_tx_2
+  #define tx_key_line_1 (100 + MCP23017_PIN3)
+  #define ptt_tx_1      (100 + MCP23017_PIN4)
+  #define tx_key_line_2 (100 + MCP23017_PIN5)
+  #define ptt_tx_2      (100 + MCP23017_PIN6)
+  #define tx_key_line_3 (100 + MCP23017_PIN7)
+  #define ptt_tx_3      (100 + MCP23017_PIN8)
+  #define tx_key_line_4 (100 + MCP23017_PIN9)
+  #define ptt_tx_4      (100 + MCP23017_PIN10)
+  #define tx_key_line_5 (100 + MCP23017_PIN11)
+  #define ptt_tx_5      (100 + MCP23017_PIN12)
+  #define tx_key_line_6 (100 + MCP23017_PIN13)
+  #define ptt_tx_6      (100 + MCP23017_PIN14)
+#else
+  //  common pins
+  #define tx_key_line_3 0
+  #define tx_key_line_4 0
+  #define tx_key_line_5 0
+  #define tx_key_line_6 0
 
-#define ptt_tx_3 0              //   These are optional - set to 0 if unused
-#define ptt_tx_4 0
-#define ptt_tx_5 0
-#define ptt_tx_6 0
+  #define ptt_tx_3 0              //   These are optional - set to 0 if unused
+  #define ptt_tx_4 0
+  #define ptt_tx_5 0
+  #define ptt_tx_6 0
+#endif
+
 #define tx_key_dit 0            // if defined, goes active for dit (any transmitter) - customized with tx_key_dit_and_dah_pins_active_state and tx_key_dit_and_dah_pins_inactive_state
 #define tx_key_dah 0            // if defined, goes active for dah (any transmitter) - customized with tx_key_dit_and_dah_pins_active_state and tx_key_dit_and_dah_pins_inactive_state
 
@@ -202,10 +265,19 @@ FEATURE_SIDETONE_SWITCH
 
 // rotary encoder pins and options - rotary encoder code from Jim Balls M0CKE
 #ifdef FEATURE_ROTARY_ENCODER
-  #define OPTION_ENCODER_HALF_STEP_MODE     // Half-step mode?
-  #define rotary_pin1  34 //34 Needs external 10k Pullup   // CW Encoder Pin  Not all ESP32 pins supports PULLUP SP5IOU
-  #define rotary_pin2  35 //35 Needs external 10k Pullup   // CCW Encoder Pin  Not all ESP32 pins supports PULLUP SP5IOU
-  #define OPTION_ENCODER_ENABLE_PULLUPS     // define to enable weak pullups.
+  #ifdef FEATURE_MCP23017_EXPANDER
+    #define OPTION_ENCODER_HALF_STEP_MODE     // Half-step mode?
+    #define rotary_pin1   2 //34 Needs external 10k Pullup   // CW Encoder Pin  Not all ESP32 pins supports PULLUP SP5IOU
+    #define rotary_pin2   3 //35 Needs external 10k Pullup   // CCW Encoder Pin  Not all ESP32 pins supports PULLUP SP5IOU
+    #define OPTION_ENCODER_ENABLE_PULLUPS     // define to enable weak pullups.
+    #define rotary_switch 4 // Rotary encoder switch pin
+  #else
+    #define OPTION_ENCODER_HALF_STEP_MODE     // Half-step mode?
+    #define rotary_pin1  22 //34 Needs external 10k Pullup   // CW Encoder Pin  Not all ESP32 pins supports PULLUP SP5IOU
+    #define rotary_pin2  14 //35 Needs external 10k Pullup   // CCW Encoder Pin  Not all ESP32 pins supports PULLUP SP5IOU
+    #define OPTION_ENCODER_ENABLE_PULLUPS     // define to enable weak pullups.
+    #define rotary_switch 42 // Rotary encoder switch pin
+  #endif
 #endif //FEATURE_ROTARY_ENCODER
 
 #ifdef FEATURE_LED_RING
