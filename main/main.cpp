@@ -20055,7 +20055,8 @@ void display_heading(void) {
 			paddle_right_state = gpio_get_level((gpio_num_t) paddle_right);
 			#ifdef FEATURE_M5STACK_CORE2
 			} else {
-				paddle_left_state = paddle_right_state = true;
+				paddle_left_state = true;
+				paddle_right_state = true;
 			}
 			#endif
 

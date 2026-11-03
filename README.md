@@ -799,6 +799,12 @@ The Core2 ESP-IDF build overlays M5Unified's speaker task stack with a 4096-byte
 base plus its audio buffer; the upstream 1536-byte base overflowed with this
 ESP-IDF build. Managed library files are unchanged, and configuration fails
 explicitly if an updated library no longer matches the overlay.
+The Core2 build also overlays M5Unified's power code to use `std::isfinite`
+with the ESP-IDF C++/picolibc toolchain. TFT_eSPI fonts remain available, but its
+unused display-driver source is not compiled for Core2.
+VS Code's ESP-IDF monitor requires the ELF in its configured build directory;
+build that directory before starting the monitor. An ELF from a separate build
+directory must match the firmware flashed to the device for reliable decoding.
 The microSD, IMU and RTC are not initialized. Do not attach a conflicting
 stacked module. Test without a connected transmitter first: screen orientation,
 touch buttons/long presses, abort and text restart, paddles/straight key, then

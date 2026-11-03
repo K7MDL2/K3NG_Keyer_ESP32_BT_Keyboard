@@ -23,7 +23,11 @@ message(STATUS "^^^TFT_eSPI: CONFIG_DISPLAY_TYPE=${CONFIG_DISPLAY_TYPE}")
 #set(include_dirs ${CMAKE_SOURCE_DIR}/components)
 
 #if("${CONFIG_DISPLAY_TYPE_NAME}" STREQUAL "7") 
-    idf_component_register(SRCS "TFT_eSPI.cpp"
+    set(tft_sources "TFT_eSPI.cpp")
+    if(CONFIG_DISPLAY_TYPE STREQUAL "M5STACK_CORE2_LCD" OR CONFIG_DISPLAY_TYPE STREQUAL "4")
+        set(tft_sources)
+    endif()
+    idf_component_register(SRCS ${tft_sources}
                     INCLUDE_DIRS "." ${CMAKE_SOURCE_DIR}/components/TFT_eSPI/Fonts/GFXFF
                     REQUIRES  arduino-esp32 driver esp_driver_spi esp_driver_gpio esp_driver_i2c)
 
