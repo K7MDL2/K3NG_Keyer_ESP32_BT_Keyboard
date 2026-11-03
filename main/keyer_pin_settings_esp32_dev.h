@@ -32,26 +32,32 @@ ADC2 is utylized by WiFi so if WiFi feature is used, ADC2 pins cannot be used fo
 // M5Stack Core2
 //#define M5STACK_CORE2 // provides sound and LCD touchscreen in one module
 
-#if defined (M5STACK_CORE2)
-  #define bt_keyboard_LED 19  // indicates BT keyboard connection status
-  #define paddle_left     27//32 Needs external 10k Pullup. 32 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-  #define paddle_right    33 //33 Needs external 10k Pullup. 33 can be used as touch paddle on ESP32 platform //SP5IOU 20220201
-  #define tx_key_line_1   26  // (high = key down/tx on)
-  #define tx_key_line_2    0  
-  #define sidetone_line    0 //23         // connect a speaker for sidetone
-  #define audio_enable     0 // Only for 3.5" Hoysond Display
-  //#define potentiometer   35 //A3 - VN pin // Speed potentiometer (0 to 3.3V) Use pot from 1k to 10k
-  #define ptt_tx_1         0     //27   PTT ("push to talk") lines
-  #define tx_inhibit_pin  13   //9
-  #define tx_pause_pin    14  //10
+#if defined (FEATURE_M5STACK_CORE2)
+  #define bt_keyboard_LED 0
+  extern bool core2_port_a_output;
+  #define paddle_left    33  // Port A; move the former ULN2803A input wire to GPIO27
+  #define paddle_right   32  // Port A; not available for external I2C in this profile
+  #define tx_key_line_1   (core2_port_a_output ? 33 : 25)
+  #define ptt_tx_1        (core2_port_a_output ? 32 : 26)
+  #define tx_key_line_2   27
+  #define ptt_tx_2        19
+  #define sidetone_line   0  // Built-in I2S speaker; no GPIO tone output
+  #define audio_enable   0
+  #define potentiometer  0
+  #define tx_inhibit_pin 0
+  #define tx_pause_pin   0
+  // The buffered GPIO14 input is used as the straight key, not manual PTT.
   #ifdef FEATURE_STRAIGHT_KEY
-    #define pin_straight_key 1 //TXD0
+    #define pin_straight_key 14
   #endif //FEATURE_STRAIGHT_KEY
-  #define SD_SPI_CS_PIN    4
+  #define GPS_RX_PIN      0  // GPS disabled; GPIO13 spare, GPIO35 reserved
+  #define I2CDEV_SDA_PIN 21
+  #define I2CDEV_SCL_PIN 22
+  #define SD_SPI_CS_PIN   4
   #define SD_SPI_SCK_PIN  18
   #define SD_SPI_MISO_PIN 38
   #define SD_SPI_MOSI_PIN 23
-  // 21,22 are i2c shared with touch, 39 is touch int.
+  // GPIO0/2/12/34: audio; 39: touch IRQ; 21/22: internal I2C.
 
   #elif defined (FEATURE_TFT7789_3_2inch_240x320_LCD)  // for DIY Malls 3.2" 320x240 TFT st7789
     #define bt_keyboard_LED 17 // indicates BT keyboard connection status - 17 on 3.2" DIY malls st7789 TFT, red BLUE    

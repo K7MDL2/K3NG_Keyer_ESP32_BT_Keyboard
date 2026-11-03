@@ -183,6 +183,7 @@ English code training word lists from gen_cw_words.pl by Andy Stewart, KB1OIQ
 	 CTRL-M           Set Farnsworth Speed (0 = disabled)  (requires FEATURE_FARNSWORTH)
 	 CTRL-N           Paddle Reverse
 	 CTRL-O           Toggle Sidetone On/Off
+	 CTRL-Q           Toggle saved beacon mode (repeat Memory 1)
 	 CTRL-S           CMOS Superkeyer Timing On/Off
 	 CTRL-T           Tune
 	 CTRL-U           Manual PTT Toggle
@@ -1758,24 +1759,20 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#define CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION
 	//#define TFT_VIEWPORT
-	#ifdef M5STACK_CORE2a
-		//#include <M5ModuleDisplay.h>
-		#include "SPI.h"
-		#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
-		TFT_eSPI lcd = TFT_eSPI();  // Invoke library
-		//#include <m5stack_core_2.h>
-		//#include  <m5gfx.h>
-		//#include <M5Unified.h>
-		//#define lcd M5.Lcd
-
-		//#define setTextColor(a,b,c) setTextColor(a,b)
-		//#define fillSmoothRoundRect(x,y,w,h,r,fg,bg) fillSmoothRoundRect(x,y,w,h,r,fg)
-		//#define drawSmoothRoundRect(x,y,r,ir,w,h,fg,bg) drawRoundRect(x,y,w,h,r,fg)
-		#define setFreeFont(a) setFont(a)
+	#ifdef FEATURE_M5STACK_CORE2
+		#include <M5Unified.h>
+		M5GFX &lcd = M5.Display;
 		#define FM9 &fonts::FreeMono9pt7b
 		#define FMB12 &fonts::FreeMonoBold12pt7b
+		#define FMB18 &fonts::FreeMonoBold18pt7b
 		#define FS9 &fonts::FreeSans9pt7b
-		#define TFT_HEIGHT 240
+		#define FS12 &fonts::FreeSans12pt7b
+		#define TFT_HEIGHT 320
+		#define TFT_WIDTH 240
+		#define TL_DATUM 0
+		#define BL_DATUM 8
+		#define BC_DATUM 9
+		#define MC_DATUM 5
 	#else
 		#include "SPI.h"
 		#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
@@ -1801,7 +1798,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#endif
 	//#include "Free_Fonts.h" // Include the header file attached to this sketch
-	#define GFXFF 1                 // enable FreeFont set of custom fonts from AdaFruit
+	#ifdef FEATURE_M5STACK_CORE2
+		#define GFXFF lcd.getFont()
+	#else
+		#define GFXFF 1                 // enable FreeFont set of custom fonts from AdaFruit
+	#endif
 	#define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
 	#define SCROLL_BOX_DATUM BL_DATUM
 	#define SCROLL_BOX_CENTER_DATUM BC_DATUM //BC_DATUM
@@ -1877,9 +1878,31 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#endif
 
+	#ifdef FEATURE_M5STACK_CORE2
+		#undef TFT_FONT_MEDIUM
+		#undef SCROLL_BOX_FONT
+		#undef COLUMN_WIDTH
+		#undef FONT_HEIGHT
+		#undef SCROLL_TEXT_TOP_LINE
+		#undef SCROLL_TEXT_LEFT_SIDE
+		#undef LINE_SPACER
+		#define TFT_FONT_MEDIUM FMB18
+		#define SCROLL_BOX_FONT FMB18
+		#define COLUMN_WIDTH 24
+		#define FONT_HEIGHT 44
+		#define LINE_SPACER 0
+		#define SCROLL_TEXT_TOP_LINE 67
+		#define SCROLL_TEXT_LEFT_SIDE 16
+	#endif
+
 	#define TFT_GREY 0x5AEB // New color
 
-	#if defined(TOUCH_BUTTON_16)
+	#if defined(FEATURE_M5STACK_CORE2)
+		#define BUTTON_FONT FS9
+		#define BUTTON_HEIGHT 48
+		#define BUTTON_WIDTH 100
+		#define BUTTON_ROW 184
+	#elif defined(TOUCH_BUTTON_16)
 		#undef BUTTON_FONT
 		#define BUTTON_FONT TFT_FONT_SMALL
 		#define BUTTON_HEIGHT 57
@@ -1908,7 +1931,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 	#define SCROLL_BOX_ROW3 (SCROLL_TEXT_TOP_LINE+(2*FONT_HEIGHT)+LINE_SPACER)
 	#define SCROLL_BOX_ROW4 (SCROLL_TEXT_TOP_LINE+(3*FONT_HEIGHT)+LINE_SPACER)
 	#define SCROLL_BOX_ROW5 (SCROLL_TEXT_TOP_LINE+(4*FONT_HEIGHT)+LINE_SPACER)
-	#define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
+	#ifdef FEATURE_M5STACK_CORE2
+		#define SCROLL_BOX_CENTER (SCROLL_BOX_LEFT_SIDE + SCROLL_BOX_WIDTH/2)
+	#else
+		#define SCROLL_BOX_CENTER (SCROLL_BOX_WIDTH/2)
+	#endif
 	#define SCROLL_BOX_BOTTOM (SCROLL_BOX_TOP+SCROLL_BOX_HEIGHT)
 
 	#define TFT_VIEWPORT_EXISTS (lcd.checkViewport(SCROLL_BOX_LEFT_SIDE+3, SCROLL_BOX_TOP+4, 1, 1))
@@ -2107,17 +2134,36 @@ struct config_t {
 	#endif
 } configuration;
 
-#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
 void print_audio_volumes(PRIMARY_SERIAL_CLS *port);
 bool apply_audio_levels();
-void service_keyer_midi();
-void service_host_ptt_feedback();
 void audio_consumer_key(uint16_t usage, uint8_t modifiers);
 int audio_volume(AudioVolumeTarget target);
 int step_audio_volume(int level, bool increase);
 void set_audio_volume(AudioVolumeTarget target, int level, bool muted);
 bool audio_muted(AudioVolumeTarget target);
+#endif
+#if defined(FEATURE_CORE2_AUDIO) && defined(FEATURE_DISPLAY)
+#include <atomic>
+void service_core2_audio_message();
+#endif
+#ifdef FEATURE_M5STACK_CORE2
+static_assert(CORE2_PORT_A_OUTPUT_DEFAULT == 0 || CORE2_PORT_A_OUTPUT_DEFAULT == 1);
+bool core2_port_a_output = CORE2_PORT_A_OUTPUT_DEFAULT;
+static bool core2_port_a_saved_output = CORE2_PORT_A_OUTPUT_DEFAULT;
+static_assert(CORE2_PORT_A_REVERSED_DEFAULT == 0 || CORE2_PORT_A_REVERSED_DEFAULT == 1);
+static bool core2_port_a_reversed = CORE2_PORT_A_REVERSED_DEFAULT;
+static bool core2_port_a_saved_reversed = CORE2_PORT_A_REVERSED_DEFAULT;
+static bool core2_port_a_key_active = false;
+static bool core2_port_a_ptt_active = false;
+#if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
+bool cli_core2_port_a(PRIMARY_SERIAL_CLS *port, String command);
+#endif
+#endif
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+void service_keyer_midi();
+void service_host_ptt_feedback();
 void sync_pod_volume();
 bool midi_pod_mode();
 // POD mode PC-side levels: sent to the PC only; local playback/mic levels stay fixed.
@@ -2196,6 +2242,9 @@ void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 void display_scroll_print_char(char charin);
 void service_display();
+#ifdef FEATURE_DISPLAY
+void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration);
+#endif
 void popup(bool show);
 void initialize_sinewave_generator();
 void myDelay(uint32_t _ms);
@@ -2385,6 +2434,15 @@ enum button_ID{
 		const uint8_t buttonCount = 16 + 1;  // sizeof(btn) / sizeof(btn[0]);
 		const int NUM_BUTTON_ROWS = 1; // number of rows of buttons
 		const int NUM_KEYS = buttonCount;  // +1 is CW Scroll Box touch zone.  Fx key counts as a regular key
+	#elif defined(FEATURE_M5STACK_CORE2)
+		#if ((BUTTON_ROWS + 0) < 1) || ((BUTTON_ROWS + 0) > 8)
+			#error "Core2 BUTTON_ROWS must be 1-8 (two actions per page)"
+		#endif
+		const int MAX_ROWS = 8;
+		const int BUTTONS_PER_ROW = 3;
+		const uint8_t buttonCount = BUTTONS_PER_ROW + 1;
+		const int NUM_BUTTON_ROWS = BUTTON_ROWS;
+		const int NUM_KEYS = MAX_ROWS * BUTTONS_PER_ROW + 1;
 	#else
 		#if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check value exists and is not empty, must be 1-4.
 			#error "BUTTON_ROWS must be defined with a value = 1-4, or, TOUCH_BUTTON_16 must be defined in keyer_features_and_options.h"
@@ -2425,7 +2483,11 @@ enum button_ID{
 	*/
 	#endif
 	struct BTN_State {
-		TFT_eSPI_Button p_btn;
+		#ifdef FEATURE_M5STACK_CORE2
+			lgfx::LGFX_Button p_btn;
+		#else
+			TFT_eSPI_Button p_btn;
+		#endif
 		uint8_t len;
 		uint32_t duration;
 	} btn[buttonCount] = {};
@@ -2443,7 +2505,35 @@ enum button_ID{
 	};
 
 	struct Keys key[NUM_KEYS] =
-	#ifdef TOUCH_BUTTON_16
+	#ifdef FEATURE_M5STACK_CORE2
+	{
+		{BUTTON_F1,         0, 0, false, false, false, "1/4",   "1/4"},
+		{BUTTON_PAUSE,      1, 0, false, false, false, "Pause", "Pause"},
+		{BUTTON_TX_ENABLE,  2, 0, false, false, false, "TXen",  "TXen"},
+		{BUTTON_F1,         0, 1, false, false, false, "2/4",   "2/4"},
+		{BUTTON_WPM_UP,     1, 1, false, false, false, "Wpm+",  "Wpm+"},
+		{BUTTON_WPM_DN,     2, 1, false, false, false, "Wpm-",  "Wpm-"},
+		{BUTTON_F1,         0, 2, false, false, false, "3/4",   "3/4"},
+		{BUTTON_MEM_1,      1, 2, false, false, false, "M1",    "M1-R"},
+		{BUTTON_MEM_2,      2, 2, false, false, false, "M2",    "M2-R"},
+		{BUTTON_F1,         0, 3, false, false, false, "4/4",   "4/4"},
+		{BUTTON_MEM_3,      1, 3, false, false, false, "M3",    "M3-R"},
+		{BUTTON_MEM_4,      2, 3, false, false, false, "M4",    "M4-R"},
+		{BUTTON_F1,         0, 4, false, false, false, "5/4",   "5/4"},
+		{BUTTON_MEM_5,      1, 4, false, false, false, "M5",    "M5-R"},
+		{BUTTON_MEM_6,      2, 4, false, false, false, "M6",    "M6-R"},
+		{BUTTON_F1,         0, 5, false, false, false, "6/4",   "6/4"},
+		{BUTTON_MEM_7,      1, 5, false, false, false, "M7",    "M7-R"},
+		{BUTTON_MEM_8,      2, 5, false, false, false, "M8",    "M8-R"},
+		{BUTTON_F1,         0, 6, false, false, false, "7/4",   "7/4"},
+		{BUTTON_MEM_LIST,   1, 6, false, false, false, "Mem",   "Mem"},
+		{BUTTON_TUNE,       2, 6, false, false, false, "Tune",  "Tune"},
+		{BUTTON_F1,         0, 7, false, false, false, "8/4",   "8/4"},
+		{BUTTON_TX_SELECT,  1, 7, false, false, false, "Tx#1",  "Tx#1"},
+		{BUTTON_SIDETONE_EN,2, 7, false, false, false, "Tone",  "Tone"},
+		{CW_BOX,            3,255, false, false, false, "",      ""}
+	};
+	#elif defined(TOUCH_BUTTON_16)
 	{
 		// 1st row
 		{BUTTON_PAUSE,      0,  0, false, false, false, "Pause", "Pause"},
@@ -3713,6 +3803,15 @@ byte service_tx_inhibit_and_pause(){
 //-------------------------------------------------------------------------------------------------------
 
 #if defined(FEATURE_BEACON_SETTING)
+	void toggle_beacon_setting() {
+		configuration.beacon_mode_on_boot_up = !configuration.beacon_mode_on_boot_up;
+		config_dirty = 1;
+		#ifdef FEATURE_DISPLAY
+			lcd_center_print_timed(configuration.beacon_mode_on_boot_up ?
+			    "Beacon On" : "Beacon Off", 0, default_display_msg_delay);
+		#endif
+	}
+
 	void service_beacon(){
 		if ((configuration.beacon_mode_on_boot_up) && (!send_buffer_bytes)){
 			serial_play_memory(0);
@@ -4926,7 +5025,11 @@ int32_t tft_scroll_row_y(byte row) {
 void tft_draw_scroll_char(byte row, byte col) {
 	const char c = lcd_scroll_buffer[row].charAt(col);
 	if (c > 0 && c != ' ') {
-		lcd.drawChar(c, SCROLL_TEXT_LEFT_SIDE+(col*COLUMN_WIDTH), tft_scroll_row_y(row), GFXFF);
+		#ifdef FEATURE_M5STACK_CORE2
+			lcd.drawChar(c, SCROLL_TEXT_LEFT_SIDE+(col*COLUMN_WIDTH), tft_scroll_row_y(row));
+		#else
+			lcd.drawChar(c, SCROLL_TEXT_LEFT_SIDE+(col*COLUMN_WIDTH), tft_scroll_row_y(row), GFXFF);
+		#endif
 	}
 }
 
@@ -5086,7 +5189,11 @@ void service_display() {
 						lcd.drawString(lcd_scroll_buffer[y], SCROLL_TEXT_LEFT_SIDE, y1, GFXFF);
 					#else  // do char by char
 						char c = lcd_scroll_buffer[y].charAt(x);
-						lcd.drawChar(c, x1, y1, GFXFF);  // use char in scroll buffer and place at x1, y1 on graphics screen
+						#ifdef FEATURE_M5STACK_CORE2
+							lcd.drawChar(c, x1, y1);
+						#else
+							lcd.drawChar(c, x1, y1, GFXFF);  // use char in scroll buffer and place at x1, y1 on graphics screen
+						#endif
 					#endif
 
 					//lcd.setCursor(x1, y1);
@@ -5179,6 +5286,9 @@ void reset_display_scroll_text() {
 }
 
 void display_scroll_print_char(char charin){
+	#ifdef FEATURE_M5STACK_CORE2
+		if (static_cast<uint8_t>(charin) < 32 || charin == 127) return;
+	#endif
 
 	byte &column_pointer = lcd_scroll_column_pointer;
 	byte &row_pointer = lcd_scroll_row_pointer;
@@ -5281,6 +5391,9 @@ void clear_display_row(byte row_number)
 		default: y1 = SCROLL_BOX_ROW1; break;
 	}
 		y1 -= FONT_HEIGHT;
+		#ifdef FEATURE_M5STACK_CORE2
+			if (y1 < SCROLL_BOX_TOP) y1 = SCROLL_BOX_TOP;
+		#endif
 
 		// blank out line
 	#ifdef FEATURE_TFT_DISPLAY
@@ -5339,7 +5452,11 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 		clear_display_row(row_number);
 	}
 	#ifdef FEATURE_TFT_DISPLAY
-		lcd.setFreeFont(SCROLL_BOX_FONT);
+		#ifdef FEATURE_M5STACK_CORE2
+			lcd.setFreeFont(FMB12);
+		#else
+			lcd.setFreeFont(SCROLL_BOX_FONT);
+		#endif
 		lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
 		//uint32_t y1 = SCROLL_TEXT_TOP_LINE+(row_number*FONT_HEIGHT)+(FONT_HEIGHT/4);
 		uint32_t y1 = SCROLL_BOX_ROW1;
@@ -5353,7 +5470,12 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 		}
 		//debug_serial_port->print(F("lcd_center_print_timed(): string = ")); debug_serial_port->println(lcd_print_string);
 		lcd.setTextPadding(2);
+		#ifdef FEATURE_M5STACK_CORE2
+			const int clear_top = max(static_cast<int>(SCROLL_BOX_TOP), static_cast<int>(y1) - FONT_HEIGHT);
+			lcd.fillRect(SCROLL_BOX_LEFT_SIDE, clear_top, SCROLL_BOX_WIDTH, y1 - clear_top, TFT_BLACK);
+		#else
 		lcd.fillRect(SCROLL_BOX_LEFT_SIDE, y1-FONT_HEIGHT, SCROLL_BOX_WIDTH, FONT_HEIGHT, TFT_BLACK);  // Blank out last line
+		#endif
 		lcd.setTextColor(TFT_WHITE);
 		lcd.drawString(lcd_print_string, SCROLL_BOX_CENTER, y1, GFXFF);
 		//lcd.setTextDatum(SCROLL_BOX_DATUM);   // restore to generic datum
@@ -5934,6 +6056,12 @@ void check_ps2_keyboard()
 																config_dirty = 1;
 																break;
 
+
+																#ifdef FEATURE_BEACON_SETTING
+																case PS2_Q_CTRL:
+																		toggle_beacon_setting();
+																		break;
+																#endif
 
 																#if defined(FEATURE_CMOS_SUPER_KEYER_IAMBIC_B_TIMING)
 																case PS2_S_CTRL :
@@ -7429,6 +7557,15 @@ bool keyer_expander_register_write(uint8_t reg, uint8_t value) {
 #endif
 
 void keyer_output_write(uint8_t pin, uint8_t state) {
+	#ifdef FEATURE_M5STACK_CORE2
+		if (core2_port_a_output && (pin == 33 || pin == 32)) {
+			const bool active = state == (pin == 33 ? tx_key_line_active_state : ptt_line_active_state);
+			(pin == 33 ? core2_port_a_key_active : core2_port_a_ptt_active) = active;
+			ESP_ERROR_CHECK(gpio_set_level(static_cast<gpio_num_t>(pin),
+			    active != core2_port_a_reversed ? 0 : 1));
+			return;
+		}
+	#endif
 	#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
 		if (pin >= 100 && pin <= 115) {
 			const uint8_t port = (pin - 100) / 8;
@@ -7447,6 +7584,15 @@ void keyer_output_write(uint8_t pin, uint8_t state) {
 }
 
 void keyer_output_initialize(uint8_t pin, uint8_t inactive_state) {
+	#ifdef FEATURE_M5STACK_CORE2
+		if (core2_port_a_output && (pin == 33 || pin == 32)) {
+			(pin == 33 ? core2_port_a_key_active : core2_port_a_ptt_active) = false;
+			ESP_ERROR_CHECK(gpio_set_level(static_cast<gpio_num_t>(pin), core2_port_a_reversed ? 0 : 1));
+			ESP_ERROR_CHECK(gpio_set_pull_mode(static_cast<gpio_num_t>(pin), GPIO_FLOATING));
+			ESP_ERROR_CHECK(gpio_set_direction(static_cast<gpio_num_t>(pin), GPIO_MODE_OUTPUT_OD));
+			return;
+		}
+	#endif
 	#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
 		if (pin >= 100 && pin <= 115) {
 			const uint8_t port = (pin - 100) / 8;
@@ -14130,6 +14276,9 @@ void print_serial_help(PRIMARY_SERIAL_CLS * port_to_use,byte paged_help){
 	port_to_use->println(F("\\)\t\t: Send serial number with cut numbers, then increment")); //Added missing command(WD9DMP)
 	port_to_use->println(F("\\[\t\t: Set quiet paddle interruption - 0 to 20 element lengths; 0 = off")); //Added missing command(WD9DMP)
 	port_to_use->println(F("\\]\t\t: PTT disable/enable"));
+	#ifdef FEATURE_BEACON_SETTING
+		port_to_use->println(F("\\_\t\t: Toggle saved beacon mode (repeat Memory 1; Ctrl-Q)"));
+	#endif
 	#ifdef FEATURE_AMERICAN_MORSE
 		port_to_use->println(F("\\=\t\t: Toggle American Morse mode")); //Added missing command(WD9DMP)
 	#endif
@@ -14173,6 +14322,13 @@ void print_serial_help(PRIMARY_SERIAL_CLS * port_to_use,byte paged_help){
 	#if !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 		if (paged_help) {serial_page_pause(port_to_use,10);}
 		port_to_use->println(F("\r\n\\:\tExtended CLI commands"));
+		#ifdef FEATURE_M5STACK_CORE2
+			port_to_use->println(F("\t\tporta [PADDLES|OUTPUT|REVERSE] - saved mode/polarity; reboot to apply"));
+		#endif
+		#ifdef FEATURE_CORE2_AUDIO
+			port_to_use->println(F("\t\taudio - show saved speaker levels"));
+			port_to_use->println(F("\t\tsidetone [0..100|+|-|MUTE|UNMUTE|TOGGLE]"));
+		#endif
 		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 			port_to_use->println(F("\t\taudio - show saved device audio levels"));
 			port_to_use->println(F("\t\tusbplay|usbmic|sidetone [0..100|+|-|MUTE|UNMUTE|TOGGLE]"));
@@ -14563,15 +14719,13 @@ void process_serial_command(PRIMARY_SERIAL_CLS * port_to_use) {
 		#if defined(FEATURE_BEACON_SETTING)
 		case '_':
 				port_to_use->print(F("\r\nBeacon Mode At Boot Up "));
-				if (!configuration.beacon_mode_on_boot_up){
-					configuration.beacon_mode_on_boot_up = 1;
+				toggle_beacon_setting();
+				if (configuration.beacon_mode_on_boot_up){
 					port_to_use->print(F("En"));
 				} else {
-					configuration.beacon_mode_on_boot_up = 0;
 					port_to_use->print(F("Dis"));
 				}
 				port_to_use->println(F("abled"));
-				config_dirty = 1;
 				break;
 		#endif
 
@@ -14696,14 +14850,24 @@ void sync_pod_volume() {
 	pod_mic_volume = configuration.usb_mic_volume;
 	pod_mic_muted = configuration.usb_mic_muted;
 }
+#endif
 
+#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 int audio_volume(AudioVolumeTarget target) {
 	switch (target) {
 		case AudioVolumeTarget::Playback:
+			#ifdef FEATURE_CORE2_AUDIO
+			return configuration.sidetone_volume;
+			#else
 			return midi_pod_mode() ? pod_play_volume : configuration.usb_play_volume;
+			#endif
 		case AudioVolumeTarget::Sidetone: return configuration.sidetone_volume;
 		case AudioVolumeTarget::Microphone:
+			#ifdef FEATURE_CORE2_AUDIO
+			return 0;
+			#else
 			return midi_pod_mode() ? pod_mic_volume : configuration.usb_mic_volume;
+			#endif
 	}
 	return 0;
 }
@@ -14711,28 +14875,50 @@ int audio_volume(AudioVolumeTarget target) {
 bool audio_muted(AudioVolumeTarget target) {
 	switch (target) {
 		case AudioVolumeTarget::Playback:
+			#ifdef FEATURE_CORE2_AUDIO
+			return configuration.sidetone_muted;
+			#else
 			return midi_pod_mode() ? pod_play_muted : configuration.usb_play_muted;
+			#endif
 		case AudioVolumeTarget::Sidetone: return configuration.sidetone_muted;
 		case AudioVolumeTarget::Microphone:
+			#ifdef FEATURE_CORE2_AUDIO
+			return true;
+			#else
 			return midi_pod_mode() ? pod_mic_muted : configuration.usb_mic_muted;
+			#endif
 	}
 	return false;
 }
 
 bool apply_audio_levels() {
+	#ifdef FEATURE_CORE2_AUDIO
+	M5.Speaker.setVolume(configuration.sidetone_muted ? 0 :
+	    constrain(configuration.sidetone_volume, 0, 100) * CORE2_SPEAKER_VOLUME / 100);
+	return true;
+	#else
 	return wm8960_audio_set_levels(
 	    configuration.sidetone_volume, configuration.usb_play_volume,
 	    configuration.usb_mic_volume, configuration.sidetone_muted,
 	    configuration.usb_play_muted, configuration.usb_mic_muted);
+	#endif
 }
 
 void set_audio_volume(AudioVolumeTarget target, int level, bool muted) {
+	#ifdef FEATURE_CORE2_AUDIO
+	if (target == AudioVolumeTarget::Microphone) {
+		debug_serial_port->println(F("Error: Core2 microphone audio is not supported"));
+		return;
+	}
+	target = AudioVolumeTarget::Sidetone;
+	#else
 	if (target != AudioVolumeTarget::Sidetone && midi_pod_mode()) {
 		const bool mic = target == AudioVolumeTarget::Microphone;
 		(mic ? pod_mic_volume : pod_play_volume) = static_cast<uint8_t>(constrain(level, 0, 100));
 		(mic ? pod_mic_muted : pod_play_muted) = muted;
 		return;
 	}
+	#endif
 	switch (target) {
 		case AudioVolumeTarget::Playback:
 			configuration.usb_play_volume = level;
@@ -14749,11 +14935,17 @@ void set_audio_volume(AudioVolumeTarget target, int level, bool muted) {
 	}
 	if (apply_audio_levels()) {
 		config_dirty = 1;
-		config_changed_ms = millis();
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			config_changed_ms = millis();
+		#endif
 	}
 }
 
 void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
+	#ifdef FEATURE_CORE2_AUDIO
+	port->printf("SIDETONE %d%% %s\r\n", configuration.sidetone_volume,
+	    configuration.sidetone_muted ? "MUTED" : "ON");
+	#else
 	port->printf("USBPLAY %u%% %s\r\nSIDETONE %d%% %s\r\nUSBMIC %u%% %s\r\n",
 	    configuration.usb_play_volume,
 	    configuration.usb_play_muted ? "MUTED" : "ON",
@@ -14766,6 +14958,7 @@ void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
 		    pod_play_volume, pod_play_muted ? "MUTED" : "ON",
 		    pod_mic_volume, pod_mic_muted ? "MUTED" : "ON");
 	}
+	#endif
 }
 
 int step_audio_volume(int level, bool increase) {
@@ -14773,6 +14966,19 @@ int step_audio_volume(int level, bool increase) {
 	// were too coarse near full scale.
 	return constrain(level + (increase ? 2 : -2), 0, 100);
 }
+
+#if defined(FEATURE_CORE2_AUDIO) && defined(FEATURE_DISPLAY)
+// The BT task publishes a snapshot; only the main display path draws it.
+static std::atomic<int> core2_audio_message{-1};
+
+void service_core2_audio_message() {
+	if (popup_active || in_pairing_mode || ptt_line_activated || key_state) return;
+	const int message = core2_audio_message.exchange(-1);
+	if (message < 0) return;
+	lcd_center_print_timed((message & 128) ? String("Sidetone muted") :
+	    "Sidetone " + String(message & 127) + "%", 0, 1000);
+}
+#endif
 
 void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
 	if (usage != 0xE2 && usage != 0xE9 && usage != 0xEA) {
@@ -14784,14 +14990,27 @@ void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
 	if ((modifiers & 0xCC) || (shift && ctrl)) {
 		return;
 	}
+	#ifdef FEATURE_CORE2_AUDIO
+	if (ctrl) return;
+	const AudioVolumeTarget target = AudioVolumeTarget::Sidetone;
+	#else
 	const AudioVolumeTarget target = ctrl ? AudioVolumeTarget::Microphone :
 	    shift ? AudioVolumeTarget::Sidetone : AudioVolumeTarget::Playback;
+	#endif
 	if (usage == 0xE2) {
 		set_audio_volume(target, audio_volume(target), !audio_muted(target));
 	} else {
+		#ifdef FEATURE_CORE2_AUDIO
+		const int level = constrain(audio_volume(target) + (usage == 0xE9 ? 4 : -4), 0, 100);
+		#else
 		const int level = step_audio_volume(audio_volume(target), usage == 0xE9);
+		#endif
 		set_audio_volume(target, level, false);
 	}
+	#if defined(FEATURE_CORE2_AUDIO) && defined(FEATURE_DISPLAY)
+	core2_audio_message.store(configuration.sidetone_volume |
+	    (configuration.sidetone_muted ? 128 : 0));
+	#endif
 }
 
 #if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
@@ -14814,6 +15033,12 @@ bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 	} else {
 		return false;
 	}
+	#ifdef FEATURE_CORE2_AUDIO
+	if (target != AudioVolumeTarget::Sidetone) {
+		port->println(F("Error: Core2 supports SIDETONE only; USB audio is unavailable"));
+		return true;
+	}
+	#endif
 	String value = separator < 0 ? "" : command.substring(separator + 1);
 	value.trim();
 	int level = audio_volume(target);
@@ -14846,7 +15071,11 @@ bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 	print_audio_volumes(port);
 	return true;
 }
+#endif
+#endif
 
+#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+#if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
 bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 	command.trim();
 	if (command != "MIC" && !command.startsWith("MIC ")) {
@@ -15048,8 +15277,13 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 	if (userinput.startsWith("WIFI ")) { cli_wifi(port_to_use, userinputNoUpper.substring(5)); return; }
  else { userinput.toUpperCase();}
 #endif
-	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+	#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 		if (cli_audio_volume(port_to_use, userinput)) { return; }
+	#endif
+	#ifdef FEATURE_M5STACK_CORE2
+		if (cli_core2_port_a(port_to_use, userinput)) { return; }
+	#endif
+	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 		if (cli_midi(port_to_use, userinput)) { return; }
 		if (cli_mic(port_to_use, userinput)) { return; }
 		if (userinput == "I2CTEST" || userinput.startsWith("I2CTEST ")) {
@@ -19805,6 +20039,9 @@ void display_heading(void) {
 	void init_ESP32_GPIO_key_pins(void) {
 			// Setup CPU side GPIO interrupts for paddle pins
 			gpio_install_isr_service(0);
+			#ifdef FEATURE_M5STACK_CORE2
+			if (!core2_port_a_output) {
+			#endif
 			gpio_set_direction((gpio_num_t) paddle_left, GPIO_MODE_INPUT);
 			gpio_set_pull_mode((gpio_num_t) paddle_left, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
 			gpio_set_intr_type((gpio_num_t) paddle_left, GPIO_INTR_ANYEDGE);
@@ -19816,11 +20053,16 @@ void display_heading(void) {
 			gpio_isr_handler_add((gpio_num_t) paddle_right, right_paddle_intr_handler, (void *)(gpio_num_t) paddle_right);
 			paddle_left_state = gpio_get_level((gpio_num_t) paddle_left);
 			paddle_right_state = gpio_get_level((gpio_num_t) paddle_right);
+			#ifdef FEATURE_M5STACK_CORE2
+			} else {
+				paddle_left_state = paddle_right_state = true;
+			}
+			#endif
 
 			#ifdef FEATURE_STRAIGHT_KEY
 				// Setup CPU side GPIO interrupt for straight key
 				gpio_set_direction((gpio_num_t) pin_straight_key, GPIO_MODE_INPUT);
-				gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);  // no pullup on pin 35
+				gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);
 				gpio_set_intr_type((gpio_num_t) pin_straight_key, GPIO_INTR_ANYEDGE);
 				gpio_isr_handler_add((gpio_num_t) pin_straight_key, straight_key_intr_handler, (void *)(gpio_num_t) pin_straight_key);
 				straight_key_state = gpio_get_level((gpio_num_t) pin_straight_key);
@@ -19983,7 +20225,125 @@ void display_heading(void) {
 #endif
 //---------------------------------------------------------------------
 
+#ifdef FEATURE_M5STACK_CORE2
+void load_core2_port_a_mode() {
+	Preferences settings;
+	if (!settings.begin("keyer-core2", false)) {
+		debug_serial_port->println(F("Error: Core2 Port A settings could not be opened"));
+		ESP_ERROR_CHECK(ESP_FAIL);
+	}
+	const uint8_t mode = settings.getUChar("porta", CORE2_PORT_A_OUTPUT_DEFAULT);
+	const uint8_t reversed = settings.getUChar("porta-reverse", CORE2_PORT_A_REVERSED_DEFAULT);
+	settings.end();
+	if (mode > 1 || reversed > 1) {
+		debug_serial_port->println(F("Error: invalid saved Core2 Port A mode"));
+		ESP_ERROR_CHECK(ESP_FAIL);
+	}
+	core2_port_a_output = core2_port_a_saved_output = mode != 0;
+	core2_port_a_reversed = core2_port_a_saved_reversed = reversed != 0;
+	current_tx_key_line = tx_key_line_1;
+	configuration.current_ptt_line = ptt_tx_1;
+}
+
+#if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
+bool cli_core2_port_a(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	const int separator = command.indexOf(' ');
+	if ((separator < 0 ? command : command.substring(0, separator)) != "PORTA") return false;
+	String value = separator < 0 ? "" : command.substring(separator + 1);
+	value.trim();
+	if (value.length()) {
+		if (value != "PADDLES" && value != "OUTPUT" && value != "REVERSE") {
+			port->println(F("Error: use PORTA [PADDLES|OUTPUT|REVERSE]"));
+			return true;
+		}
+		if (value != "REVERSE" && (ptt_line_activated || key_state)) {
+			port->println(F("Error: stop transmitting before saving Port A mode"));
+			return true;
+		}
+		Preferences settings;
+		if (!settings.begin("keyer-core2", false)) {
+			port->println(F("Error: Core2 Port A settings could not be opened"));
+			return true;
+		}
+		const bool output = value == "OUTPUT";
+		const bool reverse = value == "REVERSE";
+		const bool reversed = !core2_port_a_saved_reversed;
+		const size_t written = reverse ?
+		    settings.putUChar("porta-reverse", reversed ? 1 : 0) :
+		    settings.putUChar("porta", output ? 1 : 0);
+		settings.end();
+		if (written != 1) {
+			port->println(F("Error: Core2 Port A mode was not saved"));
+			return true;
+		}
+		if (reverse) {
+			core2_port_a_reversed = core2_port_a_saved_reversed = reversed;
+			if (core2_port_a_output) {
+				keyer_output_write(33, core2_port_a_key_active ? tx_key_line_active_state : tx_key_line_inactive_state);
+				keyer_output_write(32, core2_port_a_ptt_active ? ptt_line_active_state : ptt_line_inactive_state);
+			}
+		}
+		else core2_port_a_saved_output = output;
+	}
+	port->printf("\r\nPORTA active %s; saved %s; polarity active GND on %s, saved GND on %s%s\r\n",
+	    core2_port_a_output ? "OUTPUT" : "PADDLES",
+	    core2_port_a_saved_output ? "OUTPUT" : "PADDLES",
+	    core2_port_a_reversed ? "RX" : "TX",
+	    core2_port_a_saved_reversed ? "RX" : "TX",
+	    core2_port_a_output != core2_port_a_saved_output ||
+	    core2_port_a_reversed != core2_port_a_saved_reversed ? "; reboot to apply" : "");
+	return true;
+}
+#endif
+
+void initialize_core2_board() {
+	auto board_config = M5.config();
+	board_config.fallback_board = m5::board_t::board_M5StackCore2;
+	#ifdef FEATURE_CORE2_AUDIO
+		board_config.internal_spk = true;
+	#else
+		board_config.internal_spk = false;
+	#endif
+	board_config.internal_mic = false;
+	board_config.internal_imu = false;
+	board_config.internal_rtc = false;
+	board_config.external_display_value = 0;
+	board_config.output_power = false;
+	M5.begin(board_config);
+	if (M5.getBoard() != m5::board_t::board_M5StackCore2 || !lcd.touch()) {
+		debug_serial_port->println(F("Error: Core2 display/touch initialization failed"));
+		ESP_ERROR_CHECK(ESP_FAIL);
+	}
+	lcd.setRotation(LCD_ROTATION);
+	if (lcd.width() != 320 || lcd.height() != 240) {
+		debug_serial_port->println(F("Error: Core2 display must be 320x240 in landscape"));
+		ESP_ERROR_CHECK(ESP_FAIL);
+	}
+	lcd.setBrightness(128);
+	#ifdef FEATURE_CORE2_AUDIO
+		static_assert(CORE2_SPEAKER_VOLUME >= 0 && CORE2_SPEAKER_VOLUME <= 255);
+		auto speaker_config = M5.Speaker.config();
+		speaker_config.sample_rate = 48000;
+		speaker_config.dma_buf_len = 64;
+		speaker_config.dma_buf_count = 4;
+		speaker_config.task_priority = 3;
+		M5.Speaker.config(speaker_config);
+		M5.Speaker.setVolume(CORE2_SPEAKER_VOLUME);
+		if (!M5.Speaker.begin()) {
+			debug_serial_port->println(F("Error: Core2 speaker initialization failed"));
+			ESP_ERROR_CHECK(ESP_FAIL);
+		}
+	#endif
+}
+#endif
+
 void initialize_pins() {
+	#ifdef FEATURE_M5STACK_CORE2
+		// Board detection/power setup must finish before configuring radio outputs.
+		initialize_core2_board();
+		load_core2_port_a_mode();
+	#endif
 #if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 	#if defined(FEATURE_MCP23017_EXPANDER)
 		init_MCP23017();  // pin interrupts used on the expander, not local io pins.
@@ -20131,7 +20491,7 @@ void initialize_pins() {
 	#endif //FEATURE_PTT_INTERLOCK
 
 	#if defined(FEATURE_STRAIGHT_KEY) && !defined(USE_KEY_PIN_INTERRUPTS)
-		pinMode(pin_straight_key,INPUT_PULLUP);
+		pinMode(pin_straight_key, INPUT_PULLUP);
 		if (STRAIGHT_KEY_ACTIVE_STATE == HIGH){
 			digitalWrite (pin_straight_key, LOW);
 		} else {
@@ -20821,6 +21181,9 @@ void check_eeprom_for_initialization(){
 	if (read_settings_from_eeprom()) {
 	 initialize_eeprom();
 	}
+	#ifdef FEATURE_CORE2_AUDIO
+		apply_audio_levels();
+	#endif
 }
 
 //---------------------------------------------------------------------
@@ -21137,7 +21500,7 @@ void keyboard_connected_handler() {
 
 // Consumer keys are the special media keys on most modern keyboards (mute/etc.)
 void ckb(void *cbdata, int key) {
-		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 			if (cbdata && (key == 0xE2 || key == 0xE9 || key == 0xEA)) {
 				KeyInfo event = {};
 				event.consumer_usage = static_cast<uint16_t>(key);
@@ -21559,7 +21922,11 @@ void initialize_display() {
 		} else {
 			#ifdef FEATURE_TFT_DISPLAY
 				lcd.setTextDatum(SCROLL_BOX_CENTER_DATUM);
+				#ifdef FEATURE_M5STACK_CORE2
+					lcd.setFreeFont(FMB12);
+				#else
 				lcd.setFreeFont(SCROLL_BOX_FONT);
+				#endif
 				//lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1+(FONT_HEIGHT/4), GFXFF);
 				lcd.drawString("K3NG Keyer", SCROLL_BOX_CENTER, SCROLL_BOX_ROW1, GFXFF);
 				#ifdef FEATURE_BT_KEYBOARD
@@ -21652,8 +22019,13 @@ void popup(bool show)
 {
 	#ifdef FEATURE_TFT_DISPLAY
 		if (!show && popup_active) {  // remove popup window unless it is a repeat key
-			lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
-			lcd.resetViewport();
+			#ifdef FEATURE_M5STACK_CORE2
+				lcd.clearClipRect();
+				lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+			#else
+				lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+				lcd.resetViewport();
+			#endif
 			lcd.setFreeFont(TFT_FONT_MEDIUM);
 			lcd_scroll_drawn_row = 0;  // box was blanked; redraw all scroll text
 			lcd_scroll_drawn_col = 0;
@@ -21666,14 +22038,43 @@ void popup(bool show)
 		}
 		// draw the popup window and post the text
 		//debug_serial_port->println(F("popup on"));
-		lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+		#ifdef FEATURE_M5STACK_CORE2
+			lcd.setClipRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+		#else
+			lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+		#endif
 		popup_active = true;
-		lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+		#ifdef FEATURE_M5STACK_CORE2
+			lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+		#else
+			lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+		#endif
 		lcd.setTextWrap(true,true);
+		#ifdef FEATURE_M5STACK_CORE2
+		lcd.setFreeFont(FMB12);
+		lcd.setTextDatum(TL_DATUM);
+		lcd.setTextColor(TFT_WHITE, TFT_BLUE);
+		const int line_height = lcd.fontHeight() + 2;
+		int y = SCROLL_BOX_TOP + 4;
+		String line;
+		for (const char *p = popup_text; ; ++p) {
+			const bool newline = *p == '\n' || *p == '\0';
+			String next = line;
+			if (!newline && *p != '\r') next.concat(*p);
+			if (newline || lcd.textWidth(next) > SCROLL_BOX_WIDTH - 8) {
+				lcd.drawString(line, SCROLL_BOX_CENTER - lcd.textWidth(line)/2, y, GFXFF);
+				y += line_height;
+				line = "";
+			}
+			if (!*p) break;
+			if (*p != '\n' && *p != '\r') line.concat(*p);
+		}
+		#else
 		lcd.setCursor(SCROLL_BOX_LEFT_SIDE,SCROLL_BOX_TOP);
 		lcd.setFreeFont(TFT_FONT_MEDIUM);
 		lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 		lcd.print(popup_text);
+		#endif
 		//lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
 		//lcd.frameViewport(TFT_GREEN, 3);
 		//lcd.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -21716,26 +22117,31 @@ void create_buttons() {
 		#ifndef TOUCH_BUTTON_16
 
 			// All touch displays have at least 5 usable keys and a CW Scroll Box touch zone
-			#if defined(TFT_320_480)
+			#if defined(FEATURE_M5STACK_CORE2)
+				for (int b = 0; b < BUTTONS_PER_ROW; ++b) {
+					btn[b].p_btn.initButtonUL(&lcd, ba + b * bs, br, bw, bh, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				}
+				btn[3].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, 1);
+			#elif defined(TFT_320_480)
 				ba = 2;
 				bs = bw + 10;  // start of next button left edge
 				lcd.setFreeFont(BUTTON_FONT);
-				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, GFXFF);  // library modified to ignore text size
+				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, 1);
 			#else
 				ba = 1;
 				bs = bw + 4;  // start of next button left edge
 				lcd.setFreeFont(BUTTON_FONT);
-				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, GFXFF);  // library modified to ignore text size
+				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, 1);
 			#endif
 		#else
 			ba = 1;
@@ -21773,6 +22179,14 @@ void create_buttons() {
 // For rows, need to calculate the row nummber (mod 4) then assign the group of 4 values 0-3 for all 4 groups of 4
 void initialize_buttons() {
 	#ifdef FEATURE_TOUCH_DISPLAY
+		#ifdef FEATURE_M5STACK_CORE2
+		for (int i = 0; i < NUM_KEYS - 1; ++i) {
+			if (key[i].btn_idx == 0) {
+				snprintf(key[i].text_off, sizeof(key[i].text_off), "%u/%u", key[i].row + 1, NUM_BUTTON_ROWS);
+				strcpy(key[i].text_on, key[i].text_off);
+			}
+		}
+		#endif
 		int i, b;
 		#ifndef TOUCH_BUTTON_16
 		int r = 0;
@@ -21968,10 +22382,13 @@ void process_buttons() { // (uint8_t button_ID) {
 			}
 		}
 
+		if (key_ID == 254) return;
+
 		// F-Key (always btn_idx == 0) cycles through rows of action buttons - button_row is the top dawg
 		// if TOUCH_BUTTON_16 is set then there is only 1 row and Fx keys are not used
 		#ifndef TOUCH_BUTTON_16
 			if (key[key_ID].btn_idx == 0) {  // F1, F2, F3, etc are always touch btn0
+				last_active_time = millis();
 				button_row++;
 				if (button_row >= NUM_BUTTON_ROWS) {
 					button_row = 0;
@@ -22043,6 +22460,24 @@ void process_buttons() { // (uint8_t button_ID) {
 }
 
 // Detects if a button is pressed and assign a button ID to it.
+#ifdef FEATURE_M5STACK_CORE2
+bool read_core2_touch(uint16_t *x, uint16_t *y) {
+	uint16_t raw_x, raw_y;
+	if (!lcd.getTouchRaw(&raw_x, &raw_y)) return false;
+	// The three printed panel buttons occupy the strip below the 240-pixel LCD.
+	if (raw_y >= 240 && raw_x < 320) {
+		const uint8_t button = raw_x * 3 / 320;
+		*x = 1 + button * (BUTTON_WIDTH + 4) + BUTTON_WIDTH / 2;
+		*y = BUTTON_ROW + BUTTON_HEIGHT / 2;
+	} else {
+		lcd.convertRawXY(&raw_x, &raw_y);
+		*x = raw_x;
+		*y = raw_y;
+	}
+	return true;
+}
+#endif
+
 #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_RES_TOUCH) && \
     defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
@@ -22130,6 +22565,9 @@ bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
 						}
 						if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);
 					#endif
+					#ifdef FEATURE_M5STACK_CORE2
+						pressed = read_core2_touch(&t_x, &t_y);
+					#endif
 
 					#ifdef USE_RES_TOUCH
 						//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex							
@@ -22170,6 +22608,9 @@ bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
 										tp.read();
 										pressed = tp.isTouched;
 									#endif
+									#ifdef FEATURE_M5STACK_CORE2
+										pressed = read_core2_touch(&t_x, &t_y);
+									#endif
 
 									#ifdef USE_RES_TOUCH
 										//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
@@ -22185,7 +22626,11 @@ bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
 										//}
 									#endif
 
-									duration += (millis() - tpTime);      // add each touch to total duration
+									#ifdef FEATURE_M5STACK_CORE2
+										duration = millis() - tpTime;
+									#else
+										duration += (millis() - tpTime);      // add each touch to total duration
+									#endif
 
 									//debug_serial_port->printf("Touch Event: x:%d y:%d pressed:%d  duration:%lu\n", t_x, t_y, pressed, duration);
 
@@ -23370,6 +23815,9 @@ void update_led_ring(){
 
 //---------------------------------------------------------------------
 int paddle_pin_read(int pin_to_read) {
+	#ifdef FEATURE_M5STACK_CORE2
+		if (core2_port_a_output && (pin_to_read == paddle_left || pin_to_read == paddle_right)) return HIGH;
+	#endif
 	#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
 		read_io_handler();
 	#endif
@@ -26252,12 +26700,15 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 		}
 	#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 		#ifdef FEATURE_M5STACK_CORE2
-				M5.Speaker.tone(frequency, configuration.hz_sidetone);
-				myDelay(duration_ms);
-				if (M5.Speaker.isPlaying(0))
-				{
-						M5.Speaker.stop();
+				(void)sidetone_line_pin_num;
+				#ifdef FEATURE_CORE2_AUDIO
+				if (!M5.Speaker.tone(frequency, duration_ms ? duration_ms : UINT32_MAX, 0, true)) {
+					debug_serial_port->println(F("Error: Core2 tone playback failed"));
 				}
+				#else
+				(void)frequency;
+				#endif
+				if (duration_ms) myDelay(duration_ms);
 		#elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 			 //debug_serial_port->printf("pin:%d Freq:%d dur:%lu", sidetone_line_pin_num, frequency, duration_ms);
 			 tone(sidetone_line_pin_num, frequency, duration_ms);
@@ -26277,10 +26728,10 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 			wm8960_audio_stop_tone();
 		#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 			#ifdef FEATURE_M5STACK_CORE2
-				if (M5.Speaker.isPlaying(0))
-				{
-						M5.Speaker.stop();
-				}
+				(void)sidetone_line_pin_num;
+				#ifdef FEATURE_CORE2_AUDIO
+					M5.Speaker.stop(0);
+				#endif
 			#elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 				noTone(sidetone_line_pin_num);
 			#endif
@@ -26693,8 +27144,12 @@ void tft_backlight(int state) {
 		static bool state_last = 254;
 
 		if (!configuration.backlight_timeout_disable && (state != state_last)) { // do nothing effectively disabling timeout
-			if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
-			else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
+			#ifdef FEATURE_M5STACK_CORE2
+				lcd.setBrightness(state ? 128 : 0);
+			#else
+				if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
+				else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
+			#endif
 			state_last = state;
 			#ifdef DEBUG_BACKLIGHT
 				debug_serial_port->printf("tft_backlight: Timeout disabled=%d  state=%d\n", configuration.backlight_timeout_disable, state);
@@ -26825,7 +27280,7 @@ void tft_backlight(int state) {
 							else inf = bt_queuepop();							
 							#endif
 						#endif
-						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						#if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 							if (inf.consumer_usage) {
 								audio_consumer_key(inf.consumer_usage, inf.keys[0]);
 								continue;
@@ -27518,10 +27973,8 @@ void initialize_st7789_lcd()
 	void initialize_TFT_display(void)
 	{
 		#ifdef FEATURE_M5STACK_CORE2
-			//lcd.setRotation(1);
-			//lcd.invertDisplay(true);
-			//initialize_m5stack_core2();
-			// h and w are defined as 320 and 240 globally.  Crashes when calling height() or width() functions.
+			lcd.setRotation(LCD_ROTATION);
+			lcd.setBrightness(128);
 		#else
 			lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
 			//lcd.invertDisplay(1);
@@ -28395,6 +28848,9 @@ void mainloop(void)
 					#endif
 					check_paddles();
 					service_send_buffer(PRINTCHAR);
+					#ifdef FEATURE_CORE2_AUDIO
+						service_core2_audio_message();
+					#endif
 					service_display();
 				#endif
 

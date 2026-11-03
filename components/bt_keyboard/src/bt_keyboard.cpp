@@ -22,6 +22,7 @@
 
 #define __BT_KEYBOARD__ 1
 #include "bt_keyboard.hpp"
+#include "consumer_audio.hpp"
 extern "C" {
 #include "esp_gap_ble_api.h"
 #include "esp_gap_bt_api.h"
@@ -1417,7 +1418,31 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
                    ESP_BD_ADDR_HEX(bda), esp_hid_usage_str(param->input.usage),
                    param->input.map_index, param->input.report_id, param->input.length);
           ESP_LOG_BUFFER_HEX_LEVEL(TAG, param->input.data, param->input.length, ESP_LOG_DEBUG);
-          bt_keyboard_->push_key(param->input.data, param->input.length);
+          if (param->input.usage == ESP_HID_USAGE_CCONTROL) {
+            size_t count = 0;
+            esp_hid_raw_report_map_t *maps = nullptr;
+            uint8_t pressed = 0;
+            if (esp_hidh_dev_report_maps_get(param->input.dev, &count, &maps) != ESP_OK ||
+                !maps || param->input.map_index >= count ||
+                !decode_consumer_audio(maps[param->input.map_index].data,
+                    maps[param->input.map_index].len, param->input.report_id,
+                    param->input.data, param->input.length, pressed)) {
+              ESP_LOGW(TAG, "Unsupported consumer report map=%u id=%u length=%u",
+                  param->input.map_index, param->input.report_id, unsigned(param->input.length));
+              break;
+            }
+            const uint16_t usages[] = {0xE2, 0xE9, 0xEA};
+            for (unsigned n = 0; n < 3; ++n) {
+              if (!(pressed & (1u << n))) continue;
+              KeyInfo event = {};
+              event.consumer_usage = usages[n];
+              if (xQueueSendToBack(bt_keyboard_->event_queue_, &event, 0) != pdTRUE) {
+                ESP_LOGW(TAG, "Keyboard queue full; consumer audio event dropped");
+              }
+            }
+          } else if (param->input.usage == ESP_HID_USAGE_KEYBOARD) {
+            bt_keyboard_->push_key(param->input.data, param->input.length);
+          }
         }
         break;
       }
@@ -1471,7 +1496,7 @@ void BTKeyboard::hidh_callback(void *handler_args, esp_event_base_t base, int32_
  * @note No blocking occurs if queue is full (timeout = 0)
  */
 void BTKeyboard::push_key(uint8_t *keys, uint8_t size) {
-  KeyInfo inf;
+  KeyInfo inf = {};
   if (size > MAX_KEY_DATA_SIZE) {    
     ESP_LOGW(TAG, "Keyboard event data size bigger than expected: %d\n.", size);
     size = MAX_KEY_DATA_SIZE;
