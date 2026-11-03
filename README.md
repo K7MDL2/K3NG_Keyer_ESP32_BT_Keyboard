@@ -67,7 +67,7 @@ _____________________________________________
  - Sept 2026 have BT Classic and BLE keyboards pairing with receonnection on both ESP32 and Pico2W. The BT Classic keyboard, Logitech K380, pairs with a PIN teh first time, then after, pairs to receonnct, no PIN required so it is reasonably fast.
  
  > [!NOTE]
- > On Pico only, USB sound card, MIDI functionality, encoder+switch, are now working in a test branch [test/pico2w-wm8960-usb-audio](https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/tree/test/pico2w-wm8960-usb-audio).  Compiles with Arduino IDE.
+ > ON November 3, 2026 for Pico only, USB sound card, MIDI functionality, encoder+switch, are now working and compiles with Arduino IDE as before.
 
 - Uses common Waveshare WM8960 module with headphone, speakers and an onboard mic.  Can use as a soundcard for normal audio output. Sidetone is generated locally for zero latency and played into the USB audio output.  USB audio (play and mic) are muted for 7 dit lengths enabling full break-in if your hardware allows it.  Serial terminal commands, BT keyboard volume +/-/Mute keys work and are saved in EEPROM.  Adding touch controls later.  The USB MIDI/Audio/Serial configuration was developed as an overlay over standard libraries in this project https://github.com/pa3gsb/RP2350-SDR-CW-Interface using the Pico SDK.  Thank you to PA3GSB for working that out.  It was applied in this project with changes to make it work under Arduino IDE. The existing MIDI, serial lines, encoder were then wired up to the new USB interfaces.
 
@@ -101,6 +101,11 @@ _____________________________________________
 - One encoder with push switch can be used to control USB Audio Volume, USB mic audio level, VFO tune, Sidetone level and frequency.  Tap the knob to cycle through each function.  Long press to return to VFO tune.  If there is no push switch configured, then the knob controls USB audio out volume.
 
 - When the MCP23017 is enabled, All 6 PTT_TX and 6 TX_Key_line outputs are mapped to MCP23017 expander pins freeing up local GPIO for encoders, serial GPS, and I2S lines for the audio module.  The Paddle and Straight key inputs were already mapped there.
+
+- CW text box scrolling and clear screen perf improvement.
+- Several audio related optimixations for celar tones and voice from mic and PC.
+- Several new serial termina configuration commands for Audio, Mic, and NIDI.
+- Tested MIDI and audio with sdroxide, deskHPSDR, puHPSDR, Thetis on Windows and Linux Mint.
 
 Check out the latest main branch changes at the Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Change-Notes
 
