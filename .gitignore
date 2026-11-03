@@ -144,3 +144,4 @@ components/IST8310/examples/IST8310_get_mag_vector/.vscode/IST8310_get_mag_vecto
 libraries/USB_Host_Shield/examples/max_LCD/.vscode
 libraries/USB_Host_Shield/examples/HID/USBHIDBootKbdAndMouse/.vscode/
 
+main/build/
