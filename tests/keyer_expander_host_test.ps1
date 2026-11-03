@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $main = Get-Content (Join-Path $root 'main\main.cpp') -Raw
 $pins = Get-Content (Join-Path $root 'main\keyer_pin_settings_pico.h') -Raw
-$helpers = [regex]::Match($main, '(?s)#if defined\(ARDUINO_ARCH_RP2040\) && defined\(FEATURE_MCP23017_EXPANDER\)\r?\nuint8_t keyer_output_latches.*?(?=void ptt_key\(\))').Value
+$espPins = Get-Content (Join-Path $root 'main\keyer_pin_settings_esp32_dev.h') -Raw
+$helpers = [regex]::Match($main, '(?s)#if [^\r\n]+\r?\nuint8_t keyer_output_latches.*?(?=void ptt_key\(\))').Value
 if (!$helpers) { throw 'TX/PTT helpers not found' }
 $activeCode = [regex]::Replace($main, '(?m)//.*$', '')
 if ($activeCode -match '\bdigitalWrite\s*\(\s*(?:tx_key_line_[1-6]|ptt_tx_[1-6]|current_tx_key_line|current_tx_ptt_line|configuration\.current_ptt_line)\b') {
@@ -15,8 +16,6 @@ $mock = @'
 #include <cstdio>
 #include <array>
 #include <vector>
-#define ARDUINO_ARCH_RP2040
-#define FEATURE_TFT_PICO_320x480_RES_LCD
 #define FEATURE_STRAIGHT_KEY
 constexpr uint8_t HIGH = 1, LOW = 0, OUTPUT = 1;
 struct Write { uint8_t reg, value; };
@@ -55,7 +54,11 @@ int main() {
   TwoWire &bus = Wire;
   TwoWire &other = Wire1;
 #endif
+#ifdef HARDWARE_ESP32_DEV
+  assert(paddle_left == 0 && paddle_right == 1 && pin_straight_key == 2);
+#else
   assert(paddle_left == 1 && paddle_right == 0 && pin_straight_key == 2);
+#endif
   for (int tx = 0; tx < 6; ++tx) {
     assert(keys[tx] == 103 + tx * 2);
     assert(ptts[tx] == 104 + tx * 2);
@@ -99,8 +102,13 @@ int main() {
   keyer_output_initialize(14,LOW); keyer_output_write(14,HIGH);
   assert(cpu_modes.back()[0] == 14 && cpu_writes.back()[0] == 14);
 #else
+#ifdef HARDWARE_ESP32_DEV
+  assert(tx_key_line_1 == 18 && tx_key_line_2 == 0 && ptt_tx_1 == 0 && ptt_tx_2 == 0);
+  for (int tx = 2; tx < 6; ++tx) assert(keys[tx] == 0 && ptts[tx] == 0);
+#else
   assert(tx_key_line_1 == 0 && ptt_tx_1 == 0);
   for (int tx = 1; tx < 6; ++tx) assert(keys[tx] == 0 && ptts[tx] == 0);
+#endif
   keyer_output_initialize(14,LOW);
   keyer_output_write(14,HIGH);
   keyer_output_initialize(22,HIGH);
@@ -122,17 +130,26 @@ $source = Join-Path $temp 'test.cpp'
 $exe = Join-Path $temp 'test.exe'
 $obj = Join-Path $temp 'test.obj'
 try {
-    Set-Content -LiteralPath $source -Value ($mock + "`n" + $pins + "`n" + $helpers + "`n" + $checks) -Encoding ASCII
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     if (!(Test-Path -LiteralPath $vswhere)) { throw 'Visual Studio C++ tools required' }
     $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if (!$vs) { throw 'Visual Studio C++ tools not found' }
     $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
-    foreach ($defines in @('', '/DFEATURE_MCP23017_EXPANDER', '/DFEATURE_MCP23017_EXPANDER /DUSE_WIRE1')) {
+    foreach ($platform in @('pico', 'esp32')) {
+      $platformPins = if ($platform -eq 'pico') { $pins } else { $espPins }
+      $platformDefines = if ($platform -eq 'pico') {
+          '/DARDUINO_ARCH_RP2040 /DFEATURE_TFT_PICO_320x480_RES_LCD'
+      } else {
+          '/DHARDWARE_ESP32_DEV /DFEATURE_TFT_HOSYOND_320x480_LCD'
+      }
+      Set-Content -LiteralPath $source -Value ($mock + "`n" + $platformPins + "`n" + $helpers + "`n" + $checks) -Encoding ASCII
+      foreach ($options in @('', '/DFEATURE_MCP23017_EXPANDER', '/DFEATURE_MCP23017_EXPANDER /DUSE_WIRE1')) {
+        $defines = "$platformDefines $options"
         & $env:ComSpec /c "call `"$vcvars`" >nul && cl /nologo /std:c++17 /EHsc /W3 $defines /Fo`"$obj`" /Fe`"$exe`" `"$source`""
         if ($LASTEXITCODE -ne 0) { throw "Host compilation failed: $defines" }
         & $exe
         if ($LASTEXITCODE -ne 0) { throw "Host assertions failed: $defines" }
+      }
     }
 } finally {
     foreach ($file in @($source, $exe, $obj)) {

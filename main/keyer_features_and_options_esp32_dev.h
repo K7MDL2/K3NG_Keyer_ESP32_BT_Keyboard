@@ -5,8 +5,8 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "V:K7MDL-2026.9.15"
-#define eeprom_magic_number 46          // you can change this number to have the unit re-initialize EEPROM
+#define CODE_VERSION "V:K7MDL-2026.11.3"
+#define eeprom_magic_number 47          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -175,7 +175,7 @@
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87ts"  // substitute for GPS supplied grid square. This and GPS time will display on status row.
-    #define MAX_TX_PORTS 2  // nunmber of transmitter lines (TX) for TX Select touch button
+    #define MAX_TX_PORTS 6  // number of transmitter lines (TX) for TX Select touch button
 #endif
 
 #if (DISPLAY_TYPE == TFT_320x480_CAP_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_320x480_CAP_LCD)

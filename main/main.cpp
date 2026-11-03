@@ -5158,11 +5158,31 @@ void service_display() {
 //-------------------------------------------------------------------------------------------------------
 
 #ifdef FEATURE_DISPLAY
+byte lcd_scroll_column_pointer = 0;
+byte lcd_scroll_row_pointer = 0;
+byte lcd_scroll_holding_space = 0;
+
+void reset_display_scroll_text() {
+	for (byte row = 0; row < LCD_ROWS; ++row) {
+		lcd_scroll_buffer[row] = "";
+	}
+	lcd_scroll_column_pointer = 0;
+	lcd_scroll_row_pointer = 0;
+	lcd_scroll_holding_space = 0;
+	lcd_scroll_flag = 0;
+	lcd_scroll_buffer_dirty = 1;
+	#ifdef FEATURE_TFT_DISPLAY
+		lcd_scroll_drawn_row = 0;
+		lcd_scroll_drawn_col = 0;
+		lcd_scroll_repaint_row = 0;
+	#endif
+}
+
 void display_scroll_print_char(char charin){
 
-	static byte column_pointer = 0;
-	static byte row_pointer = 0;
-	static byte holding_space = 0;
+	byte &column_pointer = lcd_scroll_column_pointer;
+	byte &row_pointer = lcd_scroll_row_pointer;
+	byte &holding_space = lcd_scroll_holding_space;
 	byte x = 0;
 
 	#ifdef DEBUG_DISPLAY_SCROLL_PRINT_CHAR
@@ -5619,16 +5639,8 @@ void check_ps2_keyboard()
 																#endif
 
 																#ifdef FEATURE_DISPLAY   // clear out the old text on the scrollable portion of display
+																		reset_display_scroll_text();
 																		lcd_center_print_timed("Abort", 0, default_display_msg_delay);
-																		for (uint16_t i = 0; i < (LCD_ROWS); i++) {
-
-																		#if defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
-																				lcd_scroll_buffer[i] = "";
-																				//memset(lcd_scroll_buffer[i], 0, sizeof(lcd_scroll_buffer[i])); // .clear() not on Pico. Maybe use memset(received, 0, sizeof(received))
-																		#else
-																				lcd_scroll_buffer[i].clear();
-																		#endif
-																}
 																#endif
 																break;
 
@@ -7394,7 +7406,7 @@ void check_paddles()
 
 //-------------------------------------------------------------------------------------------------------
 
-#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
 uint8_t keyer_output_latches[2] = {};
 uint8_t keyer_output_directions[2] = {0xFF, 0xFF};
 
@@ -7417,7 +7429,7 @@ bool keyer_expander_register_write(uint8_t reg, uint8_t value) {
 #endif
 
 void keyer_output_write(uint8_t pin, uint8_t state) {
-	#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+	#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
 		if (pin >= 100 && pin <= 115) {
 			const uint8_t port = (pin - 100) / 8;
 			const uint8_t mask = 1u << ((pin - 100) % 8);
@@ -7435,7 +7447,7 @@ void keyer_output_write(uint8_t pin, uint8_t state) {
 }
 
 void keyer_output_initialize(uint8_t pin, uint8_t inactive_state) {
-	#if defined(ARDUINO_ARCH_RP2040) && defined(FEATURE_MCP23017_EXPANDER)
+	#if (defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)) && defined(FEATURE_MCP23017_EXPANDER)
 		if (pin >= 100 && pin <= 115) {
 			const uint8_t port = (pin - 100) / 8;
 			const uint8_t mask = 1u << ((pin - 100) % 8);
@@ -13904,6 +13916,10 @@ void service_command_line_interface(PRIMARY_SERIAL_CLS * port_to_use) {
 				port_to_use->write(incoming_serial_byte);
 			} else {  // escape
 				clear_send_buffer();
+				#ifdef FEATURE_DISPLAY
+					reset_display_scroll_text();
+					lcd_scroll_box_clear();
+				#endif
 				#ifdef FEATURE_MEMORIES
 					play_memory_prempt = 1;
 					repeat_memory = 255;
@@ -19798,6 +19814,8 @@ void display_heading(void) {
 			gpio_set_pull_mode((gpio_num_t) paddle_right, GPIO_PULLUP_ONLY);  // no internal pullup on pin 34,35
 			gpio_set_intr_type((gpio_num_t) paddle_right, GPIO_INTR_ANYEDGE);
 			gpio_isr_handler_add((gpio_num_t) paddle_right, right_paddle_intr_handler, (void *)(gpio_num_t) paddle_right);
+			paddle_left_state = gpio_get_level((gpio_num_t) paddle_left);
+			paddle_right_state = gpio_get_level((gpio_num_t) paddle_right);
 
 			#ifdef FEATURE_STRAIGHT_KEY
 				// Setup CPU side GPIO interrupt for straight key
@@ -19805,6 +19823,7 @@ void display_heading(void) {
 				gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);  // no pullup on pin 35
 				gpio_set_intr_type((gpio_num_t) pin_straight_key, GPIO_INTR_ANYEDGE);
 				gpio_isr_handler_add((gpio_num_t) pin_straight_key, straight_key_intr_handler, (void *)(gpio_num_t) pin_straight_key);
+				straight_key_state = gpio_get_level((gpio_num_t) pin_straight_key);
 			#endif
 			// Now any pin state change will call the handler.
 	}
@@ -19894,7 +19913,7 @@ void display_heading(void) {
 		// could be bus 1 if board has a touch controller. else normally bus 0
 		//debug_serial_port->println("MCP23107: Start setup");
 		mcp23017.init();
-		#if defined(ARDUINO_ARCH_RP2040)
+		#if defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)
 			keyer_expander_register_write(0x00, 0xFF);
 			keyer_expander_register_write(0x01, 0xFF);
 		#endif
@@ -19905,7 +19924,7 @@ void display_heading(void) {
 		#ifdef FEATURE_STRAIGHT_KEY
 			mcp23017.pinMode(pin_straight_key, INPUT_PULLUP, false);
 		#endif
-		#if defined(ARDUINO_ARCH_RP2040)
+		#if defined(ARDUINO_ARCH_RP2040) || defined(HARDWARE_ESP32_DEV)
 			keyer_output_latches[0] = keyer_output_latches[1] = 0;
 			keyer_output_directions[0] = keyer_output_directions[1] = 0xFF;
 			const uint8_t input_interrupts = (1u << paddle_left) |
@@ -20874,6 +20893,9 @@ void initialize_gps_port(void) {
 					debug_serial_port->print(F("Intialized GPS Serial Port on Pin ")); debug_serial_port->println(GPS_RX_PIN);
 				#endif
 			#else
+				if (gps_serial_port.setRxBufferSize(1024) != 1024) {
+					debug_serial_port->println(F("Error: GPS RX buffer could not be set to 1024 bytes"));
+				}
 				gps_serial_port.begin(configuration.gps_baud, SERIAL_8N1, GPS_RX_PIN, -1, GPS_SERIAL_INVERT);
 			#endif
 			gps_serial_port.flush();  // move the read string queue char ptr to the front so the next read works
@@ -22948,6 +22970,7 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key)
 			repeat_memory = 255;
 			#endif
 			#ifdef FEATURE_DISPLAY
+			reset_display_scroll_text();
 			lcd_center_print_timed("Abort", 0, default_display_msg_delay);
 			#endif
 			return;

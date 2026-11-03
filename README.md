@@ -653,9 +653,34 @@ tools installed, run `.\tests\wm8960_midi_host_test.ps1`; it checks debug
 options both enabled and disabled, control-change reporting, packet routing, source coexistence,
 EEPROM configuration byte round-trips, and USB failure recovery.
 
-### Pico MCP23017 TX/PTT outputs
+### Shared ESP32 display, GPS and key-input improvements
+
+The ESP32 build uses the same incremental TFT scrolling, timed-message expiry,
+GPS clock redraw, five-second GPS freshness check, sixty-second location
+holdover and five-minute grid-change beep holdoff as the Pico build. Legacy
+text-LCD redraw remains separate from the TFT path.
+Touch, keyboard and terminal aborts reset the scroll text and its insertion
+cursor, so new text starts at column 1, row 1 without a pending leading space.
+
+ESP32 direct-GPIO paddles and straight key sample their initial levels after
+interrupt setup, including a key held at startup. GPIO34/35 still require
+external pull-ups. GPS UART reception uses a 1024-byte buffer configured before
+the port starts to accommodate deferred GPS processing while transmitting.
+
+These changes do not enable WM8960, USB audio or USB MIDI on ESP32.
+Run `.\tests\esp32_shared_host_test.ps1` on Windows with Visual Studio C++
+tools to test initial input states and edges, GPS freshness/holdover boundaries,
+and incremental TFT character drawing and row repainting.
+
+### Pico and ESP32 MCP23017 TX/PTT outputs
 
 With `FEATURE_MCP23017_EXPANDER`, all six TX/PTT pairs use the expander:
+
+Both platform pin-settings headers use output identifiers `100 + MCP pin`.
+With the feature disabled, their existing direct-GPIO assignments are retained.
+ESP32 expander enablement remains in its selected display profile in
+`main/keyer_features_and_options_esp32_dev.h`; mappings are in
+`main/keyer_pin_settings_esp32_dev.h`.
 
 | Transmitter | TX key MCP pin | PTT MCP pin |
 |---|---|---|
