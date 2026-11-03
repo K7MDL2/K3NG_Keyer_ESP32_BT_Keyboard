@@ -6,7 +6,69 @@
 #endif
 
 #define CODE_VERSION "V:K7MDL-2026.10.30"
-#define eeprom_magic_number 43          // you can change this number to have the unit re-initialize EEPROM
+#ifndef WM8960_MIC_GATE_MODE
+  #define WM8960_MIC_GATE_MODE 3 // 0=always, 1=manual local PTT, 2=external feedback, 3=either
+#endif
+#ifndef WM8960_PTT_FEEDBACK_CHANNEL
+  #define WM8960_PTT_FEEDBACK_CHANNEL 10 // SDRoxide PTT LED feedback; 0 disables matching, otherwise 1..16
+#endif
+#ifndef WM8960_PTT_FEEDBACK_TYPE
+  #define WM8960_PTT_FEEDBACK_TYPE 9 // 11=CC, 9=Note On/Off
+#endif
+#ifndef WM8960_PTT_FEEDBACK_NUMBER
+  #define WM8960_PTT_FEEDBACK_NUMBER 18 // Controller or note number; ignored when channel is 0
+#endif
+#if WM8960_MIC_GATE_MODE < 0 || WM8960_MIC_GATE_MODE > 3 || \
+    WM8960_PTT_FEEDBACK_CHANNEL < 0 || WM8960_PTT_FEEDBACK_CHANNEL > 16 || \
+    (WM8960_PTT_FEEDBACK_TYPE != 9 && WM8960_PTT_FEEDBACK_TYPE != 11) || \
+    WM8960_PTT_FEEDBACK_NUMBER < 0 || WM8960_PTT_FEEDBACK_NUMBER > 127
+  #error "Invalid WM8960 microphone gate or PTT feedback configuration"
+#endif
+// Host mic-level feedback (CC) sets the keyer USB mic level, saved to EEPROM.
+// Off by default: SDR apps treat the incoming level as fixed and adjust their own gain.
+#ifndef WM8960_MIC_LEVEL_FEEDBACK_CHANNEL
+  #define WM8960_MIC_LEVEL_FEEDBACK_CHANNEL 0 // 0 disables matching, otherwise 1..16
+#endif
+#ifndef WM8960_MIC_LEVEL_FEEDBACK_CC
+  #define WM8960_MIC_LEVEL_FEEDBACK_CC 23 // Matches the keyer's own mic-level CC
+#endif
+#if WM8960_MIC_LEVEL_FEEDBACK_CHANNEL < 0 || WM8960_MIC_LEVEL_FEEDBACK_CHANNEL > 16 || \
+    WM8960_MIC_LEVEL_FEEDBACK_CC < 0 || WM8960_MIC_LEVEL_FEEDBACK_CC > 127
+  #error "Invalid WM8960 mic level feedback configuration"
+#endif
+// Default MIDI control mode (runtime MIDI-MODE command, saved to EEPROM). Keys, PTT and VFO tune always work.
+// 0=LOCAL: all controls local, no control reports
+// 1=REPORT: all controls local and reported to the PC
+// 2=POD: master volume goes only to the PC (local level stays fixed); the rest stay local and are reported
+#ifndef WM8960_MIDI_CONTROL_MODE
+  #define WM8960_MIDI_CONTROL_MODE 2
+#endif
+#if WM8960_MIDI_CONTROL_MODE < 0 || WM8960_MIDI_CONTROL_MODE > 2
+  #error "Invalid WM8960_MIDI_CONTROL_MODE"
+#endif
+// Analog mic gain ahead of the ADC; lower these if the [MIC] input peak reaches 32768.
+#ifndef WM8960_MIC_BOOST
+  #define WM8960_MIC_BOOST 2 // 0=0 dB, 1=+13 dB, 2=+20 dB, 3=+29 dB
+#endif
+#ifndef WM8960_MIC_PGA
+  #define WM8960_MIC_PGA 33 // 0..63: -17.25 dB + 0.75 dB per step (23 = 0 dB, 33 = +7.5 dB, 63 = +30 dB)
+#endif
+// Optional codec ALC: adjusts the PGA automatically (WM8960_MIC_PGA becomes only the start gain).
+#ifndef WM8960_MIC_ALC
+  #define WM8960_MIC_ALC 0 // 0=off (fixed gain), 1=on
+#endif
+#ifndef WM8960_MIC_ALC_TARGET
+  #define WM8960_MIC_ALC_TARGET 7 // 0..15: -22.5 dBFS + 1.5 dB per step (7 = -12 dBFS)
+#endif
+#ifndef WM8960_MIC_ALC_MAX_GAIN
+  #define WM8960_MIC_ALC_MAX_GAIN 4 // 0..7: -12 dB + 6 dB per step (4 = +12 dB PGA)
+#endif
+#if WM8960_MIC_BOOST < 0 || WM8960_MIC_BOOST > 3 || WM8960_MIC_PGA < 0 || WM8960_MIC_PGA > 63 || \
+    (WM8960_MIC_ALC != 0 && WM8960_MIC_ALC != 1) || WM8960_MIC_ALC_TARGET < 0 || WM8960_MIC_ALC_TARGET > 15 || \
+    WM8960_MIC_ALC_MAX_GAIN < 0 || WM8960_MIC_ALC_MAX_GAIN > 7
+  #error "Invalid WM8960 microphone gain configuration"
+#endif
+#define eeprom_magic_number 44          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
@@ -121,7 +183,7 @@
     #define GPS_SERIAL_INVERT 0   // invert the RX_pin signal if needed.  Common if connecting without buffers.
     //#define GPS_TEST  // uses nmea.h to provide simulated NMEA for CN87 or EM10 grids
     #define DEFAULT_GRID "CN87xs"  // substitute for GPS supplied grid square. This and GPS time will display on status row. Must be between 4 and 8 chars
-    #define MAX_TX_PORTS 1  // nunmber of transmitter lines (TX) for TX Select touch button
+    #define MAX_TX_PORTS 6  // nunmber of transmitter lines (TX) for TX Select touch button
     //#define OPTION_CW_DECODER_GOERTZEL_AUDIO_DETECTOR  // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder 
     //#define FEATURE_CW_DECODER              // https://github.com/k3ng/k3ng_cw_keyer/wiki/385-Feature:-CW-Decoder  
 #endif

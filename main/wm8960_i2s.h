@@ -13,7 +13,18 @@ uint32_t received_frames();
 uint32_t transmitted_frames();
 uint32_t underruns();
 uint32_t max_service_gap_us();
+uint32_t take_window_gap_us();
 uint32_t queued_frames();
+void pause_for_flash();
+void resume_after_flash();
+uint32_t flash_pause_count();
+uint32_t flash_overrun_count();
+uint32_t gap_underrun_count();
+uint32_t lead_underrun_count();
+uint32_t last_underrun_core_num();
+void lead_underrun_detail(uint32_t *distance, bool *was_paused,
+                          uint32_t *since_resume_us,
+                          uint32_t *head_from_resume);
 }
 
 #endif

@@ -134,7 +134,11 @@ EEPROM magic is now 43 for Pico and 46 for ESP32 because the shared structure
 changed. **The first boot resets saved settings and initializes CW memories.**
 Bluetooth pairing/reconnection settings may need to be established again.
 Changes use the normal deferred EEPROM save when idle; allow at least the
-configured `eeprom_write_time_ms` before removing power.
+configured `eeprom_write_time_ms` before removing power. On Pico WM8960 builds
+a save also waits until settings have been unchanged for 2 s (so a slider or
+encoder sweep is one flash write), and the speaker output is faded out before
+the ~47 ms flash write, which stops both cores, so the stall is a brief
+silence instead of a pop.
 
 With `FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT` enabled, the Pico
 WM8960 build runs the terminal on **USB CDC2**, while WinKey stays on USB CDC1. Non-audio builds retain the UART `Serial1` mapping.
@@ -399,10 +403,37 @@ Do not use `TOGGLE` with Thetis.
 
 Terminal commands (CDC2 when configured) are:
 
-- `\:MIDI`: show connection, PTT mode, queue, and packet/error counters.
+- `\:MIDI`: show connection, PTT mode, control mode, queue, and packet/error counters.
 - `\:MIDI-PTT [OFF|ONOFF|TOGGLE]`: show or change the saved PTT mode.
   Release PTT and let queued events drain before changing it.
+- `\:MIDI-MODE [LOCAL|REPORT|POD]`: show or change the saved control mode (below).
 - `\:MIDIWHEEL +` / `\:MIDIWHEEL -`: send one wheel step for host mapping/testing.
+
+MIDI control modes decide what the keyer's own controls (encoder, BT keyboard
+media keys, terminal commands) do. Keys, PTT, and the VFO wheel work in every
+mode, and the WM8960 sidetone always plays locally.
+
+| Mode | Master volume, USB mic level | Speed, sidetone freq/level | Reported to PC (CC) |
+|------|------------------------------|----------------------------|---------------------|
+| `LOCAL` | local | local | nothing |
+| `REPORT` | local | local | all |
+| `POD` (default) | **PC only, mirrors PC** | local, **PC can set** | all |
+
+`POD` makes the keyer a control pod: set the local levels in `LOCAL` or
+`REPORT`, then switch to `POD`. Master volume (CC 7) and USB mic (CC 23)
+changes then go only to the PC, starting from the local levels, while the
+keyer's own WM8960 playback and mic gains stay fixed. When the PC sends CC 7 or
+CC 23 on channel 10, the keyer mirrors that value (so the next knob step
+continues from the PC level) without changing local gain or sending it back.
+The PC can also set CW speed (CC 21, Thetis scaling; value 0 ignored),
+sidetone level (CC 22) and sidetone frequency (CC 3, 0..127 = 300..1000 Hz)
+on channel 10. These update the keyer and its WM8960 sidetone, are saved to
+EEPROM, and are not sent back. `LOCAL` and `REPORT` ignore all PC control values.
+The PC-side levels are not saved; they restart from the local levels after a
+reboot or mode change. `\:AUDIO` also shows them in `POD` mode. USB MIDI has no
+"port open" signal, so the mode is a manual setting. Set the build default with
+`WM8960_MIDI_CONTROL_MODE` (0=LOCAL, 1=REPORT, 2=POD). Adding this saved setting
+changed the EEPROM layout, so the first boot of this build resets saved settings.
 
 `wm8960_midi_wheel_step(int direction)` supplies the wheel API; positive
 direction sends 127 and negative sends 1, matching the source implementation
@@ -456,12 +487,106 @@ Existing local speed/LCD behavior is unchanged. No EEPROM layout change is
 needed. This CC21 encoding targets Thetis's absolute CW Speed action;
 other hosts need an equivalent mapping.
 
+### USB microphone PTT gate and host feedback
+
+`WM8960_MIC_GATE_MODE` in `main/keyer_features_and_options_pico.h`
+selects microphone gating at build time:
+
+| Value | Microphone permitted when |
+|---|---|
+| 0 | Always (legacy mode, including legacy incoming MIDI PTT muting) |
+| 1 | Manual local PTT is active |
+| 2 | Selected external MIDI PTT feedback is active |
+| 3 (default) | Either manual local PTT or selected external feedback is active |
+
+Manual local PTT includes Ctrl-U, touch/terminal PTT commands, and the PTT
+input, not automatic CW/tune PTT. Tone/key monitor muting and its release
+hold still take precedence, as do the existing microphone mute/level controls.
+The host USB capture stream remains connected and receives silence while gated.
+This changes the default from always-open capture; choose mode 0 for an
+external transmitter whose PTT cannot be observed by the keyer.
+
+SDRoxide PTT LED feedback defaults to channel 10, Note 18:
+`WM8960_PTT_FEEDBACK_CHANNEL=10`, `WM8960_PTT_FEEDBACK_TYPE=9`,
+`WM8960_PTT_FEEDBACK_NUMBER=18`. Captured feedback uses velocity 127 for
+PTT on and zero for off. Select **Keyer MIDI** as SDRoxide's **Feedback to**
+destination and enable the PTT LED option. Set the feedback channel to 0
+to disable matching. `DEBUG_MIDI_MESSAGES` remains enabled for testing.
+Toggle SDRoxide's PTT on and off and record the `[MIDI RX]` lines on CDC2
+(DTR enabled). Traces include channel, type, controller/note, and value, even
+for packets subsequently suppressed as immediate echoes. Trace printing is
+deferred while key/PTT sources are active.
+
+For other mappings, set `WM8960_PTT_FEEDBACK_CHANNEL` to the message's
+one-based channel (1..16), `WM8960_PTT_FEEDBACK_TYPE` to 11 for CC or 9 for
+Note On/Off, and `WM8960_PTT_FEEDBACK_NUMBER` to its controller/note.
+Nonzero means active; zero or Note Off means inactive. Matched feedback is
+consumed rather than echoed, and is matched before echo suppression because
+host state reports can be byte-identical to the keyer's own PTT message.
+Hosts that loop the keyer's own messages back (MIDI thru) are not supported
+as feedback sources. Disconnect, suspend, and reconnect clear its state.
+Other host value encodings need an explicit decoder once captured.
+Default mode 3 opens the mic for manual local PTT or this external feedback.
+
+Host mic-level feedback is **off by default** (`WM8960_MIC_LEVEL_FEEDBACK_CHANNEL
+0`): SDR apps such as SDRoxide treat the incoming mic level as fixed and adjust
+their own gain, so syncing both ends fights. Volume and sidetone levels are
+likewise not synced from the host; only keyer-owned settings (CW speed and
+sidetone frequency) are candidates for host sync. If enabled (e.g. channel 10,
+CC 23, the same message the keyer sends for its USB mic level), the keyer
+sets its USB mic level from the value (0..127 scaled to 0..100%), unmutes the
+mic, and saves the level to EEPROM after the normal settle delay (never while
+PTT is active). The message is consumed rather than sent back, and feedback of
+a level the keyer itself reported within the last second is ignored.
+Change `WM8960_MIC_LEVEL_FEEDBACK_CC` for a different controller.
+
+The WM8960's analog microphone gain is set at build time by
+`WM8960_MIC_BOOST` (0 = 0 dB, 1 = +13 dB, 2 = +20 dB default, 3 = +29 dB)
+and `WM8960_MIC_PGA` (0..63, -17.25 dB + 0.75 dB per step; default 33 =
++7.5 dB). These apply before the ADC, so lower them if the `[MIC]` debug input
+peak reaches 32768 (clipping); the keyer and host mic levels cannot remove
+that distortion. Use the keyer mic level to set the transmitted loudness.
+
+Set `WM8960_MIC_ALC 1` to let the codec's automatic level control adjust the
+PGA instead (default off). `WM8960_MIC_ALC_TARGET` sets the target level
+(0..15, -22.5 dBFS + 1.5 dB per step; default 7 = -12 dBFS) and
+`WM8960_MIC_ALC_MAX_GAIN` caps the PGA gain (0..7, -12 dB + 6 dB per step;
+default 4 = +12 dB). A noise gate at -61.5 dBFS holds the gain between words so
+background noise is not pumped up; ALC can still raise room noise compared
+with fixed gain.
+
+To tune without rebuilding, use the `\:MIC` CLI command. `MIC` alone prints
+the current gain and a meter (peak, RMS and clipped-sample count of the ADC
+input since the previous `MIC`). `MIC PGA n`, `MIC BOOST n` and `MIC ALC ON|OFF`
+change the codec gain immediately but are not saved; copy good values into the
+build defines. `MIC TONE ON` replaces the ADC input with a clean 1 kHz tone
+at -6 dBFS. If the tone is clean on air, the distortion is in the
+microphone/analog stage rather than in the USB, PC or transmit chain.
+`MIC TONE OFF` restores the microphone.
+
+Host PTT feedback also drives the keyer's PTT output, keeping the keyer and
+host in step:
+
+- Host PTT on while the keyer is idle keys the keyer PTT (GPIO/MCP, T/R
+  status icon) as a manual PTT, without sending MIDI back.
+- Host PTT off releases a manual keyer PTT (Ctrl-U, touch/terminal, or
+  host-started) without sending MIDI, so a toggle host is not switched back
+  on. A held PTT input pin is left alone; if a key is down, the normal PTT
+  tail releases it.
+- Automatic CW/tune PTT is never converted to a held manual PTT.
+- Releasing host-started PTT locally (Ctrl-U) still sends the off message.
+
+For a host whose PTT control toggles on each press (SDRoxide **Toggle**),
+use `\:MIDI-PTT TOGGLE` so each Ctrl-U press sends one Note On 127. With
+SDRoxide **Hold**, use `\:MIDI-PTT ONOFF`.
+
 Incoming Note On 17 (nonzero velocity) starts a WM8960 monitor tone using
 the current sidetone frequency/volume. Zero velocity or Note Off releases it.
-Note 18 controls USB priority mute only. These notes are accepted on any MIDI
+Note 18 controls USB playback priority mute and legacy-mode microphone mute
+unless selected as external PTT feedback above. These notes are accepted on any MIDI
 channel, tracked independently per channel, and **never drive key/PTT GPIO**.
 CC120/CC123 release the corresponding channel's incoming key/PTT state.
-Incoming key/PTT states mute both USB audio directions with the existing
+Incoming key states (and PTT in legacy microphone mode) mute USB audio with the existing
 5 ms fades; they release on note-up without adding a seven-dit hold.
 The local keyer's seven-dit hold remains unchanged. Local sidetone has
 priority if both local and MIDI tones are active; releasing either source
@@ -547,9 +672,15 @@ transmission may overflow that buffer, with later NMEA sentences restoring GPS.
 Clock and location status are independent: fresh valid time keeps the clock
 active even without a position fix. Grid status requires fresh valid location;
 data becomes stale after five seconds without an update. Raw UART bytes alone
-do not mark either status active. Without location, the configured fallback
+do not mark either status active. A stale fix only dims the grid; the last GPS
+grid is kept for 60 s before switching to the fallback, so brief indoor
+dropouts do not rewrite flash. Without location, the configured fallback
 grid remains visible; a GPS fix produces an eight-character grid in the status
-row (the separate saved-grid digit setting controls memory storage).
+row (the separate saved-grid digit setting controls memory storage). A saved
+grid change plays a short 60 ms 300 Hz confirmation beep, at most once every
+5 minutes so a position near a grid border does not beep repeatedly (the grid
+itself is still updated and saved). On the Pico WM8960 build every tone,
+including CW sidetone, has a 3 ms smoothed rise and fall to avoid clicks.
 
 ### Pico WM8960 rotary encoder
 
@@ -588,7 +719,12 @@ stack-start/ready startup diagnostics have been removed; pairing prompts
 and errors remain.
 WM8960 feedback beeps finish with audio servicing before their callers
 draw LCD messages. Normal display servicing pauses during local or MIDI
-tones, key-down, or PTT; GPS processing also pauses during feedback tones.
+tones, key-down, or PTT; during PTT only the T/R icon and the CW text box
+still update (between elements, at most two characters per pass), so paddle,
+straight-key and keyboard text appear as it is sent. On TFT displays the CW
+text box draws only new characters and repaints a row per pass after a
+scroll or screen message, instead of the legacy one-character-per-pass
+redraw. GPS processing also pauses during feedback tones.
 Touch, keyboard, and terminal command polling must remain available during
 tune/TX so stop commands can be received; audio servicing takes priority
 over GPS and LCD work. Pico WM8960 resistive touch reads use two samples

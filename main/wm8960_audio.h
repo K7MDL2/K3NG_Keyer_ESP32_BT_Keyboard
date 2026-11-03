@@ -33,12 +33,23 @@ void wm8960_audio_start_tone(uint16_t frequency, uint32_t duration_ms,
 void wm8960_audio_stop_tone(void);
 bool wm8960_audio_tone_active();
 bool wm8960_audio_feedback_pending();
+void wm8960_audio_set_local_ptt(bool active);
+void wm8960_audio_set_external_ptt(bool active);
+bool wm8960_audio_external_ptt();
 void wm8960_audio_set_midi_input(bool keyed, bool ptt, uint16_t frequency);
+void wm8960_audio_pause_for_flash();
+void wm8960_audio_resume_after_flash();
 void wm8960_audio_trace_keyer(uint8_t stage);
 void wm8960_audio_trace_key_edge(bool down, uint8_t element_dits,
                                  uint16_t wpm);
 bool wm8960_audio_set_levels(int sidetone, int playback, int microphone,
                             bool sidetone_muted, bool playback_muted,
                             bool microphone_muted);
+bool wm8960_audio_set_mic_gain(uint8_t pga, uint8_t boost, bool alc);
+void wm8960_audio_get_mic_gain(uint8_t *pga, uint8_t *boost, bool *alc);
+void wm8960_audio_set_mic_test_tone(bool enabled);
+bool wm8960_audio_mic_test_tone();
+void wm8960_audio_take_mic_meter(uint16_t *peak, uint16_t *rms,
+                                 uint32_t *clips, uint32_t *samples);
 
 #endif

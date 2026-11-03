@@ -20,6 +20,8 @@ constexpr uint8_t kPttNote = 18;
 constexpr uint16_t kQueueSize = 128;
 constexpr uint32_t kQueueTimeoutMs = 250;
 constexpr uint32_t kEchoWindowUs = 15000;
+// Host feedback of a level the keyer just sent arrives ~250 ms later.
+constexpr uint32_t kOwnFeedbackWindowUs = 1000000;
 constexpr uint32_t kSpeedReportIntervalMs = 5 * 60 * 1000;
 
 enum class PacketKind : uint8_t { Other, Key, Ptt };
@@ -63,7 +65,12 @@ uint16_t last_control_inputs[4] = {
 uint32_t last_speed_wpm = 0;
 uint32_t last_speed_report_ms = 0;
 bool speed_reported = false;
+int16_t host_mic_value = -1;
+int16_t host_control_value[static_cast<uint8_t>(Wm8960MidiHostControl::Count)] = {
+    -1, -1, -1, -1, -1};
+constexpr uint8_t kHostControlNumbers[] = {7, 23, 21, 22, 3};
 Wm8960MidiPttMode ptt_mode = Wm8960MidiPttMode::Off;
+Wm8960MidiControlMode control_mode = Wm8960MidiControlMode::Pod;
 volatile uint32_t usb_epoch = 0;
 uint32_t serviced_epoch = 0;
 
@@ -241,11 +248,11 @@ void flush_output() {
   }
 }
 
-bool is_echo(const uint8_t *bytes) {
+bool is_echo(const uint8_t *bytes, uint32_t window_us = kEchoWindowUs) {
   const uint32_t now = micros();
   for (const RecentPacket &packet : recent) {
     if (packet.valid &&
-        static_cast<uint32_t>(now - packet.sent_us) < kEchoWindowUs &&
+        static_cast<uint32_t>(now - packet.sent_us) < window_us &&
         memcmp(bytes, packet.bytes, 4) == 0) {
       return true;
     }
@@ -258,16 +265,48 @@ void receive_packet(const uint8_t *bytes) {
 #if defined(DEBUG_MIDI_MESSAGES)
   trace_message(bytes, true);
 #endif
-  if (is_echo(bytes)) {
-    ++suppressed_echoes;
-    return;
-  }
   const uint8_t cin = bytes[0] & 0x0F;
   const uint8_t status = bytes[1] & 0xF0;
   if ((bytes[0] >> 4) != 0 || cin < 2 ||
       ((cin == 8 || cin == 9 || cin == 11) &&
        (status != (cin << 4) || bytes[2] > 127 || bytes[3] > 127))) {
     ++invalid_packets;
+    return;
+  }
+  // Feedback reports host state and can be byte-identical to what the keyer
+  // just sent, so it must be matched before echo suppression.
+  const bool feedback_match = WM8960_PTT_FEEDBACK_CHANNEL != 0 &&
+      (bytes[1] & 0x0F) + 1 == WM8960_PTT_FEEDBACK_CHANNEL &&
+      bytes[2] == WM8960_PTT_FEEDBACK_NUMBER &&
+      ((WM8960_PTT_FEEDBACK_TYPE == 11 && cin == 11) ||
+       (WM8960_PTT_FEEDBACK_TYPE == 9 && (cin == 8 || cin == 9)));
+  if (feedback_match) {
+    wm8960_audio_set_external_ptt(cin != 8 && bytes[3] != 0);
+    return;
+  }
+  // POD mode mirrors PC levels and applies PC speed/sidetone; consumed, never echoed back.
+  if (control_mode == Wm8960MidiControlMode::Pod && cin == 11 &&
+      (bytes[1] & 0x0F) == kChannel) {
+    for (uint8_t index = 0; index < sizeof(kHostControlNumbers); ++index) {
+      if (bytes[2] == kHostControlNumbers[index]) {
+        if (!is_echo(bytes, kOwnFeedbackWindowUs)) {
+          host_control_value[index] = bytes[3];
+        }
+        return;
+      }
+    }
+  }
+  // Consumed, never echoed back: the host would answer with more feedback.
+  if (WM8960_MIC_LEVEL_FEEDBACK_CHANNEL != 0 && cin == 11 &&
+      (bytes[1] & 0x0F) + 1 == WM8960_MIC_LEVEL_FEEDBACK_CHANNEL &&
+      bytes[2] == WM8960_MIC_LEVEL_FEEDBACK_CC) {
+    if (!is_echo(bytes, kOwnFeedbackWindowUs)) {
+      host_mic_value = bytes[3];
+    }
+    return;
+  }
+  if (is_echo(bytes)) {
+    ++suppressed_echoes;
     return;
   }
   const uint16_t channel = static_cast<uint16_t>(1u << (bytes[1] & 0x0F));
@@ -290,6 +329,7 @@ void receive_packet(const uint8_t *bytes) {
 }
 
 void reset_session() {
+  wm8960_audio_set_external_ptt(false);
   queue_read = queue_count = 0;
   memset(recent, 0, sizeof(recent));
   recent_index = 0;
@@ -302,22 +342,29 @@ void reset_session() {
     input = UINT16_MAX;
   }
   speed_reported = false;
+  host_mic_value = -1;
+  for (int16_t &value : host_control_value) {
+    value = -1;
+  }
   wm8960_audio_set_midi_input(false, false, 0);
 }
 }  // namespace
 
 // Callbacks run in the core USB task; the foreground owns all MIDI queues.
 extern "C" void tud_mount_cb() {
+  wm8960_audio_set_external_ptt(false);
   ++usb_epoch;
   wm8960_audio_set_midi_input(false, false, 0);
 }
 
 extern "C" void tud_umount_cb() {
+  wm8960_audio_set_external_ptt(false);
   ++usb_epoch;
   wm8960_audio_set_midi_input(false, false, 0);
 }
 
 extern "C" void tud_suspend_cb(bool remote_wakeup_en) {
+  wm8960_audio_set_external_ptt(false);
   (void)remote_wakeup_en;
   ++usb_epoch;
   wm8960_audio_set_midi_input(false, false, 0);
@@ -354,9 +401,10 @@ void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm,
       for (uint8_t count = 0; count < 16 && tud_midi_packet_read(bytes); ++count) {
         receive_packet(bytes);
       }
-      if (!speed_reported || last_speed_wpm != speed_wpm ||
-          static_cast<uint32_t>(millis() - last_speed_report_ms) >=
-              kSpeedReportIntervalMs) {
+      if (control_mode != Wm8960MidiControlMode::Local &&
+          (!speed_reported || last_speed_wpm != speed_wpm ||
+           static_cast<uint32_t>(millis() - last_speed_report_ms) >=
+               kSpeedReportIntervalMs)) {
         const uint8_t value = speed_controller_value(speed_wpm);
         if (enqueue_control(21, value)) {
           last_speed_wpm = speed_wpm;
@@ -370,7 +418,8 @@ void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm,
           static_cast<uint16_t>(constrain(sidetone_volume, 0, 100)),
           static_cast<uint16_t>(constrain(microphone_volume, 0, 100)),
           static_cast<uint16_t>(constrain(sidetone_frequency, 300, 1000))};
-      for (uint8_t index = 0; index < 4; ++index) {
+      for (uint8_t index = 0;
+           control_mode != Wm8960MidiControlMode::Local && index < 4; ++index) {
         if (last_control_inputs[index] != inputs[index]) {
           const uint8_t value = index == 3
               ? ((inputs[index] - 300u) * 127u + 350u) / 700u
@@ -439,6 +488,59 @@ void wm8960_midi_ptt(bool down) {
   }
 }
 
+void wm8960_midi_ptt_from_host(bool down) {
+  local_ptt = down;
+  // The host already holds this state; a later local release must still reach it.
+  ptt_session_active = down && ptt_mode != Wm8960MidiPttMode::Off;
+  sent_ptt = ptt_session_active;
+}
+
+bool wm8960_midi_take_host_mic_level(uint8_t *percent, uint8_t *value) {
+  if (host_mic_value < 0) {
+    return false;
+  }
+  *value = static_cast<uint8_t>(host_mic_value);
+  *percent = static_cast<uint8_t>((host_mic_value * 100 + 63) / 127);
+  host_mic_value = -1;
+  // The host already has this level, so do not report it back.
+  last_control_inputs[2] = *percent;
+  return true;
+}
+
+bool wm8960_midi_take_host_control(Wm8960MidiHostControl control, uint16_t *value) {
+  if (control >= Wm8960MidiHostControl::Count) {
+    return false;
+  }
+  int16_t &raw = host_control_value[static_cast<uint8_t>(control)];
+  if (raw < 0) {
+    return false;
+  }
+  const uint16_t midi = static_cast<uint16_t>(raw);
+  raw = -1;
+  // The PC already has these values, so do not report them back.
+  switch (control) {
+    case Wm8960MidiHostControl::Speed:
+      if (midi == 0) {
+        return false;  // Thetis ignores zero too.
+      }
+      // Inverse of speed_controller_value: round(value / 2.1333 + 1).
+      *value = static_cast<uint16_t>(constrain((midi * 10000u + 10666u) / 21333u + 1u, 1u, 60u));
+      last_speed_wpm = *value;
+      last_speed_report_ms = millis();
+      speed_reported = true;
+      return true;
+    case Wm8960MidiHostControl::SidetoneFrequency:
+      *value = static_cast<uint16_t>(300u + (midi * 700u + 63u) / 127u);
+      last_control_inputs[3] = *value;
+      return true;
+    default:
+      *value = static_cast<uint16_t>((midi * 100u + 63u) / 127u);
+      last_control_inputs[control == Wm8960MidiHostControl::MasterVolume ? 0 :
+                          control == Wm8960MidiHostControl::MicLevel ? 2 : 1] = *value;
+      return true;
+  }
+}
+
 bool wm8960_midi_set_ptt_mode(uint8_t mode) {
   if (mode > static_cast<uint8_t>(Wm8960MidiPttMode::Toggle) ||
       local_ptt || sent_ptt || ptt_session_active || queue_count || cleanup_pending) {
@@ -457,6 +559,38 @@ const char *wm8960_midi_ptt_mode_name(uint8_t mode) {
   }
 }
 
+bool wm8960_midi_set_control_mode(uint8_t mode) {
+  if (mode > static_cast<uint8_t>(Wm8960MidiControlMode::Pod)) {
+    return false;
+  }
+  const Wm8960MidiControlMode next = static_cast<Wm8960MidiControlMode>(mode);
+  if (next != control_mode) {
+    // Report the current values to the PC once control reports are enabled again.
+    for (uint16_t &input : last_control_inputs) {
+      input = UINT16_MAX;
+    }
+    speed_reported = false;
+    for (int16_t &value : host_control_value) {
+      value = -1;
+    }
+    control_mode = next;
+  }
+  return true;
+}
+
+Wm8960MidiControlMode wm8960_midi_control_mode() {
+  return control_mode;
+}
+
+const char *wm8960_midi_control_mode_name(uint8_t mode) {
+  switch (mode) {
+    case 0: return "LOCAL";
+    case 1: return "REPORT";
+    case 2: return "POD";
+    default: return "INVALID";
+  }
+}
+
 bool wm8960_midi_wheel_step(int direction) {
   if (direction == 0) {
     return true;
@@ -465,8 +599,9 @@ bool wm8960_midi_wheel_step(int direction) {
 }
 
 void wm8960_midi_print_status(HardwareSerial &port) {
-  port.printf("MIDI PTT %s; USB %s; output %s; queued %u\r\n",
+  port.printf("MIDI PTT %s; MODE %s; USB %s; output %s; queued %u\r\n",
               wm8960_midi_ptt_mode_name(static_cast<uint8_t>(ptt_mode)),
+              wm8960_midi_control_mode_name(static_cast<uint8_t>(control_mode)),
               connected ? "CONNECTED" : "DISCONNECTED",
               faulted ? "FAULTED" : "READY", queue_count);
   port.printf("MIDI sent %lu received %lu echoes %lu invalid %lu faults %lu\r\n",

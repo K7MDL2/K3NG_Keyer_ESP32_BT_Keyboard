@@ -20,11 +20,15 @@
 
 namespace wm8960_i2s {
 namespace {
-constexpr uint32_t kFrames = 2048;
+// 4096 frames (~85 ms) outlasts a ~47 ms flash erase/program stall.
+constexpr uint32_t kFramesLog2 = 12;
+constexpr uint32_t kFrames = 1u << kFramesLog2;
 constexpr uint32_t kMask = kFrames - 1;
 constexpr uint32_t kLead = 256;
-alignas(8192) uint32_t tx_ring[kFrames];
-alignas(4096) uint16_t rx_ring[kFrames];
+// DMA may prefetch eight frames into the joined TX FIFO.
+constexpr uint32_t kPrefetch = 16;
+alignas(kFrames * sizeof(uint32_t)) uint32_t tx_ring[kFrames];
+alignas(kFrames * sizeof(uint16_t)) uint16_t rx_ring[kFrames];
 PIOProgram tx_program(&wm8960_i2s_tx_program);
 PIOProgram rx_program(&wm8960_i2s_rx_program);
 PIO tx_pio;
@@ -45,6 +49,19 @@ uint32_t last_rx_poll = 0;
 uint32_t ring_time_us = 0;
 uint32_t tx_underruns = 0;
 uint32_t max_gap_us = 0;
+uint32_t window_gap_us = 0;
+uint32_t flash_pauses = 0;
+uint32_t flash_overruns = 0;
+uint32_t gap_underruns = 0;
+uint32_t lead_underruns = 0;
+uint32_t last_underrun_core = 0;
+volatile bool paused = false;
+uint32_t last_lead_distance = 0;
+bool last_lead_paused = false;
+uint32_t last_lead_since_resume_us = 0;
+uint32_t resume_us = 0;
+uint32_t resume_position = 0;
+uint32_t last_lead_head_from_resume = 0;
 
 uint32_t tx_position() {
   return ((dma_channel_hw_addr(tx_dma)->read_addr -
@@ -56,15 +73,24 @@ uint32_t rx_position() {
            reinterpret_cast<uintptr_t>(rx_ring)) / sizeof(uint16_t)) & kMask;
 }
 
-uint32_t poll_tx() {
+uint32_t poll_tx(bool expected_stall = false) {
   const uint32_t now = micros();
   const uint32_t position = tx_position();
-  max_gap_us = std::max(max_gap_us, now - last_tx_poll);
+  if (!expected_stall) {
+    max_gap_us = std::max(max_gap_us, now - last_tx_poll);
+    window_gap_us = std::max(window_gap_us, now - last_tx_poll);
+  }
   tx_total += (position - tx_previous) & kMask;
   if (now - last_tx_poll >= ring_time_us) {
-    ++tx_underruns;
+    if (expected_stall) {
+      ++flash_overruns;
+    } else {
+      ++tx_underruns;
+      ++gap_underruns;
+      last_underrun_core = get_core_num();
+    }
     std::memset(tx_ring, 0, sizeof(tx_ring));
-    tx_head = (position + 16) & kMask;
+    tx_head = (position + kPrefetch) & kMask;
   } else {
     // Erase consumed frames so a delayed renderer cannot replay old keying.
     for (uint32_t frame = tx_previous; frame != position;
@@ -72,8 +98,16 @@ uint32_t poll_tx() {
       tx_ring[frame] = 0;
     }
     if (((tx_head - position) & kMask) > kLead) {
-      ++tx_underruns;
-      tx_head = (position + 16) & kMask;
+      if (!expected_stall) {
+        ++tx_underruns;
+        ++lead_underruns;
+        last_underrun_core = get_core_num();
+        last_lead_distance = (tx_head - position) & kMask;
+        last_lead_paused = paused;
+        last_lead_since_resume_us = now - resume_us;
+        last_lead_head_from_resume = (tx_head - resume_position) & kMask;
+      }
+      tx_head = (position + kPrefetch) & kMask;
     }
   }
   tx_previous = position;
@@ -172,7 +206,7 @@ bool begin(uint32_t sample_rate) {
   channel_config_set_read_increment(&tx_config, true);
   channel_config_set_write_increment(&tx_config, false);
   channel_config_set_dreq(&tx_config, pio_get_dreq(tx_pio, tx_sm, true));
-  channel_config_set_ring(&tx_config, false, 13);
+  channel_config_set_ring(&tx_config, false, kFramesLog2 + 2);
   dma_channel_configure(tx_dma, &tx_config, &tx_pio->txf[tx_sm], tx_ring,
                         dma_encode_endless_transfer_count(), false);
   dma_channel_config rx_config = dma_channel_get_default_config(rx_dma);
@@ -181,7 +215,7 @@ bool begin(uint32_t sample_rate) {
   channel_config_set_read_increment(&rx_config, false);
   channel_config_set_write_increment(&rx_config, true);
   channel_config_set_dreq(&rx_config, pio_get_dreq(rx_pio, rx_sm, false));
-  channel_config_set_ring(&rx_config, true, 12);
+  channel_config_set_ring(&rx_config, true, kFramesLog2 + 1);
   dma_channel_configure(rx_dma, &rx_config, rx_ring, &rx_pio->rxf[rx_sm],
                         dma_encode_endless_transfer_count(), false);
   dma_start_channel_mask(1u << tx_dma);
@@ -205,8 +239,59 @@ bool begin(uint32_t sample_rate) {
 
 int available_for_write() {
   if (!running) return 0;
-  const uint32_t position = poll_tx();
+  const uint32_t position = poll_tx(paused);
+  if (paused) return 0;
   return (kLead - ((tx_head - position) & kMask)) * 4;
+}
+
+void pause_for_flash() {
+  if (!running) return;
+  const uint32_t interrupt_state = save_and_disable_interrupts();
+  paused = true;
+  ++flash_pauses;
+  // Fade the queued lead to silence so the stall is a dropout, not a click.
+  const uint32_t start = (poll_tx() + kPrefetch) & kMask;
+  const uint32_t queued = (tx_head - start) & kMask;
+  if (queued <= kLead) {
+    for (uint32_t index = 0; index < queued; ++index) {
+      uint32_t &frame = tx_ring[(start + index) & kMask];
+      const int32_t scale = static_cast<int32_t>(queued - 1 - index);
+      const int32_t left = static_cast<int16_t>(frame >> 16) * scale /
+                           static_cast<int32_t>(queued);
+      const int32_t right = static_cast<int16_t>(frame & 0xffff) * scale /
+                            static_cast<int32_t>(queued);
+      frame = (static_cast<uint32_t>(static_cast<uint16_t>(left)) << 16) |
+              static_cast<uint16_t>(right);
+    }
+  }
+  __dmb();
+  restore_interrupts(interrupt_state);
+}
+
+void resume_after_flash() {
+  if (!running) return;
+  const uint32_t interrupt_state = save_and_disable_interrupts();
+  poll_tx(true);
+  // Restart with a silent cushion; the first render may be ~1 ms away.
+  const uint32_t position = tx_position();
+  for (uint32_t index = 0; index < kLead / 2; ++index) {
+    tx_ring[(position + index) & kMask] = 0;
+  }
+  tx_head = (position + kLead / 2) & kMask;
+  resume_position = position;
+  __dmb();
+  paused = false;
+  resume_us = micros();
+  restore_interrupts(interrupt_state);
+}
+
+void lead_underrun_detail(uint32_t *distance, bool *was_paused,
+                          uint32_t *since_resume_us,
+                          uint32_t *head_from_resume) {
+  *distance = last_lead_distance;
+  *was_paused = last_lead_paused;
+  *since_resume_us = last_lead_since_resume_us;
+  *head_from_resume = last_lead_head_from_resume;
 }
 
 size_t write(const uint8_t *buffer, size_t bytes) {
@@ -246,7 +331,17 @@ size_t read(uint8_t *buffer, size_t bytes) {
 uint32_t received_frames() { return rx_total; }
 uint32_t transmitted_frames() { return tx_total; }
 uint32_t underruns() { return tx_underruns; }
+uint32_t flash_pause_count() { return flash_pauses; }
+uint32_t flash_overrun_count() { return flash_overruns; }
+uint32_t gap_underrun_count() { return gap_underruns; }
+uint32_t lead_underrun_count() { return lead_underruns; }
+uint32_t last_underrun_core_num() { return last_underrun_core; }
 uint32_t max_service_gap_us() { return max_gap_us; }
+uint32_t take_window_gap_us() {
+  const uint32_t gap = window_gap_us;
+  window_gap_us = 0;
+  return gap;
+}
 uint32_t queued_frames() {
   if (!running) return 0;
   const uint32_t queued = (tx_head - tx_position()) & kMask;

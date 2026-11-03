@@ -21,6 +21,7 @@
 #include <hardware/exception.h>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
+#include <pico/time.h>
 
 #include <algorithm>
 #include <cstring>
@@ -79,6 +80,8 @@ constexpr uint32_t kSampleRate = 48000;
 constexpr uint16_t kMuteRampFrames = kSampleRate * 5 / 1000;
 constexpr uint16_t kPlaybackRingFrames = 1024;
 constexpr uint16_t kCaptureRingFrames = 1024;
+// TinyUSB mic EP IN FIFO half depth: its flow control sends 48 frames at this level.
+constexpr uint16_t kMicFifoTargetFrames = CFG_TUD_AUDIO_FUNC_2_EP_IN_SW_BUF_SZ / sizeof(int16_t) / 2;
 constexpr int16_t kToneAmplitude = 8192;
 constexpr uint8_t kSpeakerFunctionId = 0;
 constexpr uint8_t kMicrophoneFunctionId = 1;
@@ -360,6 +363,9 @@ uint32_t microphone_sample_rate = kSampleRate;
 volatile bool tone_active = false;
 volatile bool midi_tone_active = false;
 volatile bool midi_ptt_active = false;
+volatile bool local_voice_ptt = false;
+volatile bool external_voice_ptt = false;
+
 uint32_t midi_tone_phase = 0;
 uint32_t midi_tone_phase_increment = 0;
 volatile bool tone_mute_pending = false;
@@ -389,10 +395,35 @@ bool usb_audio_muted_for_keyer() {
            tone_mute_release_ms);
 }
 uint32_t tone_phase = 0;
+bool microphone_muted_for_gate() {
+  const bool tone_muted = tone_active || midi_tone_active ||
+      (tone_mute_pending &&
+       static_cast<uint32_t>(millis() - tone_stopped_ms) < tone_mute_release_ms);
+  if (WM8960_MIC_GATE_MODE == 0) return tone_muted || midi_ptt_active;
+  const bool permitted =
+      ((WM8960_MIC_GATE_MODE == 1 || WM8960_MIC_GATE_MODE == 3) && local_voice_ptt) ||
+      ((WM8960_MIC_GATE_MODE == 2 || WM8960_MIC_GATE_MODE == 3) && external_voice_ptt);
+  return tone_muted || !permitted;
+}
+
 uint32_t tone_phase_increment = 0;
 uint32_t tone_frames_remaining = 0;
 uint32_t tone_start_count = 0;
 uint32_t tone_output_frames = 0;
+
+// Raised-cosine-like (smoothstep) edges on every tone remove on/off clicks.
+constexpr uint16_t kToneEdgeFrames = kSampleRate * 3 / 1000;
+uint16_t tone_edge_level = 0;
+uint32_t tone_out_phase = 0;
+uint32_t tone_out_increment = 0;
+
+int16_t apply_tone_edge(int16_t sample, uint16_t level) {
+  if (level >= kToneEdgeFrames) return sample;
+  const uint32_t s = static_cast<uint32_t>(level) * 32767u / kToneEdgeFrames;
+  const uint32_t shape = (((s * s) >> 15) * (98301u - 2u * s)) >> 15;
+  return static_cast<int16_t>((static_cast<int32_t>(sample) *
+                               static_cast<int32_t>(shape)) / 32767);
+}
 uint16_t last_tone_frequency = 0;
 struct KeyTimingEdge {
   uint32_t time_us;
@@ -406,8 +437,35 @@ uint32_t key_timing_count = 0;
 uint32_t usb_playback_bytes = 0;
 uint16_t usb_playback_peak = 0;
 uint16_t adc_peak = 0;
+volatile uint32_t mic_gate_packets = 0;
+volatile uint16_t mic_gate_input_peak = 0;
+volatile uint16_t mic_gate_sent_peak = 0;
 volatile uint32_t capture_starved_packets = 0;
+// Runtime mic tuning (MIC CLI); not saved, defaults come from the build defines.
+uint8_t mic_pga = WM8960_MIC_PGA;
+uint8_t mic_boost = WM8960_MIC_BOOST;
+bool mic_alc = WM8960_MIC_ALC;
+volatile bool mic_test_tone = false;
+uint32_t mic_test_phase = 0;
+volatile uint16_t mic_meter_peak = 0;
+volatile uint32_t mic_meter_clips = 0;
+volatile uint32_t mic_meter_samples = 0;
+volatile uint64_t mic_meter_sum_squares = 0;
 uint32_t playback_starved_frames = 0;
+volatile uint32_t playback_min_queued = 1024;
+volatile uint32_t playback_frames_out = 0;
+// USB task scheduling diagnostics (see usb_task_irq_handler).
+volatile uint32_t usb_task_runs = 0;
+volatile uint32_t usb_task_skips = 0;
+volatile uint32_t usb_task_max_gap_us = 0;
+volatile uint32_t usb_task_last_us = 0;
+volatile bool usb_task_retry_armed = false;
+volatile uint32_t usb_audio_core1_callbacks = 0;
+volatile uint32_t speaker_packets = 0;
+volatile uint32_t mic_packets = 0;
+// Serializes render_i2s_output across both cores (USB callbacks can run on
+// core 1 when core 1 code drives SerialUSB, which calls tud_task itself).
+spin_lock_t *render_spin_lock = nullptr;
 bool playback_started = false;
 bool capture_primed = false;
 constexpr uint32_t kPlaybackTargetFrames = 768;
@@ -536,6 +594,25 @@ bool write_codec_register(uint8_t register_address, uint16_t value) {
   return true;
 }
 
+bool write_mic_gain_registers() {
+  const uint16_t mic_signal_path = 0x108 | (mic_boost << 4);
+  if (!write_codec_register(0x20, mic_signal_path) ||
+      !write_codec_register(0x21, mic_signal_path) ||
+      !write_codec_register(0x00, mic_pga) ||
+      !write_codec_register(0x01, 0x100 | mic_pga)) {
+    return false;
+  }
+  if (!mic_alc) {
+    return write_codec_register(0x11, 0x07B);
+  }
+  // Stereo ALC; noise gate at -61.5 dBFS holds the gain between words.
+  return write_codec_register(0x12, 0x080) &&
+         write_codec_register(0x13, 0x032) &&
+         write_codec_register(0x14, 0x051) &&
+         write_codec_register(
+             0x11, 0x180 | (WM8960_MIC_ALC_MAX_GAIN << 4) | WM8960_MIC_ALC_TARGET);
+}
+
 bool initialize_codec_registers() {
   if (!write_codec_register(0x0F, 0x000) ||
       !write_codec_register(0x05, 0x008) ||
@@ -582,10 +659,7 @@ bool initialize_codec_registers() {
   }
   delay(5);
 
-  if (!write_codec_register(0x20, 0x138) ||
-      !write_codec_register(0x21, 0x138) ||
-      !write_codec_register(0x00, 0x020) ||
-      !write_codec_register(0x01, 0x120) ||
+  if (!write_mic_gain_registers() ||
       !write_codec_register(0x15, 0x0C3) ||
       !write_codec_register(0x16, 0x1C3) ||
       !write_codec_register(0x2F, 0x03C) ||
@@ -677,7 +751,23 @@ void capture_i2s_samples() {
     if (write_index - capture_read_index >= kCaptureRingFrames) {
       continue;
     }
-    capture_ring[write_index & (kCaptureRingFrames - 1)] = samples[frame * 2];
+    int16_t sample = samples[frame * 2];
+    if (mic_test_tone) {
+      // 1 kHz at -6 dBFS replaces the ADC to check the USB/PC/TX chain alone.
+      const uint8_t index = static_cast<uint8_t>(mic_test_phase >> 26);
+      const int32_t first = kSineTable[index];
+      const int32_t next = kSineTable[(index + 1) & 0x3F];
+      const int32_t fraction = static_cast<int32_t>((mic_test_phase >> 10) & 0xFFFF);
+      sample = static_cast<int16_t>((first + (((next - first) * fraction) >> 16)) / 2);
+      mic_test_phase += static_cast<uint32_t>((1000ULL << 32) / kSampleRate);
+    }
+    const uint16_t magnitude = sample_magnitude(sample);
+    if (magnitude > mic_meter_peak) mic_meter_peak = magnitude;
+    if (magnitude >= 32000) mic_meter_clips = mic_meter_clips + 1;
+    mic_meter_sum_squares = mic_meter_sum_squares +
+        static_cast<uint64_t>(static_cast<int32_t>(sample) * sample);
+    mic_meter_samples = mic_meter_samples + 1;
+    capture_ring[write_index & (kCaptureRingFrames - 1)] = sample;
     capture_write_index = write_index + 1;
   }
 }
@@ -760,6 +850,11 @@ void render_i2s_output() {
   if (!codec_ready) {
     return;
   }
+  // Called from the timer IRQ, USB callbacks (either core) and the foreground.
+  struct RenderLock {
+    uint32_t state = spin_lock_blocking(render_spin_lock);
+    ~RenderLock() { spin_unlock(render_spin_lock, state); }
+  } render_lock;
 
   const int writable_bytes = wm8960_i2s::available_for_write();
   const uint16_t frame_count = static_cast<uint16_t>(
@@ -769,11 +864,18 @@ void render_i2s_output() {
   }
 
   static int16_t output[256];
-  uint32_t phase = tone_phase;
+  struct ToneEdgeState {
+    uint32_t phase;
+    uint32_t increment;
+    uint16_t level;
+  };
+  static ToneEdgeState edge_after[128];
   uint32_t tone_remaining = tone_frames_remaining;
   bool active_tone = tone_active;
   const bool midi_active = midi_tone_active;
-  uint32_t midi_phase = midi_tone_phase;
+  uint32_t out_phase = tone_out_phase;
+  uint32_t out_increment = tone_out_increment;
+  uint16_t edge_level = tone_edge_level;
   const bool mute_for_keyer = usb_audio_muted_for_keyer();
   uint16_t mute_level = playback_mute_level;
   uint16_t tone_frames_generated = 0;
@@ -783,6 +885,9 @@ void render_i2s_output() {
     playback_started = true;
   }
   const uint32_t playable_frames = playback_started ? playback_queued : 0;
+  if (playback_started && playback_queued < playback_min_queued) {
+    playback_min_queued = playback_queued;
+  }
 
   for (uint16_t frame = 0; frame < frame_count; ++frame) {
     mute_level = advance_mute_ramp(mute_level, mute_for_keyer);
@@ -799,25 +904,33 @@ void render_i2s_output() {
            local_playback_gain_q15) / 32767), mute_level);
     }
 
-    if (active_tone || midi_active) {
-      const int16_t tone = static_cast<int16_t>(
-          (static_cast<int32_t>(next_tone_sample(active_tone ? phase : midi_phase)) *
-           local_sidetone_gain_q15) / 32767);
+    const bool gate = active_tone || midi_active;
+    if (gate) {
+      out_increment = active_tone ? tone_phase_increment
+                                  : midi_tone_phase_increment;
+      if (edge_level < kToneEdgeFrames) ++edge_level;
+    } else if (edge_level > 0) {
+      --edge_level;  // release tail after the tone stops
+    }
+    if (edge_level > 0) {
+      const int16_t tone = apply_tone_edge(static_cast<int16_t>(
+          (static_cast<int32_t>(next_tone_sample(out_phase)) *
+           local_sidetone_gain_q15) / 32767), edge_level);
+      out_phase += out_increment;
       left = static_cast<int16_t>(std::max<int32_t>(
           -32768, std::min<int32_t>(32767, static_cast<int32_t>(left) + tone)));
       right = static_cast<int16_t>(std::max<int32_t>(
           -32768, std::min<int32_t>(32767, static_cast<int32_t>(right) + tone)));
-      if (active_tone) {
-        phase += tone_phase_increment;
-        ++tone_frames_generated;
-        if (tone_remaining > 0 && --tone_remaining == 0) {
-          active_tone = false;
-        }
-      } else {
-        midi_phase += midi_tone_phase_increment;
-        ++midi_frames_generated;
-      }
     }
+    if (active_tone) {
+      ++tone_frames_generated;
+      if (tone_remaining > 0 && --tone_remaining == 0) {
+        active_tone = false;
+      }
+    } else if (midi_active) {
+      ++midi_frames_generated;
+    }
+    edge_after[frame] = {out_phase, out_increment, edge_level};
     output[frame * 2] = left;
     output[frame * 2 + 1] = right;
   }
@@ -826,12 +939,19 @@ void render_i2s_output() {
       reinterpret_cast<const uint8_t *>(output), frame_count * 4);
   const uint16_t frames_written =
       static_cast<uint16_t>(bytes_written / 4);
+  if (frames_written > 0) {
+    const ToneEdgeState &edge = edge_after[frames_written - 1];
+    tone_out_phase = edge.phase;
+    tone_out_increment = edge.increment;
+    tone_edge_level = edge.level;
+  }
   for (uint16_t frame = 0; frame < frames_written; ++frame) {
     playback_mute_level =
         advance_mute_ramp(playback_mute_level, mute_for_keyer);
   }
   playback_read_index +=
       std::min<uint32_t>(frames_written, playable_frames);
+  playback_frames_out = playback_frames_out + frames_written;
   if (playback_started && frames_written > playable_frames) {
     playback_starved_frames += frames_written - playable_frames;
     playback_started = false;
@@ -966,6 +1086,45 @@ bool wm8960_audio_set_levels(int sidetone, int playback, int microphone,
   return true;
 }
 
+bool wm8960_audio_set_mic_gain(uint8_t pga, uint8_t boost, bool alc) {
+  if (!codec_ready || pga > 63 || boost > 3) {
+    return false;
+  }
+  mic_pga = pga;
+  mic_boost = boost;
+  mic_alc = alc;
+  return write_mic_gain_registers();
+}
+
+void wm8960_audio_get_mic_gain(uint8_t *pga, uint8_t *boost, bool *alc) {
+  *pga = mic_pga;
+  *boost = mic_boost;
+  *alc = mic_alc;
+}
+
+void wm8960_audio_set_mic_test_tone(bool enabled) {
+  mic_test_tone = enabled;
+}
+
+bool wm8960_audio_mic_test_tone() {
+  return mic_test_tone;
+}
+
+void wm8960_audio_take_mic_meter(uint16_t *peak, uint16_t *rms,
+                                 uint32_t *clips, uint32_t *samples) {
+  const uint32_t interrupt_state = save_and_disable_interrupts();
+  const uint64_t sum = mic_meter_sum_squares;
+  *samples = mic_meter_samples;
+  *peak = mic_meter_peak;
+  *clips = mic_meter_clips;
+  mic_meter_sum_squares = 0;
+  mic_meter_samples = 0;
+  mic_meter_peak = 0;
+  mic_meter_clips = 0;
+  restore_interrupts(interrupt_state);
+  *rms = *samples ? static_cast<uint16_t>(sqrtf(static_cast<float>(sum / *samples))) : 0;
+}
+
 void wm8960_audio_trace_keyer(uint8_t stage) {
   trace_audio_stage(stage);
 }
@@ -976,6 +1135,52 @@ void wm8960_audio_trace_key_edge(bool down, uint8_t element_dits,
       {micros(), wpm, element_dits, down};
   ++key_timing_count;
 }
+
+namespace {
+int64_t usb_task_retry_alarm(alarm_id_t, void *) {
+  usb_task_retry_armed = false;
+  irq_set_pending(USB.usbTaskIRQ);
+  return 0;
+}
+
+// Replaces the core's handler, which silently skips a tick whenever USB.mutex
+// is held (CDC/debug writes, core 1 prints). A skipped tick leaves ISO
+// endpoints un-armed for a whole frame or more, dropping audio packets, so
+// retry shortly instead of waiting for the next 1 ms poll.
+void usb_task_irq_handler() {
+  if (mutex_try_enter(&USB.mutex, nullptr)) {
+    const uint32_t now = time_us_32();
+    const uint32_t last = usb_task_last_us;
+    if (last != 0 && now - last > usb_task_max_gap_us) {
+      usb_task_max_gap_us = now - last;
+    }
+    usb_task_last_us = now;
+    usb_task_runs = usb_task_runs + 1;
+    tud_task();
+    mutex_exit(&USB.mutex);
+    return;
+  }
+  usb_task_skips = usb_task_skips + 1;
+  if (!usb_task_retry_armed) {
+    usb_task_retry_armed = true;
+    if (add_alarm_in_us(100, usb_task_retry_alarm, nullptr, true) < 0) {
+      usb_task_retry_armed = false;
+    }
+  }
+}
+
+void install_usb_task_handler() {
+  const uint irq = USB.usbTaskIRQ;
+  const irq_handler_t current = irq_get_exclusive_handler(irq);
+  if (current == nullptr || current == usb_task_irq_handler) {
+    return;
+  }
+  irq_set_enabled(irq, false);
+  irq_remove_handler(irq, current);
+  irq_set_exclusive_handler(irq, usb_task_irq_handler);
+  irq_set_enabled(irq, true);
+}
+}  // namespace
 
 extern "C" void tud_event_hook_cb(uint8_t rhport, uint32_t event_id,
                                  bool in_isr) {
@@ -1036,6 +1241,10 @@ bool wm8960_audio_initialize(void (*report_progress)(const char *)) {
                                   audio_diagnostic_hard_fault);
   watchdog_enable(8000, true);
   initialization_attempted = true;
+  if (render_spin_lock == nullptr) {
+    render_spin_lock = spin_lock_init(spin_lock_claim_unused(true));
+  }
+  install_usb_task_handler();
 #if defined(DEBUG_WM8960_AUDIO)
   if (report_progress) {
     report_progress("WM8960: USB setup");
@@ -1095,6 +1304,15 @@ bool wm8960_audio_initialize(void (*report_progress)(const char *)) {
   }
 #endif
   codec_ready = true;
+  // The I2S ring holds ~5 ms; a timer keeps it fed through LCD, flash or
+  // core 1 USB stalls of the foreground loop.
+  static repeating_timer render_timer;
+  if (!add_repeating_timer_us(-1000, [](repeating_timer *) {
+        render_i2s_output();
+        return true;
+      }, nullptr, &render_timer)) {
+    wm8960_audio_debug_port().println("[WM8960] render timer unavailable; foreground rendering only");
+  }
 #if defined(DEBUG_WM8960_AUDIO)
   if (report_progress) {
     report_progress("WM8960: ready");
@@ -1160,7 +1378,8 @@ void wm8960_audio_service(void) {
                   static_cast<unsigned>(gpio_get_function(WM8960_I2S_LRCLK_PIN)),
                   static_cast<unsigned>(gpio_get_function(WM8960_I2S_DOUT_PIN)),
                   static_cast<unsigned>(gpio_get_function(WM8960_I2S_DIN_PIN)));
-    wm8960_audio_debug_port().printf("[WM8960] codec clock: %s\n",
+    wm8960_audio_debug_port().printf("[WM8960] build %s %s, codec clock: %s\n",
+                  __DATE__, __TIME__,
                   WM8960_USE_PLL ? "PLL" : "direct MCLK (PLL bypass)");
     wm8960_audio_debug_port().printf("[WM8960] playback missing frames %lu, capture short packets %lu, PIO underruns %lu, max service gap %lu us\n",
                   static_cast<unsigned long>(playback_starved_frames),
@@ -1184,6 +1403,97 @@ void wm8960_audio_service(void) {
                     static_cast<unsigned long>(kCodecI2cHz));
     }
   }
+#if defined(DEBUG_WM8960_AUDIO)
+  static bool reported_gate_open = false;
+  const bool gate_open = !microphone_muted_for_gate();
+  if (serial_connected && gate_open != reported_gate_open && !tone_active &&
+      !midi_tone_active) {
+    wm8960_audio_debug_port().printf(
+        "[MIC] gate %s (local %u, external %u, mode %u); previous period: packets %lu, input peak %u, sent peak %u, host gain %ld, keyer gain %ld\n",
+        gate_open ? "OPEN" : "closed",
+        static_cast<unsigned>(local_voice_ptt),
+        static_cast<unsigned>(external_voice_ptt),
+        static_cast<unsigned>(WM8960_MIC_GATE_MODE),
+        static_cast<unsigned long>(mic_gate_packets),
+        static_cast<unsigned>(mic_gate_input_peak),
+        static_cast<unsigned>(mic_gate_sent_peak),
+        static_cast<long>(microphone_gain_q15),
+        static_cast<long>(local_microphone_gain_q15));
+    reported_gate_open = gate_open;
+    mic_gate_packets = 0;
+    mic_gate_input_peak = mic_gate_sent_peak = 0;
+  }
+  // Pops: the I2S ring holds ~5 ms ahead, so longer stalls play a gap.
+  static uint32_t seen_underruns = 0, seen_starved = 0, seen_capture = 0;
+  static uint32_t seen_gap = 0, seen_lead = 0, seen_flash = 0;
+  const uint32_t underruns = wm8960_i2s::underruns();
+  const uint32_t starved = playback_starved_frames;
+  const uint32_t capture = capture_starved_packets;
+  const uint32_t gap_runs = wm8960_i2s::gap_underrun_count();
+  const uint32_t lead_runs = wm8960_i2s::lead_underrun_count();
+  const uint32_t flash_runs = wm8960_i2s::flash_overrun_count();
+  if (serial_connected && !tone_active && !midi_tone_active &&
+      (underruns != seen_underruns || starved != seen_starved ||
+       capture != seen_capture || flash_runs != seen_flash) &&
+      wm8960_audio_debug_port().availableForWrite() >= 200) {
+    uint32_t lead_distance = 0, since_resume_us = 0, head_from_resume = 0;
+    bool lead_paused = false;
+    wm8960_i2s::lead_underrun_detail(&lead_distance, &lead_paused,
+                                     &since_resume_us, &head_from_resume);
+    wm8960_audio_debug_port().printf(
+        "[GLITCH] ms=%lu PIO underruns +%lu (gap %lu, lead %lu, core %lu, last lead dist %lu paused %u %lu us after resume, head %lu from resume), flash overruns +%lu, playback missing +%lu frames, capture short +%lu, worst service gap %lu us\n",
+        static_cast<unsigned long>(millis()),
+        static_cast<unsigned long>(underruns - seen_underruns),
+        static_cast<unsigned long>(gap_runs - seen_gap),
+        static_cast<unsigned long>(lead_runs - seen_lead),
+        static_cast<unsigned long>(wm8960_i2s::last_underrun_core_num()),
+        static_cast<unsigned long>(lead_distance), lead_paused ? 1u : 0u,
+        static_cast<unsigned long>(since_resume_us),
+        static_cast<unsigned long>(head_from_resume),
+        static_cast<unsigned long>(flash_runs - seen_flash),
+        static_cast<unsigned long>(starved - seen_starved),
+        static_cast<unsigned long>(capture - seen_capture),
+        static_cast<unsigned long>(wm8960_i2s::take_window_gap_us()));
+    // Rates tell clock drift (in < out steadily) from bursty host delivery.
+    static uint32_t seen_in_bytes = 0, seen_out_frames = 0, seen_ms = 0;
+    const uint32_t now_ms = millis();
+    wm8960_audio_debug_port().printf(
+        "[GLITCH] playback queue avg %ld min %lu, feedback %lu/65536, USB in %lu frames, out %lu frames in %lu ms\n",
+        static_cast<long>(playback_level_q8 / 256),
+        static_cast<unsigned long>(playback_min_queued),
+        static_cast<unsigned long>(playback_feedback),
+        static_cast<unsigned long>((usb_playback_bytes - seen_in_bytes) / 4),
+        static_cast<unsigned long>(playback_frames_out - seen_out_frames),
+        static_cast<unsigned long>(now_ms - seen_ms));
+    seen_in_bytes = usb_playback_bytes;
+    seen_out_frames = playback_frames_out;
+    // Expect ~1 speaker and ~1 mic packet per ms while streaming.
+    static uint32_t seen_runs = 0, seen_skips = 0, seen_core1 = 0;
+    static uint32_t seen_speaker = 0, seen_mic = 0;
+    wm8960_audio_debug_port().printf(
+        "[GLITCH] usb task runs %lu skips %lu max gap %lu us, speaker pkts %lu mic pkts %lu, core1 callbacks %lu\n",
+        static_cast<unsigned long>(usb_task_runs - seen_runs),
+        static_cast<unsigned long>(usb_task_skips - seen_skips),
+        static_cast<unsigned long>(usb_task_max_gap_us),
+        static_cast<unsigned long>(speaker_packets - seen_speaker),
+        static_cast<unsigned long>(mic_packets - seen_mic),
+        static_cast<unsigned long>(usb_audio_core1_callbacks - seen_core1));
+    seen_runs = usb_task_runs;
+    seen_skips = usb_task_skips;
+    seen_core1 = usb_audio_core1_callbacks;
+    seen_speaker = speaker_packets;
+    seen_mic = mic_packets;
+    usb_task_max_gap_us = 0;
+    seen_ms = now_ms;
+    playback_min_queued = kPlaybackRingFrames;
+    seen_underruns = underruns;
+    seen_starved = starved;
+    seen_capture = capture;
+    seen_gap = gap_runs;
+    seen_lead = lead_runs;
+    seen_flash = flash_runs;
+  }
+#endif
   serial_was_connected = serial_connected;
   trace_audio_stage(4);
   initialize_audio_controls();
@@ -1192,10 +1502,7 @@ void wm8960_audio_service(void) {
   trace_audio_stage(6);
   if (codec_ready) {
     trace_audio_stage(7);
-    CoreMutex usb_lock(&USB.mutex, false);
-    if (usb_lock) {
-      render_i2s_output();
-    }
+    render_i2s_output();
   }
   i2s_transmit_buffers = wm8960_i2s::transmitted_frames() / 128;
   trace_audio_stage(8);
@@ -1228,6 +1535,26 @@ void wm8960_audio_start_tone(uint16_t frequency, uint32_t duration_ms,
 
 bool wm8960_audio_tone_active() {
   return tone_active || midi_tone_active;
+}
+
+void wm8960_audio_pause_for_flash() {
+  if (codec_ready) wm8960_i2s::pause_for_flash();
+}
+
+void wm8960_audio_resume_after_flash() {
+  if (codec_ready) wm8960_i2s::resume_after_flash();
+}
+
+void wm8960_audio_set_local_ptt(bool active) {
+  local_voice_ptt = active;
+}
+
+void wm8960_audio_set_external_ptt(bool active) {
+  external_voice_ptt = active;
+}
+
+bool wm8960_audio_external_ptt() {
+  return external_voice_ptt;
 }
 
 bool wm8960_audio_feedback_pending() {
@@ -1473,7 +1800,11 @@ bool tud_audio_rx_done_post_read_cb(uint8_t rhport, uint16_t bytes_received,
   (void)function_id;
   (void)endpoint_out;
   (void)alternate_setting;
+  if (get_core_num() != 0) {
+    usb_audio_core1_callbacks = usb_audio_core1_callbacks + 1;
+  }
   if (codec_ready && function_id == kSpeakerFunctionId) {
+    speaker_packets = speaker_packets + 1;
     capture_usb_playback_locked();
     render_i2s_output();
     const uint32_t queued = playback_write_index - playback_read_index +
@@ -1503,6 +1834,10 @@ bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t function_id,
   if (function_id != kMicrophoneFunctionId) {
     return true;
   }
+  mic_packets = mic_packets + 1;
+  if (get_core_num() != 0) {
+    usb_audio_core1_callbacks = usb_audio_core1_callbacks + 1;
+  }
 
   // Capture follows USB packet deadlines, not foreground display/BT latency.
   // This is the sole reader of the RX DMA ring and producer of capture_ring.
@@ -1510,7 +1845,7 @@ bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t function_id,
     capture_i2s_samples();
     i2s_receive_buffers = wm8960_i2s::received_frames() / 128;
   }
-  static int16_t samples[49];
+  static int16_t samples[kMicFifoTargetFrames + 2];
   std::memset(samples, 0, sizeof(samples));
   uint32_t read_index = capture_read_index;
   const uint32_t write_index = capture_write_index;
@@ -1518,10 +1853,20 @@ bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t function_id,
   if (!capture_primed && queued >= 192) {
     capture_primed = true;
   }
-  // Absorb small host/I2S clock differences without inserting zeros each ms.
-  const uint8_t frames = queued > 288 ? 49 : queued < 96 ? 47 : 48;
+  // TinyUSB sizes each packet (47/48/49) from its own FIFO level, and the FIFO
+  // overwrites on overflow. Only top it up to a target; nudging the target
+  // above/below half depth makes TinyUSB send 49/47 to absorb clock drift.
+  tu_fifo_t *fifo = tud_audio_n_get_ep_in_ff(function_id);
+  const uint16_t fifo_frames = fifo ? tu_fifo_count(fifo) / sizeof(int16_t) : 0;
+  const uint16_t target = queued > 288 ? kMicFifoTargetFrames + 2
+                        : queued < 96  ? kMicFifoTargetFrames - 2
+                                       : kMicFifoTargetFrames;
+  const uint8_t frames = fifo_frames >= target ? 0 : target - fifo_frames;
+  if (frames == 0) {
+    return true;
+  }
   const uint32_t available = capture_primed ? queued : 0;
-  const bool mute_for_tone = usb_audio_muted_for_keyer();
+  const bool mute_for_tone = microphone_muted_for_gate();
   if (capture_primed && available < frames) {
     capture_starved_packets = capture_starved_packets + 1;
     capture_primed = false;
@@ -1531,13 +1876,18 @@ bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t function_id,
         advance_mute_ramp(capture_mute_level, mute_for_tone);
     if (capture_primed && i < available) {
       int32_t sample = capture_ring[read_index & (kCaptureRingFrames - 1)];
+      const uint16_t input_magnitude = sample_magnitude(static_cast<int16_t>(sample));
+      if (input_magnitude > mic_gate_input_peak) mic_gate_input_peak = input_magnitude;
       sample = (sample * microphone_gain_q15) / 32767;
       sample = (sample * local_microphone_gain_q15) / 32767;
       samples[i] = apply_mute_ramp(static_cast<int16_t>(sample),
                                   capture_mute_level);
+      const uint16_t sent_magnitude = sample_magnitude(samples[i]);
+      if (sent_magnitude > mic_gate_sent_peak) mic_gate_sent_peak = sent_magnitude;
       ++read_index;
     }
   }
+  mic_gate_packets = mic_gate_packets + 1;
   capture_read_index = read_index;
   const uint16_t bytes = frames * sizeof(int16_t);
   return tud_audio_n_write(function_id, samples, bytes) == bytes;

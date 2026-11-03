@@ -43,7 +43,8 @@ if ($main -notmatch '(?s)void check_gps\(void \* pvParameters\).*?for\s*\(;;\)\s
 
 $audioFunctions = @(
     'advance_mute_ramp', 'apply_mute_ramp', 'usb_audio_muted_for_keyer',
-    'next_tone_sample', 'wm8960_audio_tone_active', 'wm8960_audio_feedback_pending', 'wm8960_audio_stop_tone',
+    'microphone_muted_for_gate', 'wm8960_audio_set_local_ptt', 'wm8960_audio_set_external_ptt', 'wm8960_audio_external_ptt',
+    'next_tone_sample', 'apply_tone_edge', 'wm8960_audio_tone_active', 'wm8960_audio_feedback_pending', 'wm8960_audio_stop_tone',
     'wm8960_audio_set_midi_input', 'render_i2s_output'
 ) | ForEach-Object { Get-CppFunction $audio $_ }
 $toneFunction = Get-CppFunction $main 's_tone'
@@ -51,8 +52,8 @@ if ($toneFunction -notmatch 'wm8960_audio_start_tone\(frequency, duration_ms, mu
     $toneFunction -notmatch 'while \(wm8960_audio_feedback_pending\(\)\)' -or
     $toneFunction -notmatch 'millis\(\) - drain_started_ms < 6' -or
     $toneFunction -notmatch 'Error: WM8960 feedback tone stalled' -or
-    $main -notmatch 'void service_display\(\) \{\s*#if[^\r\n]*\r?\n\s*if \(ptt_line_activated \|\| key_state \|\| wm8960_audio_tone_active\(\)\) return;') {
-    throw 'Feedback tones must service audio before LCD work, and display servicing must defer during tones/PTT/keying'
+    $main -notmatch 'void service_display\(\) \{\s*#if[^\r\n]*\r?\n\s*if \(key_state \|\| wm8960_audio_tone_active\(\)\) return;\s*if \(ptt_line_activated\) \{[^}]*draw_tx_icon\(\);(?s:(?:(?!#endif).)*?)tft_draw_pending_scroll_chars\(2\)(?s:(?:(?!#endif).)*?)#endif\s*return;') {
+    throw 'Feedback tones must service audio before LCD work, and display servicing must defer during tones/keying (PTT allows only T/R icon and bounded live text)'
 }
 $sine = [regex]::Match($audio, '(?s)constexpr int16_t kSineTable\[64\] = \{.*?\};').Value
 if (!$sine) { throw 'Sine table not found' }
@@ -67,7 +68,7 @@ $encoderTable = [regex]::Match($main, '(?s)#ifdef OPTION_ENCODER_HALF_STEP_MODE.
 $settings = Get-Content (Join-Path $root 'main\keyer_settings_pico.h') -Raw
 $encoderDirection = [regex]::Match($settings, '(?s)#ifndef ENCODER_VFO_DIRECTION.*?(?=\r?\n#define sd_card_spi_ss_line)').Value
 if (!$encoderDirection) { throw 'Encoder VFO direction setting not found' }
-$encoderFunctions = @('read_audio_safe_touch', 'lcd_timed_message_expired', 'gps_updates_paused', 'gps_data_fresh', 'update_gps_clock_icon', 'service_keyer_midi', 'audio_volume', 'step_audio_volume', 'set_audio_volume',
+$encoderFunctions = @('read_audio_safe_touch', 'lcd_timed_message_expired', 'gps_updates_paused', 'gps_data_fresh', 'gps_location_held', 'update_gps_clock_icon', 'service_host_ptt_feedback', 'service_keyer_midi', 'midi_pod_mode', 'sync_pod_volume', 'audio_volume', 'audio_muted', 'step_audio_volume', 'set_audio_volume',
     'initialize_potentiometer', 'initialize_rotary_encoder', 'chk_rotary_encoder',
     'check_rotary_encoder') |
     ForEach-Object { Get-CppFunction $main $_ }
@@ -89,6 +90,24 @@ $mock = @'
 #include <vector>
 #define ARDUINO_ARCH_RP2040
 #define FEATURE_WM8960_USB_AUDIO
+#ifndef WM8960_MIC_GATE_MODE
+#define WM8960_MIC_GATE_MODE 3
+#endif
+#ifndef WM8960_PTT_FEEDBACK_CHANNEL
+#define WM8960_PTT_FEEDBACK_CHANNEL 0
+#endif
+#ifndef WM8960_PTT_FEEDBACK_TYPE
+#define WM8960_PTT_FEEDBACK_TYPE 11
+#endif
+#ifndef WM8960_PTT_FEEDBACK_NUMBER
+#define WM8960_PTT_FEEDBACK_NUMBER 18
+#endif
+#ifndef WM8960_MIC_LEVEL_FEEDBACK_CHANNEL
+#define WM8960_MIC_LEVEL_FEEDBACK_CHANNEL 0
+#endif
+#ifndef WM8960_MIC_LEVEL_FEEDBACK_CC
+#define WM8960_MIC_LEVEL_FEEDBACK_CC 23
+#endif
 #define FEATURE_INTERNET_LINK_MAX_LINKS 2
 #define F(text) text
 #define PRIMARY_SERIAL_CLS HardwareSerial
@@ -137,6 +156,8 @@ class String {
   const std::string &str() const { return text; }
 };
 uint8_t config_dirty = 0;
+unsigned long config_changed_ms = 0;
+void sync_pod_volume();
 template<class T> T constrain(T value, int lo, int hi) {
   return std::max<T>(static_cast<T>(lo), std::min<T>(static_cast<T>(hi), value));
 }
@@ -148,9 +169,14 @@ int touch_audio_services = 0;
 void myDelay(uint32_t ms) {
   assert(ms == 0); ++touch_audio_services; advance(1);
 }
-int get_core_num() { return 0; }
+int core_num = 0;
+int get_core_num() { return core_num; }
 uint32_t save_and_disable_interrupts() { return 0; }
 void restore_interrupts(uint32_t) {}
+struct spin_lock_t { int unused; };
+spin_lock_t *render_spin_lock = nullptr;
+uint32_t spin_lock_blocking(spin_lock_t *) { return 0; }
+void spin_unlock(spin_lock_t *, uint32_t) {}
 bool mounted = true, suspended = false, writable = true, lockable = true;
 int write_budget = -1;
 struct { int mutex; } USB;
@@ -196,11 +222,17 @@ constexpr int16_t kToneAmplitude = 8192;
 bool codec_ready = true;
 volatile bool tone_active = false, tone_mute_pending = false;
 volatile bool midi_tone_active = false, midi_ptt_active = false;
+volatile bool local_voice_ptt = false, external_voice_ptt = false;
 volatile uint32_t tone_stopped_ms = 0, tone_mute_release_ms = 0;
 uint32_t tone_phase = 0, tone_phase_increment = 0, tone_frames_remaining = 0;
 uint32_t midi_tone_phase = 0, midi_tone_phase_increment = 0, tone_output_frames = 0;
+constexpr uint16_t kToneEdgeFrames = kSampleRate * 3 / 1000;
+uint16_t tone_edge_level = 0;
+uint32_t tone_out_phase = 0, tone_out_increment = 0;
 uint32_t playback_read_index = 0, playback_write_index = 0;
 uint32_t playback_starved_frames = 0;
+uint32_t playback_min_queued = 1024;
+uint32_t playback_frames_out = 0;
 bool playback_started = false;
 uint16_t playback_mute_level = kMuteRampFrames;
 int32_t local_sidetone_gain_q15 = 32767, local_playback_gain_q15 = 32767;
@@ -220,6 +252,12 @@ int audio_volume(AudioVolumeTarget);
 void service_keyer_midi();
 int step_audio_volume(int, bool);
 void set_audio_volume(AudioVolumeTarget, int, bool);
+bool audio_muted(AudioVolumeTarget);
+bool midi_pod_mode();
+uint8_t pod_play_volume = 100;
+bool pod_play_muted = false;
+uint8_t pod_mic_volume = 100;
+bool pod_mic_muted = false;
 template<class T> T max(T a, T b) { return std::max(a,b); }
 template<class T> T min(T a, T b) { return std::min(a,b); }
 bool apply_audio_levels() { return true; }
@@ -258,6 +296,16 @@ char time_str[27] = {};
 bool stop_msg = false;
 bool gps_time_active = true;
 volatile uint8_t key_state = 0, ptt_line_activated = 0;
+uint8_t manual_ptt_invoke = 0, manual_ptt_invoke_ptt_input_pin = 0;
+int ptt_key_calls = 0, ptt_unkey_calls = 0;
+void ptt_key() {
+  ++ptt_key_calls;
+  if (!ptt_line_activated) { ptt_line_activated = 1; wm8960_midi_ptt(true); }
+}
+void ptt_unkey() {
+  ++ptt_unkey_calls;
+  if (ptt_line_activated) { ptt_line_activated = 0; wm8960_midi_ptt(false); }
+}
 struct MockLcd {
   uint16_t pressure = 0, raw_x = 100, raw_y = 150;
   bool unstable = false;
@@ -286,6 +334,7 @@ void lcd_center_print_timed(String text, int, int duration) {
   assert(duration == 1000); lcd_text = text.str();
 }
 void speed_change(int step) { configuration.wpm += step; config_dirty = 1; }
+void speed_set(int wpm) { configuration.wpm = wpm; config_dirty = 1; }
 void speed_change_command_mode(int step) {
   configuration.wpm_command_mode += step; config_dirty = 1;
 }
@@ -300,6 +349,7 @@ void fresh() {
   write_budget = -1;
   reset_session(); connected = false; local_key = local_ptt = false;
   ptt_mode = Wm8960MidiPttMode::Off;
+  control_mode = Wm8960MidiControlMode::Report;
   incoming.clear(); outgoing.clear(); terminal.output.clear();
   tone_active = tone_mute_pending = false;
   wm8960_midi_initialize(); wm8960_midi_service(750, 20);
@@ -371,12 +421,19 @@ int main() {
   tone_mute_pending = true; tone_stopped_ms = clock_ms; tone_mute_release_ms = 420;
   receive(0x90,17,0); assert(usb_audio_muted_for_keyer());
   advance(420); assert(!usb_audio_muted_for_keyer());
-  fresh(); wm8960_audio_set_midi_input(true,false,750);
+  fresh(); tone_edge_level = 0; wm8960_audio_set_midi_input(true,false,750);
   render_i2s_output();
   assert(std::any_of(wm8960_i2s::output.begin(),wm8960_i2s::output.end(),
                     [](int16_t sample) { return sample != 0; }));
+  assert(std::abs(wm8960_i2s::output[0]) < 64 && std::abs(wm8960_i2s::output[2]) < 64);
+  render_i2s_output(); assert(tone_edge_level == kToneEdgeFrames);
   wm8960_audio_set_midi_input(false,false,750); render_i2s_output();
-  assert(std::all_of(wm8960_i2s::output.begin(),wm8960_i2s::output.end(),
+  assert(std::any_of(wm8960_i2s::output.begin(),wm8960_i2s::output.begin()+16,
+                    [](int16_t sample) { return sample != 0; }));
+  assert(tone_edge_level == kToneEdgeFrames - 128);
+  render_i2s_output(); assert(tone_edge_level == 0);
+  assert(std::all_of(wm8960_i2s::output.begin()+2*(kToneEdgeFrames-128),
+                    wm8960_i2s::output.end(),
                     [](int16_t sample) { return sample == 0; }));
   tone_phase_increment = uint32_t((uint64_t(600) << 32) / kSampleRate);
   tone_active = true; tone_frames_remaining = 32;
@@ -515,6 +572,118 @@ int main() {
   service_keyer_midi();
   assert(messages(0xB9,7,102) == 1 && messages(0xB9,22,76) == 1);
   assert(messages(0xB9,23,51) == 1);
+  // LOCAL mode: no control reports, but keys and the VFO wheel still go out.
+  fresh(); assert(wm8960_midi_set_control_mode(0));
+  assert(!wm8960_midi_set_control_mode(3));
+  assert(wm8960_midi_control_mode() == Wm8960MidiControlMode::Local);
+  mounted = false; service(); outgoing.clear();
+  mounted = true; service();
+  assert(outgoing.size() == 1 && messages(0x99,17,0) == 1);
+  outgoing.clear(); wm8960_midi_service(900, 35, 10, 20, 30);
+  advance(300000); wm8960_midi_service(900, 35, 10, 20, 30);
+  assert(outgoing.empty());
+  assert(wm8960_midi_wheel_step(1)); service(); assert(messages(0xB9,20,127) == 1);
+  // Leaving LOCAL resends every current value once.
+  outgoing.clear(); assert(wm8960_midi_set_control_mode(1));
+  wm8960_midi_service(1000, 20, 100, 0, 100);
+  assert(outgoing.size() == 5 && messages(0xB9,21,41) == 1 && messages(0xB9,3,127) == 1);
+  assert(messages(0xB9,7,127) == 1 && messages(0xB9,22,0) == 1 && messages(0xB9,23,127) == 1);
+  // POD mode: master volume goes only to the PC; other levels stay local.
+  fresh();
+  configuration.midi_control_mode = 1; configuration.usb_play_volume = 70;
+  configuration.usb_play_muted = false; configuration.usb_mic_volume = 60;
+  configuration.usb_mic_muted = false; config_dirty = 0;
+  terminal.output.clear();
+  assert(cli_midi(&terminal, "MIDI-MODE POD"));
+  assert(configuration.midi_control_mode == 2 && config_dirty == 1);
+  assert(terminal.output.find("MODE POD") != std::string::npos);
+  assert(midi_pod_mode() && audio_volume(AudioVolumeTarget::Playback) == 70);
+  set_audio_volume(AudioVolumeTarget::Playback, 40, false);
+  assert(configuration.usb_play_volume == 70 && pod_play_volume == 40);
+  set_audio_volume(AudioVolumeTarget::Sidetone, 30, false);
+  assert(configuration.sidetone_volume == 30);
+  outgoing.clear(); service_keyer_midi();
+  assert(messages(0xB9,7,51) == 1);
+  set_audio_volume(AudioVolumeTarget::Playback, audio_volume(AudioVolumeTarget::Playback),
+      !audio_muted(AudioVolumeTarget::Playback));
+  assert(!configuration.usb_play_muted && audio_muted(AudioVolumeTarget::Playback));
+  outgoing.clear(); service_keyer_midi(); assert(messages(0xB9,7,0) == 1);
+  // POD mode: the USB mic level is also PC-only.
+  set_audio_volume(AudioVolumeTarget::Microphone, 20, false);
+  assert(configuration.usb_mic_volume == 60 && pod_mic_volume == 20);
+  assert(audio_volume(AudioVolumeTarget::Microphone) == 20);
+  outgoing.clear(); service_keyer_midi(); assert(messages(0xB9,23,25) == 1);
+  // PC-side changes are mirrored without touching local levels or replying.
+  auto pod_cc = [](uint8_t status, uint8_t control, uint8_t value) {
+    advance(20); incoming.push_back({11,status,control,value}); service_keyer_midi();
+  };
+  auto sent_control = [](uint8_t control) {
+    return std::any_of(outgoing.begin(), outgoing.end(), [control](const auto &p) {
+      return p[1] == 0xB9 && p[2] == control;
+    });
+  };
+  config_dirty = 0;
+  outgoing.clear(); pod_cc(0xB9, 7, 100); service_keyer_midi();
+  assert(pod_play_volume == 79 && !pod_play_muted && !sent_control(7));
+  assert(configuration.usb_play_volume == 70 && config_dirty == 0);
+  outgoing.clear(); pod_cc(0xB9, 23, 120); service_keyer_midi();
+  assert(pod_mic_volume == 94 && !pod_mic_muted && !sent_control(23));
+  assert(configuration.usb_mic_volume == 60 && config_dirty == 0);
+  outgoing.clear(); pod_cc(0xB8, 7, 10);
+  assert(pod_play_volume == 79); // Other channels are not mirrored.
+  // PC speed, sidetone level and frequency update the local keyer without a reply.
+  configuration.wpm = 20; configuration.hz_sidetone = 750;
+  configuration.sidetone_volume = 30; configuration.sidetone_muted = true;
+  service_keyer_midi(); config_dirty = 0;
+  outgoing.clear(); pod_cc(0xB9, 21, 62); service_keyer_midi();
+  assert(configuration.wpm == 30 && config_dirty && !sent_control(21));
+  config_dirty = 0;
+  outgoing.clear(); pod_cc(0xB9, 22, 32); service_keyer_midi();
+  assert(configuration.sidetone_volume == 25 && !configuration.sidetone_muted);
+  assert(config_dirty && !sent_control(22));
+  config_dirty = 0;
+  outgoing.clear(); pod_cc(0xB9, 3, 64); service_keyer_midi();
+  assert(configuration.hz_sidetone == 653 && config_dirty && !sent_control(3));
+  outgoing.clear(); pod_cc(0xB9, 21, 0); service_keyer_midi();
+  assert(configuration.wpm == 30); // Speed value zero is ignored, as in Thetis.
+  for (uint32_t wpm = 1; wpm <= 60; ++wpm) {
+    host_control_value[static_cast<uint8_t>(Wm8960MidiHostControl::Speed)] =
+        speed_controller_value(wpm);
+    uint16_t decoded = 0;
+    assert(wm8960_midi_take_host_control(Wm8960MidiHostControl::Speed, &decoded) &&
+           decoded == wpm);
+  }
+  for (uint16_t hz = 300; hz <= 1000; ++hz) {
+    host_control_value[static_cast<uint8_t>(Wm8960MidiHostControl::SidetoneFrequency)] =
+        ((hz - 300u) * 127u + 350u) / 700u;
+    uint16_t decoded = 0;
+    assert(wm8960_midi_take_host_control(Wm8960MidiHostControl::SidetoneFrequency, &decoded));
+    assert(decoded + 3 >= hz && decoded <= hz + 3);
+  }
+  last_control_inputs[3] = configuration.hz_sidetone;
+  // Local changes after PC sync are still reported.
+  configuration.hz_sidetone = 1000; outgoing.clear(); service_keyer_midi();
+  assert(messages(0xB9,3,127) == 1);
+  // The local encoder continues from the mirrored PC level.
+  set_audio_volume(AudioVolumeTarget::Playback,
+      step_audio_volume(audio_volume(AudioVolumeTarget::Playback), false), false);
+  outgoing.clear(); service_keyer_midi();
+  assert(pod_play_volume == 70 && messages(0xB9,7,89) == 1);
+  saved = configuration; config_dirty = 0;
+  assert(cli_midi(&terminal, "MIDI-MODE BOGUS"));
+  assert(memcmp(&saved, &configuration, sizeof(saved)) == 0 && !config_dirty);
+  assert(cli_midi(&terminal, "MIDI-MODE REPORT"));
+  assert(configuration.midi_control_mode == 1 && !midi_pod_mode());
+  assert(audio_volume(AudioVolumeTarget::Playback) == 70 &&
+         !audio_muted(AudioVolumeTarget::Playback));
+  outgoing.clear(); service_keyer_midi(); assert(messages(0xB9,7,89) == 1);
+  pod_cc(0xB9, 7, 10);
+  assert(configuration.usb_play_volume == 70); // REPORT ignores PC volume.
+  pod_cc(0xB9, 21, 100); service_keyer_midi();
+  assert(configuration.wpm == 30); // REPORT ignores PC speed.
+  assert(cli_midi(&terminal, "MIDI-MODE LOCAL"));
+  assert(configuration.midi_control_mode == 0);
+  outgoing.clear(); service_keyer_midi(); assert(outgoing.empty());
   fresh();
   // Connection publishes speed, unchanged speed waits exactly five minutes.
   mounted = false; service(); outgoing.clear();
@@ -594,6 +763,144 @@ int main() {
   terminal.open = false;
 #endif
   fresh();
+  tone_active = midi_tone_active = midi_ptt_active = tone_mute_pending = false;
+  for (bool local : {false,true}) {
+    for (bool external : {false,true}) {
+      wm8960_audio_set_local_ptt(local);
+      wm8960_audio_set_external_ptt(external);
+      const bool allowed = WM8960_MIC_GATE_MODE == 0 ||
+          ((WM8960_MIC_GATE_MODE == 1 || WM8960_MIC_GATE_MODE == 3) && local) ||
+          ((WM8960_MIC_GATE_MODE == 2 || WM8960_MIC_GATE_MODE == 3) && external);
+      assert(microphone_muted_for_gate() == !allowed);
+      tone_active = true; assert(microphone_muted_for_gate()); tone_active = false;
+      midi_tone_active = true; assert(microphone_muted_for_gate()); midi_tone_active = false;
+    }
+  }
+  wm8960_audio_set_local_ptt(false); wm8960_audio_set_external_ptt(false);
+  wm8960_audio_set_external_ptt(true); tud_umount_cb();
+  assert(!external_voice_ptt);
+  manual_ptt_invoke = 0; ptt_line_activated = 1;
+  service_keyer_midi(); assert(!local_voice_ptt);
+  manual_ptt_invoke = 1;
+  service_keyer_midi(); assert(local_voice_ptt);
+  ptt_line_activated = 0;
+  service_keyer_midi(); assert(!local_voice_ptt);
+  manual_ptt_invoke = 0;
+  wm8960_audio_set_local_ptt(true);
+  tone_mute_pending = true; tone_stopped_ms = clock_ms; tone_mute_release_ms = 420;
+  assert(microphone_muted_for_gate());
+  tone_mute_pending = false;
+  wm8960_audio_set_local_ptt(false);
+  fresh();
+  const uint8_t feedback_cin = WM8960_PTT_FEEDBACK_TYPE;
+  const uint8_t feedback_status = static_cast<uint8_t>((feedback_cin << 4) | 9);
+  const size_t feedback_queue_count = queue_count;
+  receive(feedback_status,WM8960_PTT_FEEDBACK_NUMBER,127,feedback_cin);
+  assert(external_voice_ptt == (WM8960_PTT_FEEDBACK_CHANNEL == 10));
+  if (WM8960_PTT_FEEDBACK_CHANNEL == 10) assert(queue_count == feedback_queue_count);
+  receive(feedback_status,WM8960_PTT_FEEDBACK_NUMBER,0,feedback_cin);
+  assert(!external_voice_ptt);
+  if (WM8960_PTT_FEEDBACK_TYPE == 9) {
+    receive(feedback_status,WM8960_PTT_FEEDBACK_NUMBER,127,9);
+    receive(0x89,WM8960_PTT_FEEDBACK_NUMBER,64,8);
+    assert(!external_voice_ptt);
+  }
+  receive(feedback_status - 1,WM8960_PTT_FEEDBACK_NUMBER,127,feedback_cin);
+  assert(!external_voice_ptt);
+  if (WM8960_PTT_FEEDBACK_CHANNEL == 10 && WM8960_PTT_FEEDBACK_TYPE == 9 &&
+      WM8960_PTT_FEEDBACK_NUMBER == 18) {
+    // SDRoxide feedback is byte-identical to the keyer's own PTT message.
+    fresh(); assert(wm8960_midi_set_ptt_mode(1));
+    wm8960_midi_ptt(true); service();
+    incoming.push_back({9,0x99,18,127}); service();
+    assert(external_voice_ptt);
+    wm8960_midi_ptt(false); service();
+    incoming.push_back({9,0x99,18,0}); service();
+    assert(!external_voice_ptt);
+  }
+  // Host PTT feedback drives the keyer PTT output without sending MIDI back.
+  fresh(); assert(wm8960_midi_set_ptt_mode(2));
+  manual_ptt_invoke = 0; ptt_line_activated = 0; key_state = 0;
+  wm8960_audio_set_external_ptt(true); service_host_ptt_feedback(); service();
+  assert(ptt_line_activated && manual_ptt_invoke && messages(0x99,18,127) == 0);
+  wm8960_audio_set_external_ptt(false); service_host_ptt_feedback(); service();
+  assert(!ptt_line_activated && !manual_ptt_invoke && messages(0x99,18,127) == 0);
+  // A local release of host-started PTT still tells the host.
+  wm8960_audio_set_external_ptt(true); service_host_ptt_feedback(); service();
+  manual_ptt_invoke = 0; ptt_unkey(); service();
+  assert(!ptt_line_activated && messages(0x99,18,127) == 1);
+  wm8960_audio_set_external_ptt(false); service_host_ptt_feedback(); service();
+  assert(messages(0x99,18,127) == 1);
+  // Host turns off local manual PTT: release without toggling the host back on.
+  fresh(); assert(wm8960_midi_set_ptt_mode(2));
+  manual_ptt_invoke = 1; ptt_key(); service();
+  assert(messages(0x99,18,127) == 1);
+  wm8960_audio_set_external_ptt(true); service_host_ptt_feedback(); service();
+  wm8960_audio_set_external_ptt(false); service_host_ptt_feedback(); service();
+  assert(!ptt_line_activated && !manual_ptt_invoke && messages(0x99,18,127) == 1);
+  // Automatic PTT is never converted into a held manual PTT.
+  fresh(); assert(wm8960_midi_set_ptt_mode(2));
+  manual_ptt_invoke = 0; ptt_key(); service();
+  wm8960_audio_set_external_ptt(true); service_host_ptt_feedback();
+  assert(!manual_ptt_invoke && ptt_line_activated);
+  wm8960_audio_set_external_ptt(false); service_host_ptt_feedback();
+  assert(ptt_line_activated);
+  ptt_unkey(); service();
+  assert(messages(0x99,18,127) == 1);
+  // Host off while keyed: hand PTT back to the tail timer.
+  fresh(); assert(wm8960_midi_set_ptt_mode(2));
+  wm8960_audio_set_external_ptt(true); service_host_ptt_feedback();
+  key_state = 1;
+  const int unkeys_before = ptt_unkey_calls;
+  wm8960_audio_set_external_ptt(false); service_host_ptt_feedback();
+  assert(ptt_line_activated && !manual_ptt_invoke && ptt_unkey_calls == unkeys_before);
+  key_state = 0; ptt_unkey(); service();
+  assert(messages(0x99,18,127) == 0);
+  manual_ptt_invoke = 0; ptt_line_activated = 0;
+  // Host mic-level feedback sets the saved keyer mic level without echoing it back.
+  fresh();
+  auto host_cc = [](uint8_t status, uint8_t control, uint8_t value) {
+    advance(20); incoming.push_back({11,status,control,value});
+    service_keyer_midi(); service_keyer_midi();
+  };
+  configuration.usb_mic_volume = 40; configuration.usb_mic_muted = true;
+  service_keyer_midi(); outgoing.clear(); config_dirty = 0;
+  const size_t mic_queue_before = queue_count;
+  host_cc(0xB9,23,95);
+  if (WM8960_MIC_LEVEL_FEEDBACK_CHANNEL == 10) {
+    assert(configuration.usb_mic_volume == 75 && !configuration.usb_mic_muted && config_dirty);
+    assert(config_changed_ms == clock_ms);
+    assert(outgoing.empty() && queue_count == mic_queue_before);
+    // Every host value maps to a level that is not reported back.
+    for (uint8_t value = 0; value <= 127; ++value) {
+      advance(1100); outgoing.clear();
+      host_cc(0xB9,23,value);
+      assert(configuration.usb_mic_volume == (value * 100 + 63) / 127);
+      assert(outgoing.empty());
+    }
+    // Feedback of the keyer's own recent report is ignored.
+    advance(1100); configuration.usb_mic_volume = 50;
+    service_keyer_midi(); assert(messages(0xB9,23,64) == 1);
+    configuration.usb_mic_volume = 60; service_keyer_midi();
+    host_cc(0xB9,23,64);
+    assert(configuration.usb_mic_volume == 60);
+    advance(1100); host_cc(0xB9,23,64);
+    assert(configuration.usb_mic_volume == 50);
+    // Other channels and controllers are not mic-level feedback.
+    host_cc(0xB8,23,20); host_cc(0xB9,24,20);
+    assert(configuration.usb_mic_volume == 50);
+    host_mic_value = 10; reset_session(); service_keyer_midi();
+    assert(configuration.usb_mic_volume == 50);
+    // Core 1 must not apply host levels while core 0 reports them.
+    host_mic_value = 25; core_num = 1; service_keyer_midi();
+    assert(configuration.usb_mic_volume == 50 && host_mic_value == 25);
+    core_num = 0; outgoing.clear(); service_keyer_midi();
+    assert(configuration.usb_mic_volume == 20 && messages(0xB9,23,25) == 0);
+  } else {
+    assert(configuration.usb_mic_volume == 40 && configuration.usb_mic_muted);
+  }
+  configuration.usb_mic_volume = 100; configuration.usb_mic_muted = false;
+  fresh();
   uint16_t touch_x = 0, touch_y = 0;
   lcd.pressure = 0;
   assert(!read_audio_safe_touch(&touch_x, &touch_y, 320));
@@ -642,6 +949,9 @@ int main() {
   assert(!gps_data_fresh(false, 0));
   assert(gps_data_fresh(true, 0) && gps_data_fresh(true, 4999));
   assert(!gps_data_fresh(true, 5000) && !gps_data_fresh(true, UINT32_MAX));
+  assert(!gps_location_held(false, 0));
+  assert(gps_location_held(true, 5000) && gps_location_held(true, 59999));
+  assert(!gps_location_held(true, 60000) && !gps_location_held(true, UINT32_MAX));
   tone_active = true;
   tone_frames_remaining = 100;
   assert(wm8960_audio_feedback_pending());
@@ -892,7 +1202,7 @@ try {
     $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if (!$vs) { throw 'Visual Studio C++ tools not found' }
     $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
-    foreach ($defines in @('', '/DDEBUG_MIDI', '/DDEBUG_MIDI_MESSAGES', '/DDEBUG_MIDI /DDEBUG_MIDI_MESSAGES', '/Drotary_switch=0', '/Drotary_switch=42', '/DENCODER_VFO_DIRECTION=1', '/DTEST_ENCODER_FULL_STEP')) {
+    foreach ($defines in @('', '/DDEBUG_MIDI', '/DDEBUG_MIDI_MESSAGES', '/DDEBUG_MIDI /DDEBUG_MIDI_MESSAGES', '/Drotary_switch=0', '/Drotary_switch=42', '/DENCODER_VFO_DIRECTION=1', '/DTEST_ENCODER_FULL_STEP', '/DWM8960_MIC_GATE_MODE=0', '/DWM8960_MIC_GATE_MODE=1', '/DWM8960_MIC_GATE_MODE=2', '/DWM8960_PTT_FEEDBACK_CHANNEL=10', '/DWM8960_PTT_FEEDBACK_CHANNEL=10 /DWM8960_PTT_FEEDBACK_TYPE=9', '/DWM8960_PTT_FEEDBACK_CHANNEL=10 /DWM8960_PTT_FEEDBACK_TYPE=9 /DWM8960_PTT_FEEDBACK_NUMBER=19', '/DWM8960_MIC_LEVEL_FEEDBACK_CHANNEL=10', '/DWM8960_MIC_LEVEL_FEEDBACK_CHANNEL=10 /DDEBUG_MIDI_MESSAGES')) {
         & $env:ComSpec /c "call `"$vcvars`" >nul && cl /nologo /std:c++17 /EHsc /W3 $defines /Fo`"$obj`" /Fe`"$exe`" `"$source`""
         if ($LASTEXITCODE -ne 0) { throw "Host compilation failed: $defines" }
         & $exe
