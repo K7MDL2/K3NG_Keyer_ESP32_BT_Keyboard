@@ -19,11 +19,17 @@ set(SDKCONFIG ${CMAKE_SOURCE_DIR}/build/sdkconfig)
 
 message(STATUS "Main:  CONFIG_DISPLAY_TYPE: ${CONFIG_DISPLAY_TYPE}")
 
+set(core2_requirements)
+if(CONFIG_DISPLAY_TYPE STREQUAL "M5STACK_CORE2_LCD" OR CONFIG_DISPLAY_TYPE STREQUAL "4")
+    list(APPEND core2_requirements m5stack__m5unified)
+endif()
+
 idf_component_register(SRCS "main.cpp" ${app_sources}
     INCLUDE_DIRS "."  ${include_dirs}
     REQUIRES nvs_flash bt_keyboard bt TFT_eSPI gt911-arduino LiquidCrystal_I2C arduino-esp32
     TinyGPSPlus-ESP32 TimeLib IST8310 MCP23017 Goertzel espcoredump
     esp_driver_spi esp_driver_gpio esp_driver_i2c
+    ${core2_requirements}
   )
 
 #  create precompiled files

@@ -67,10 +67,12 @@
 //#define DISPLAY_TYPE TEXT_I2C_4x20_LCD
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
 //#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
-//#define DISPLAY_TYPE M5STACK_CORE2_LCD  // Not working yet
+#ifndef DISPLAY_TYPE
+//#define DISPLAY_TYPE M5STACK_CORE2_LCD
 #define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 //#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
+#endif
 
 // *** For the TFT displays you must edit the library file TFT_eSPI/User_Setup_Select.h to point to the matching User_Setup.h located in main/TFT_e_SPI_Custom_Config 
 // The Setup file is then automatically selected.  When the TFT_eSPI library is updated, it will overwrite the changes in the User_Setup_Select.h file.
@@ -141,9 +143,20 @@
 
 #if (DISPLAY_TYPE == M5STACK_CORE2_LCD) || (CONFIG_DISPLAY_TYPE_NAME == M5STACK_CORE2_LCD)
     //#define CONFIG_DISPLAY_TYPE M5STACK_CORE2_LCD
-    #define FEATURE_M5STACK_CORE2     // K7MDL version on ESP32-WROOM with onboard 3.2" DIYMalls ST7789 240x320 color LCD graphics display, uses SPI bus     
-    //#define FEATURE_STRAIGHT_KEY //This features disables memory macros on ESP32 SP5IOU 20220124
-    //#define FEATURE_TFT_DISPLAY
+    #define FEATURE_M5STACK_CORE2
+    #define FEATURE_STRAIGHT_KEY
+    #define USE_KEY_PIN_INTERRUPTS
+    #define FEATURE_TFT_DISPLAY
+    #define FEATURE_TOUCH_DISPLAY
+    #define LCD_ROTATION 1
+    #ifndef BUTTON_ROWS
+        #define BUTTON_ROWS 4  // Core2: two actions per page, up to eight pages.
+    #endif
+    #define USE_CORE1
+    #define USE_MAIN_TASK
+    #define USE_BT_TASK
+    #define MAX_TX_PORTS 2
+    // GPS, compass, external IO expanders and built-in audio are not enabled yet.
 #endif
 
 #if (DISPLAY_TYPE == TFT_HOSYOND_320x480_LCD) || (CONFIG_DISPLAY_TYPE_NAME == TFT_HOSYOND_320x480_LCD)

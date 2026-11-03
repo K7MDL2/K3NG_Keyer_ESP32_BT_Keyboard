@@ -1758,24 +1758,19 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#define CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION
 	//#define TFT_VIEWPORT
-	#ifdef M5STACK_CORE2a
-		//#include <M5ModuleDisplay.h>
-		#include "SPI.h"
-		#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
-		TFT_eSPI lcd = TFT_eSPI();  // Invoke library
-		//#include <m5stack_core_2.h>
-		//#include  <m5gfx.h>
-		//#include <M5Unified.h>
-		//#define lcd M5.Lcd
-
-		//#define setTextColor(a,b,c) setTextColor(a,b)
-		//#define fillSmoothRoundRect(x,y,w,h,r,fg,bg) fillSmoothRoundRect(x,y,w,h,r,fg)
-		//#define drawSmoothRoundRect(x,y,r,ir,w,h,fg,bg) drawRoundRect(x,y,w,h,r,fg)
-		#define setFreeFont(a) setFont(a)
+	#ifdef FEATURE_M5STACK_CORE2
+		#include <M5Unified.h>
+		M5GFX &lcd = M5.Display;
 		#define FM9 &fonts::FreeMono9pt7b
 		#define FMB12 &fonts::FreeMonoBold12pt7b
 		#define FS9 &fonts::FreeSans9pt7b
-		#define TFT_HEIGHT 240
+		#define FS12 &fonts::FreeSans12pt7b
+		#define TFT_HEIGHT 320
+		#define TFT_WIDTH 240
+		#define TL_DATUM 0
+		#define BL_DATUM 9
+		#define BC_DATUM 10
+		#define MC_DATUM 4
 	#else
 		#include "SPI.h"
 		#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
@@ -1801,7 +1796,11 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#endif
 	//#include "Free_Fonts.h" // Include the header file attached to this sketch
-	#define GFXFF 1                 // enable FreeFont set of custom fonts from AdaFruit
+	#ifdef FEATURE_M5STACK_CORE2
+		#define GFXFF lcd.getFont()
+	#else
+		#define GFXFF 1                 // enable FreeFont set of custom fonts from AdaFruit
+	#endif
 	#define MY_DATUM TL_DATUM       // can change to MC_DATAUM for centered text in a drawstring()
 	#define SCROLL_BOX_DATUM BL_DATUM
 	#define SCROLL_BOX_CENTER_DATUM BC_DATUM //BC_DATUM
@@ -1879,7 +1878,12 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 	#define TFT_GREY 0x5AEB // New color
 
-	#if defined(TOUCH_BUTTON_16)
+	#if defined(FEATURE_M5STACK_CORE2)
+		#define BUTTON_FONT FS9
+		#define BUTTON_HEIGHT 48
+		#define BUTTON_WIDTH 100
+		#define BUTTON_ROW 184
+	#elif defined(TOUCH_BUTTON_16)
 		#undef BUTTON_FONT
 		#define BUTTON_FONT TFT_FONT_SMALL
 		#define BUTTON_HEIGHT 57
@@ -2385,6 +2389,15 @@ enum button_ID{
 		const uint8_t buttonCount = 16 + 1;  // sizeof(btn) / sizeof(btn[0]);
 		const int NUM_BUTTON_ROWS = 1; // number of rows of buttons
 		const int NUM_KEYS = buttonCount;  // +1 is CW Scroll Box touch zone.  Fx key counts as a regular key
+	#elif defined(FEATURE_M5STACK_CORE2)
+		#if ((BUTTON_ROWS + 0) < 1) || ((BUTTON_ROWS + 0) > 8)
+			#error "Core2 BUTTON_ROWS must be 1-8 (two actions per page)"
+		#endif
+		const int MAX_ROWS = 8;
+		const int BUTTONS_PER_ROW = 3;
+		const uint8_t buttonCount = BUTTONS_PER_ROW + 1;
+		const int NUM_BUTTON_ROWS = BUTTON_ROWS;
+		const int NUM_KEYS = MAX_ROWS * BUTTONS_PER_ROW + 1;
 	#else
 		#if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check value exists and is not empty, must be 1-4.
 			#error "BUTTON_ROWS must be defined with a value = 1-4, or, TOUCH_BUTTON_16 must be defined in keyer_features_and_options.h"
@@ -2425,7 +2438,11 @@ enum button_ID{
 	*/
 	#endif
 	struct BTN_State {
-		TFT_eSPI_Button p_btn;
+		#ifdef FEATURE_M5STACK_CORE2
+			lgfx::LGFX_Button p_btn;
+		#else
+			TFT_eSPI_Button p_btn;
+		#endif
 		uint8_t len;
 		uint32_t duration;
 	} btn[buttonCount] = {};
@@ -2443,7 +2460,35 @@ enum button_ID{
 	};
 
 	struct Keys key[NUM_KEYS] =
-	#ifdef TOUCH_BUTTON_16
+	#ifdef FEATURE_M5STACK_CORE2
+	{
+		{BUTTON_F1,         0, 0, false, false, false, "1/4",   "1/4"},
+		{BUTTON_PAUSE,      1, 0, false, false, false, "Pause", "Pause"},
+		{BUTTON_TX_ENABLE,  2, 0, false, false, false, "TXen",  "TXen"},
+		{BUTTON_F1,         0, 1, false, false, false, "2/4",   "2/4"},
+		{BUTTON_WPM_UP,     1, 1, false, false, false, "Wpm+",  "Wpm+"},
+		{BUTTON_WPM_DN,     2, 1, false, false, false, "Wpm-",  "Wpm-"},
+		{BUTTON_F1,         0, 2, false, false, false, "3/4",   "3/4"},
+		{BUTTON_MEM_1,      1, 2, false, false, false, "M1",    "M1-R"},
+		{BUTTON_MEM_2,      2, 2, false, false, false, "M2",    "M2-R"},
+		{BUTTON_F1,         0, 3, false, false, false, "4/4",   "4/4"},
+		{BUTTON_MEM_3,      1, 3, false, false, false, "M3",    "M3-R"},
+		{BUTTON_MEM_4,      2, 3, false, false, false, "M4",    "M4-R"},
+		{BUTTON_F1,         0, 4, false, false, false, "5/4",   "5/4"},
+		{BUTTON_MEM_5,      1, 4, false, false, false, "M5",    "M5-R"},
+		{BUTTON_MEM_6,      2, 4, false, false, false, "M6",    "M6-R"},
+		{BUTTON_F1,         0, 5, false, false, false, "6/4",   "6/4"},
+		{BUTTON_MEM_7,      1, 5, false, false, false, "M7",    "M7-R"},
+		{BUTTON_MEM_8,      2, 5, false, false, false, "M8",    "M8-R"},
+		{BUTTON_F1,         0, 6, false, false, false, "7/4",   "7/4"},
+		{BUTTON_MEM_LIST,   1, 6, false, false, false, "Mem",   "Mem"},
+		{BUTTON_TUNE,       2, 6, false, false, false, "Tune",  "Tune"},
+		{BUTTON_F1,         0, 7, false, false, false, "8/4",   "8/4"},
+		{BUTTON_TX_SELECT,  1, 7, false, false, false, "Tx#1",  "Tx#1"},
+		{BUTTON_SIDETONE_EN,2, 7, false, false, false, "Tone",  "Tone"},
+		{CW_BOX,            3,255, false, false, false, "",      ""}
+	};
+	#elif defined(TOUCH_BUTTON_16)
 	{
 		// 1st row
 		{BUTTON_PAUSE,      0,  0, false, false, false, "Pause", "Pause"},
@@ -4926,7 +4971,11 @@ int32_t tft_scroll_row_y(byte row) {
 void tft_draw_scroll_char(byte row, byte col) {
 	const char c = lcd_scroll_buffer[row].charAt(col);
 	if (c > 0 && c != ' ') {
-		lcd.drawChar(c, SCROLL_TEXT_LEFT_SIDE+(col*COLUMN_WIDTH), tft_scroll_row_y(row), GFXFF);
+		#ifdef FEATURE_M5STACK_CORE2
+			lcd.drawChar(c, SCROLL_TEXT_LEFT_SIDE+(col*COLUMN_WIDTH), tft_scroll_row_y(row));
+		#else
+			lcd.drawChar(c, SCROLL_TEXT_LEFT_SIDE+(col*COLUMN_WIDTH), tft_scroll_row_y(row), GFXFF);
+		#endif
 	}
 }
 
@@ -5086,7 +5135,11 @@ void service_display() {
 						lcd.drawString(lcd_scroll_buffer[y], SCROLL_TEXT_LEFT_SIDE, y1, GFXFF);
 					#else  // do char by char
 						char c = lcd_scroll_buffer[y].charAt(x);
-						lcd.drawChar(c, x1, y1, GFXFF);  // use char in scroll buffer and place at x1, y1 on graphics screen
+						#ifdef FEATURE_M5STACK_CORE2
+							lcd.drawChar(c, x1, y1);
+						#else
+							lcd.drawChar(c, x1, y1, GFXFF);  // use char in scroll buffer and place at x1, y1 on graphics screen
+						#endif
 					#endif
 
 					//lcd.setCursor(x1, y1);
@@ -19820,7 +19873,9 @@ void display_heading(void) {
 			#ifdef FEATURE_STRAIGHT_KEY
 				// Setup CPU side GPIO interrupt for straight key
 				gpio_set_direction((gpio_num_t) pin_straight_key, GPIO_MODE_INPUT);
-				gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);  // no pullup on pin 35
+				#ifndef FEATURE_M5STACK_CORE2
+					gpio_set_pull_mode((gpio_num_t) pin_straight_key, GPIO_PULLUP_ONLY);
+				#endif
 				gpio_set_intr_type((gpio_num_t) pin_straight_key, GPIO_INTR_ANYEDGE);
 				gpio_isr_handler_add((gpio_num_t) pin_straight_key, straight_key_intr_handler, (void *)(gpio_num_t) pin_straight_key);
 				straight_key_state = gpio_get_level((gpio_num_t) pin_straight_key);
@@ -19983,7 +20038,35 @@ void display_heading(void) {
 #endif
 //---------------------------------------------------------------------
 
+#ifdef FEATURE_M5STACK_CORE2
+void initialize_core2_board() {
+	auto board_config = M5.config();
+	board_config.fallback_board = m5::board_t::board_M5StackCore2;
+	board_config.internal_spk = false;
+	board_config.internal_mic = false;
+	board_config.internal_imu = false;
+	board_config.internal_rtc = false;
+	board_config.external_display_value = 0;
+	board_config.output_power = false;
+	M5.begin(board_config);
+	if (M5.getBoard() != m5::board_t::board_M5StackCore2 || !lcd.touch()) {
+		debug_serial_port->println(F("Error: Core2 display/touch initialization failed"));
+		ESP_ERROR_CHECK(ESP_FAIL);
+	}
+	lcd.setRotation(LCD_ROTATION);
+	if (lcd.width() != 320 || lcd.height() != 240) {
+		debug_serial_port->println(F("Error: Core2 display must be 320x240 in landscape"));
+		ESP_ERROR_CHECK(ESP_FAIL);
+	}
+	lcd.setBrightness(128);
+}
+#endif
+
 void initialize_pins() {
+	#ifdef FEATURE_M5STACK_CORE2
+		// Board detection/power setup must finish before configuring radio outputs.
+		initialize_core2_board();
+	#endif
 #if defined (ARDUINO_MAPLE_MINI) || defined(ARDUINO_GENERIC_STM32F103C) || defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 	#if defined(FEATURE_MCP23017_EXPANDER)
 		init_MCP23017();  // pin interrupts used on the expander, not local io pins.
@@ -20131,12 +20214,16 @@ void initialize_pins() {
 	#endif //FEATURE_PTT_INTERLOCK
 
 	#if defined(FEATURE_STRAIGHT_KEY) && !defined(USE_KEY_PIN_INTERRUPTS)
-		pinMode(pin_straight_key,INPUT_PULLUP);
+		#ifdef FEATURE_M5STACK_CORE2
+			pinMode(pin_straight_key, INPUT);
+		#else
+		pinMode(pin_straight_key, INPUT_PULLUP);
 		if (STRAIGHT_KEY_ACTIVE_STATE == HIGH){
 			digitalWrite (pin_straight_key, LOW);
 		} else {
 			digitalWrite (pin_straight_key, HIGH);
 		}
+		#endif
 	#endif //FEATURE_STRAIGHT_KEY
 
 	#if defined(FEATURE_COMPETITION_COMPRESSION_DETECTION)
@@ -21652,8 +21739,13 @@ void popup(bool show)
 {
 	#ifdef FEATURE_TFT_DISPLAY
 		if (!show && popup_active) {  // remove popup window unless it is a repeat key
-			lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
-			lcd.resetViewport();
+			#ifdef FEATURE_M5STACK_CORE2
+				lcd.clearClipRect();
+				lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+			#else
+				lcd.fillRect(00, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+				lcd.resetViewport();
+			#endif
 			lcd.setFreeFont(TFT_FONT_MEDIUM);
 			lcd_scroll_drawn_row = 0;  // box was blanked; redraw all scroll text
 			lcd_scroll_drawn_col = 0;
@@ -21666,9 +21758,17 @@ void popup(bool show)
 		}
 		// draw the popup window and post the text
 		//debug_serial_port->println(F("popup on"));
-		lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+		#ifdef FEATURE_M5STACK_CORE2
+			lcd.setClipRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+		#else
+			lcd.setViewport(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT);
+		#endif
 		popup_active = true;
-		lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+		#ifdef FEATURE_M5STACK_CORE2
+			lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+		#else
+			lcd.fillRect(0, 0, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLUE);
+		#endif
 		lcd.setTextWrap(true,true);
 		lcd.setCursor(SCROLL_BOX_LEFT_SIDE,SCROLL_BOX_TOP);
 		lcd.setFreeFont(TFT_FONT_MEDIUM);
@@ -21716,26 +21816,31 @@ void create_buttons() {
 		#ifndef TOUCH_BUTTON_16
 
 			// All touch displays have at least 5 usable keys and a CW Scroll Box touch zone
-			#if defined(TFT_320_480)
+			#if defined(FEATURE_M5STACK_CORE2)
+				for (int b = 0; b < BUTTONS_PER_ROW; ++b) {
+					btn[b].p_btn.initButtonUL(&lcd, ba + b * bs, br, bw, bh, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				}
+				btn[3].p_btn.initButtonUL(&lcd, SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, 1);
+			#elif defined(TFT_320_480)
 				ba = 2;
 				bs = bw + 10;  // start of next button left edge
 				lcd.setFreeFont(BUTTON_FONT);
-				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, GFXFF);  // library modified to ignore text size
+				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, 1);
 			#else
 				ba = 1;
 				bs = bw + 4;  // start of next button left edge
 				lcd.setFreeFont(BUTTON_FONT);
-				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, GFXFF);  // library modified to ignore text size
-				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, GFXFF);  // library modified to ignore text size
+				btn[0].p_btn.initButtonUL(&lcd,  ba+(0*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[1].p_btn.initButtonUL(&lcd,  ba+(1*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[2].p_btn.initButtonUL(&lcd,  ba+(2*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[3].p_btn.initButtonUL(&lcd,  ba+(3*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[4].p_btn.initButtonUL(&lcd,  ba+(4*bs), br,  bh, bw, TFT_WHITE, TFT_RED, TFT_WHITE, btext, 1);
+				btn[5].p_btn.initButtonUL(&lcd,  SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK, TFT_BLACK, TFT_BLACK, btext, 1);
 			#endif
 		#else
 			ba = 1;
@@ -21773,6 +21878,14 @@ void create_buttons() {
 // For rows, need to calculate the row nummber (mod 4) then assign the group of 4 values 0-3 for all 4 groups of 4
 void initialize_buttons() {
 	#ifdef FEATURE_TOUCH_DISPLAY
+		#ifdef FEATURE_M5STACK_CORE2
+		for (int i = 0; i < NUM_KEYS - 1; ++i) {
+			if (key[i].btn_idx == 0) {
+				snprintf(key[i].text_off, sizeof(key[i].text_off), "%u/%u", key[i].row + 1, NUM_BUTTON_ROWS);
+				strcpy(key[i].text_on, key[i].text_off);
+			}
+		}
+		#endif
 		int i, b;
 		#ifndef TOUCH_BUTTON_16
 		int r = 0;
@@ -21968,10 +22081,13 @@ void process_buttons() { // (uint8_t button_ID) {
 			}
 		}
 
+		if (key_ID == 254) return;
+
 		// F-Key (always btn_idx == 0) cycles through rows of action buttons - button_row is the top dawg
 		// if TOUCH_BUTTON_16 is set then there is only 1 row and Fx keys are not used
 		#ifndef TOUCH_BUTTON_16
 			if (key[key_ID].btn_idx == 0) {  // F1, F2, F3, etc are always touch btn0
+				last_active_time = millis();
 				button_row++;
 				if (button_row >= NUM_BUTTON_ROWS) {
 					button_row = 0;
@@ -22043,6 +22159,24 @@ void process_buttons() { // (uint8_t button_ID) {
 }
 
 // Detects if a button is pressed and assign a button ID to it.
+#ifdef FEATURE_M5STACK_CORE2
+bool read_core2_touch(uint16_t *x, uint16_t *y) {
+	uint16_t raw_x, raw_y;
+	if (!lcd.getTouchRaw(&raw_x, &raw_y)) return false;
+	// The three printed panel buttons occupy the strip below the 240-pixel LCD.
+	if (raw_y >= 240 && raw_x < 320) {
+		const uint8_t button = raw_x * 3 / 320;
+		*x = 1 + button * (BUTTON_WIDTH + 4) + BUTTON_WIDTH / 2;
+		*y = BUTTON_ROW + BUTTON_HEIGHT / 2;
+	} else {
+		lcd.convertRawXY(&raw_x, &raw_y);
+		*x = raw_x;
+		*y = raw_y;
+	}
+	return true;
+}
+#endif
+
 #if defined(FEATURE_TOUCH_DISPLAY) && defined(USE_RES_TOUCH) && \
     defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
@@ -22130,6 +22264,9 @@ bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
 						}
 						if (pressed) debug_serial_port->printf("GT911 Touch Event: x:%d y:%d pressed:%d\n", t_x, t_y, pressed);
 					#endif
+					#ifdef FEATURE_M5STACK_CORE2
+						pressed = read_core2_touch(&t_x, &t_y);
+					#endif
 
 					#ifdef USE_RES_TOUCH
 						//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex							
@@ -22170,6 +22307,9 @@ bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
 										tp.read();
 										pressed = tp.isTouched;
 									#endif
+									#ifdef FEATURE_M5STACK_CORE2
+										pressed = read_core2_touch(&t_x, &t_y);
+									#endif
 
 									#ifdef USE_RES_TOUCH
 										//if (xSemaphoreTake (xMutex, portMAX_DELAY)) {  // take the mutex
@@ -22185,7 +22325,11 @@ bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
 										//}
 									#endif
 
-									duration += (millis() - tpTime);      // add each touch to total duration
+									#ifdef FEATURE_M5STACK_CORE2
+										duration = millis() - tpTime;
+									#else
+										duration += (millis() - tpTime);      // add each touch to total duration
+									#endif
 
 									//debug_serial_port->printf("Touch Event: x:%d y:%d pressed:%d  duration:%lu\n", t_x, t_y, pressed, duration);
 
@@ -26252,12 +26396,10 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 		}
 	#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 		#ifdef FEATURE_M5STACK_CORE2
-				M5.Speaker.tone(frequency, configuration.hz_sidetone);
-				myDelay(duration_ms);
-				if (M5.Speaker.isPlaying(0))
-				{
-						M5.Speaker.stop();
-				}
+				// Silent bring-up stage: leave the built-in I2S pins untouched.
+				(void)sidetone_line_pin_num;
+				(void)frequency;
+				if (duration_ms) myDelay(duration_ms);
 		#elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 			 //debug_serial_port->printf("pin:%d Freq:%d dur:%lu", sidetone_line_pin_num, frequency, duration_ms);
 			 tone(sidetone_line_pin_num, frequency, duration_ms);
@@ -26277,10 +26419,7 @@ void s_tone(uint8_t sidetone_line_pin_num, uint16_t frequency, uint32_t duration
 			wm8960_audio_stop_tone();
 		#elif !defined(OPTION_SIDETONE_DIGITAL_OUTPUT_NO_SQUARE_WAVE)
 			#ifdef FEATURE_M5STACK_CORE2
-				if (M5.Speaker.isPlaying(0))
-				{
-						M5.Speaker.stop();
-				}
+				(void)sidetone_line_pin_num;
 			#elif defined (HARDWARE_ESP32_DEV) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || defined(ARDUINO_RASPBERRY_PI_PICO)
 				noTone(sidetone_line_pin_num);
 			#endif
@@ -26693,8 +26832,12 @@ void tft_backlight(int state) {
 		static bool state_last = 254;
 
 		if (!configuration.backlight_timeout_disable && (state != state_last)) { // do nothing effectively disabling timeout
-			if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
-			else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
+			#ifdef FEATURE_M5STACK_CORE2
+				lcd.setBrightness(state ? 128 : 0);
+			#else
+				if (state) digitalWrite(TFT_BL, 1);  // turn on backlight pin  called by autodim
+				else digitalWrite(TFT_BL, 0);  // turn off backlight - called by autodim
+			#endif
 			state_last = state;
 			#ifdef DEBUG_BACKLIGHT
 				debug_serial_port->printf("tft_backlight: Timeout disabled=%d  state=%d\n", configuration.backlight_timeout_disable, state);
@@ -27518,10 +27661,8 @@ void initialize_st7789_lcd()
 	void initialize_TFT_display(void)
 	{
 		#ifdef FEATURE_M5STACK_CORE2
-			//lcd.setRotation(1);
-			//lcd.invertDisplay(true);
-			//initialize_m5stack_core2();
-			// h and w are defined as 320 and 240 globally.  Crashes when calling height() or width() functions.
+			lcd.setRotation(LCD_ROTATION);
+			lcd.setBrightness(128);
 		#else
 			lcd.init();  // init the st7789 based ideaspark tft lcd on ESP32-WROOM module
 			//lcd.invertDisplay(1);

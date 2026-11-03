@@ -653,6 +653,61 @@ tools installed, run `.\tests\wm8960_midi_host_test.ps1`; it checks debug
 options both enabled and disabled, control-change reporting, packet routing, source coexistence,
 EEPROM configuration byte round-trips, and USB failure recovery.
 
+### M5Stack Core2 initial bring-up (ESP-IDF)
+
+Select the Core2 profile without changing the default Hosyond profile:
+
+```powershell
+idf.py -B build-core2 -DKEYER_DISPLAY_TYPE=M5STACK_CORE2_LCD build
+```
+
+Alternatively select `DISPLAY_TYPE M5STACK_CORE2_LCD` in
+`main/keyer_features_and_options_esp32_dev.h`. M5Unified/M5GFX provide Core2
+power management, the built-in LCD and FT6336 capacitive touch. Other displays
+continue to use TFT_eSPI. Bluetooth Classic and BLE retain the existing
+ESP-IDF keyboard implementation and `USE_BLE` selection.
+
+The three printed capacitive panel buttons are used: A cycles pages; B and C
+activate the two actions shown above them. `BUTTON_ROWS` defaults to 4 for eight
+actions, and may be set to 1-8 (eight pages exposes all sixteen actions).
+`BUTTON_ASSIGNMENT_ORDER` in `main/keyer_settings_esp32_dev.h` sets their priority.
+The default pages are Pause/TX enable, WPM up/down, Memory 1/2 and Memory 3/4.
+The left label shows the current page/total. Short and very-long presses retain
+the existing action behavior; touching the CW scroll box still aborts sending.
+
+The provisional direct-GPIO map is:
+
+| Function | Core2 GPIO | Connection |
+|---|---:|---|
+| Left paddle | 32 | Port A / M-Bus |
+| Right paddle | 27 | M-Bus |
+| Straight key | 35 | M-Bus; external 10k pull-up to 3.3V required |
+| TX key 1 | 25 | ULN2803A; formerly BCD bit 0 |
+| PTT 1 | 26 | ULN2803A; formerly BCD bit 1 |
+| TX key 2 | 33 | ULN2803A; formerly BCD bit 2 |
+| PTT 2 | 19 | ULN2803A; existing PTT output |
+| PTT input (disabled) | 14 | Existing buffered input; reserved |
+
+Paddles/key close to ground. Use appropriate radio-interface circuitry
+(e.g. the existing ULN2803A Proto base), not radio voltages directly on GPIO.
+These output pins match the working Core2 CI-V band-decoder ULN2803A base.
+GPIO HIGH turns on each ULN2803A channel, pulling its collector output LOW;
+GPIO LOW releases the output. GPIO14's reference PTT logic is active-low,
+but the input remains disabled (`ptt_input_pin = 0`) and is not assigned elsewhere.
+Port A is not available for external I2C. GPIO13 and input-only GPIO36
+remain spare; the serial programming port, internal SPI/I2C, touch IRQ and
+audio GPIO0/2/12/34 are not assigned to keyer inputs/outputs.
+
+GPS, compass and expanders are disabled in this profile. Built-in speaker
+and microphone support are deferred: this stage is silent, with no GPIO buzzer.
+The microSD, IMU and RTC are not initialized. Do not attach a conflicting
+stacked module. Test without a connected transmitter first: screen orientation,
+touch buttons/long presses, abort and text restart, paddles/straight key, then
+both TX/PTT pairs. GPIO35 needs its pull-up even when no straight key is attached.
+
+Run `.\tests\core2_gpio_host_test.ps1` to check GPIO exclusions, four/eight-page
+action mapping, page cycling, short/long presses, abort and panel touch zones.
+
 ### Shared ESP32 display, GPS and key-input improvements
 
 The ESP32 build uses the same incremental TFT scrolling, timed-message expiry,

@@ -379,8 +379,9 @@
 #ifdef BUTTON_ASSIGNMENTS
 // You can assign the 16 predefined buttons to 16 button positions. When used in combination with BUTTON_ROWS, 
 //   you assign your top priority buttons first in the list. 
-// BUTTON_ROWS will cut off the visible buttons in the list at 4, 8, 12 or show all 16 buttons
-// If you have BUTTON_ROWS == 2, only the top 8 buttons (B1-B8) will show.  The rest are unavailable on screen adn ignored.
+// BUTTON_ROWS selects four actions per row, or two per row on Core2 (1-8 rows).
+// Core2 defaults to four rows for the first eight actions; eight rows exposes all sixteen.
+// Other displays with BUTTON_ROWS == 2 show the first eight actions.
 
 // Available button labels you can assign are in a 16-member array below
 // Arrange the 16 labels into one of the 16 array positions below as you desire.  

@@ -19,7 +19,7 @@ dependencies:
   esp-idf-lib/pcf8574: ^1.0.8
   panigrah/esp32-idf-hd44780: ^0.0.3
   #m5stack/m5gfx: ^0.2.9
-  #m5stack/m5unified: ^0.2.7
+  m5stack/m5unified: ^0.2.29
   #espressif/m5stack_core_2: ^3.0.1
   #espressif/esp_bsp_devkit: ^3.0.1
   #esp-idf-lib/mcp23x17: ^1.1.9
