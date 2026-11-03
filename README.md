@@ -27,6 +27,16 @@ To build the ESP32 under ESP-IDF see https://github.com/K7MDL2/K3NG_Keyer_ESP32_
 
 To build under Arduino IDE see https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/Building-the-project-with-Arduino-IDE.  For the Pico I post a UF2 image file, and image files for the ESP32 for each model display for those who do not want to try to compile their own.   
 
+With arduino-cli the bundled `components` folder can be used as the library source directly, avoiding the copy of libraries into the Arduino libraries folder (and any accidental use of unmodified upstream versions). For example, a Pico build for the Waveshare RP2350B Plus W:
+
+```
+arduino-cli core update-index --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+arduino-cli core install rp2040:rp2040 --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+arduino-cli compile --fqbn rp2040:rp2040:waveshare_rp2350b_plus_w:ipbtstack=ipv4btcble --libraries components -e main
+```
+
+`--libraries components` takes priority over copies in the Arduino libraries folder, so the repo's modified TFT_eSPI, MCP23017, TimeLib, and TinyGPSPlus are always the versions built. The UF2 is written to `main/build/<fqbn>/main.ino.uf2`. The bundled TFT_eSPI fork's `User_Setups` folder contains wrapper headers that include the display setup files from `TFT_e_SPI_Custom_Config`, so no TFT_e_SPI_Custom_Config copy step is needed when building from `components` (for Pico or ESP32 displays).
+
 Under Arduino, for ESP32 and Pico only,  I automatically detect the board type and set the proper #define for that board, no need to edit the keyere-hardware.h file.  If you have a different display, or no display, update the settings in Feature and Options header file.  TFT_eSPI library is used for both ESP32 and Pico.  Your TFT display needs to be one of the types supported in TFT_eSPI's UserSetup.h file.  I have tested displays with both the GT911 and XPT2046 touch controllers.  The XPT2046 has built in support in the TFT_eSPI libary.  GT911 is an i2c controller and uses a separate library.  It should be easy to substitute other touch controllers, just need a 'pressed' event (polled) with x and y values.
 
 _____________________________________________
@@ -166,7 +176,7 @@ Extended terminal commands start with `\:` and end with Enter:
 | `\:USBMIC 80` | Set USB microphone level to 80% |
 | `\:SIDETONE 50` | Set sidetone to 50% |
 | `\:USBPLAY MUTE` / `\:USBPLAY UNMUTE` / `\:USBPLAY TOGGLE` | Change playback mute without losing its level |
-| `\:USBMIC +` / `\:SIDETONE -` | Adjust the selected level by approximately 1 dB |
+| `\:USBMIC +` / `\:SIDETONE -` | Adjust the selected level by 2% (linear) |
 
 All three target commands accept a level from 0 to 100, `+`, `-`, `MUTE`,
 `UNMUTE`, or `TOGGLE`; no argument shows status. Setting/adjusting a level
@@ -181,12 +191,10 @@ Bluetooth consumer/media keys use the same controls:
 | Left or right Shift | WM8960 sidetone |
 | Left or right Ctrl | USB microphone |
 
-Mute toggles the selected path; Volume+/Volume- use approximately 1 dB
-audio-taper steps and unmute, as do terminal `+`/`-` commands. Each step
-multiplies linear amplitude by 1.122 (up) or 0.891 (down), rounded to the
-saved integer percentage. Near silence, a minimum 1% change ensures every
-step moves; 0% is silence and 100% is the upper limit. For example, decreasing
-from 100% gives 89%, 79%, 70%, 62%, then 55%. Numeric commands still set
+Mute toggles the selected path; Volume+/Volume- use linear 2% steps and
+unmute, as do terminal `+`/`-` commands (the earlier approximately 1 dB
+audio-taper steps were too coarse near full scale). 0% is silence and 100%
+is the upper limit. Numeric commands still set
 linear 0..100% directly, and the EEPROM layout/version is unchanged.
 Ctrl+Shift or Alt/Meta combinations are ignored. Consumer releases do not
 repeat the action or enter the Morse text buffer. The keyboard must actually
@@ -407,6 +415,9 @@ Terminal commands (CDC2 when configured) are:
 - `\:MIDI-PTT [OFF|ONOFF|TOGGLE]`: show or change the saved PTT mode.
   Release PTT and let queued events drain before changing it.
 - `\:MIDI-MODE [LOCAL|REPORT|POD]`: show or change the saved control mode (below).
+- `\:MIDI-VFO [NORM|REV]`: show or change the saved VFO tune direction.
+  `REV` reverses the encoder's VFO wheel steps relative to the compiled
+  `ENCODER_VFO_DIRECTION` default.
 - `\:MIDIWHEEL +` / `\:MIDIWHEEL -`: send one wheel step for host mapping/testing.
 
 MIDI control modes decide what the keyer's own controls (encoder, BT keyboard
@@ -505,6 +516,8 @@ hold still take precedence, as do the existing microphone mute/level controls.
 The host USB capture stream remains connected and receives silence while gated.
 This changes the default from always-open capture; choose mode 0 for an
 external transmitter whose PTT cannot be observed by the keyer.
+The saved `\:MIC GATE 0..3` terminal command changes the mode at runtime;
+`WM8960_MIC_GATE_MODE` is only the default after an EEPROM reset.
 
 SDRoxide PTT LED feedback defaults to channel 10, Note 18:
 `WM8960_PTT_FEEDBACK_CHANNEL=10`, `WM8960_PTT_FEEDBACK_TYPE=9`,
@@ -560,6 +573,7 @@ the current gain and a meter (peak, RMS and clipped-sample count of the ADC
 input since the previous `MIC`). `MIC PGA n`, `MIC BOOST n` and `MIC ALC ON|OFF`
 change the codec gain immediately and are saved to EEPROM after the normal
 settle delay; the build defines are only the defaults after an EEPROM reset.
+`MIC GATE 0..3` changes and saves the microphone PTT gate mode (above).
 Adding these saved settings changed the EEPROM layout (Pico magic 45), so the
 first boot of this build resets saved settings. `MIC TONE` is not saved.
 `MIC TONE ON` replaces the ADC input with a clean 1 kHz tone
@@ -762,7 +776,7 @@ the encoder function to **master/USB playback volume**, not speed.
 Menu selection is not saved; audio/pitch/speed settings use normal deferred
 EEPROM saving, with no layout or magic-number change.
 
-Volume functions reuse the existing approximately 1 dB audio-taper steps and
+Volume functions use the same linear 2% steps and
 unmute the selected path. Master volume changes the existing saved USB playback
 trim, not the codec's analogue output gain or sidetone volume. Frequency
 changes by 10 Hz per decoded step, limited to 300..1200 Hz. CW speed retains
@@ -770,7 +784,10 @@ the existing 1/2-WPM acceleration, command-mode speed handling, WinKey speed
 notification, LCD update, and normal-speed MIDI CC21 synchronization.
 VFO emits one CC20 relative message per decoded step (positive 127, negative 1).
 `ENCODER_VFO_DIRECTION` in `main/keyer_settings_pico.h` defaults to **-1**
-to reverse VFO tuning; set **+1** for the original direction. Other modes
+to reverse VFO tuning; set **+1** for the original direction. The saved
+`\:MIDI-VFO NORM|REV` terminal command reverses the direction at runtime
+without rebuilding (this saved setting and `\:MIC GATE` bumped the Pico EEPROM
+magic to 47, so the first boot resets saved settings). Other modes
 are unaffected.
 The existing half-step quadrature decoder is reused. Pico GPIO CHANGE
 interrupts capture transitions and queue up to 127 timestamped steps while

@@ -371,6 +371,7 @@ volatile bool midi_tone_active = false;
 volatile bool midi_ptt_active = false;
 volatile bool local_voice_ptt = false;
 volatile bool external_voice_ptt = false;
+volatile uint8_t mic_gate_mode = WM8960_MIC_GATE_MODE;
 
 uint32_t midi_tone_phase = 0;
 uint32_t midi_tone_phase_increment = 0;
@@ -405,10 +406,10 @@ bool microphone_muted_for_gate() {
   const bool tone_muted = tone_active || midi_tone_active ||
       (tone_mute_pending &&
        static_cast<uint32_t>(millis() - tone_stopped_ms) < tone_mute_release_ms);
-  if (WM8960_MIC_GATE_MODE == 0) return tone_muted || midi_ptt_active;
+  if (mic_gate_mode == 0) return tone_muted || midi_ptt_active;
   const bool permitted =
-      ((WM8960_MIC_GATE_MODE == 1 || WM8960_MIC_GATE_MODE == 3) && local_voice_ptt) ||
-      ((WM8960_MIC_GATE_MODE == 2 || WM8960_MIC_GATE_MODE == 3) && external_voice_ptt);
+      ((mic_gate_mode == 1 || mic_gate_mode == 3) && local_voice_ptt) ||
+      ((mic_gate_mode == 2 || mic_gate_mode == 3) && external_voice_ptt);
   return tone_muted || !permitted;
 }
 
@@ -1173,6 +1174,18 @@ void wm8960_audio_set_mic_test_tone(bool enabled) {
   mic_test_tone = enabled;
 }
 
+bool wm8960_audio_set_mic_gate_mode(uint8_t mode) {
+  if (mode > 3) {
+    return false;
+  }
+  mic_gate_mode = mode;
+  return true;
+}
+
+uint8_t wm8960_audio_mic_gate_mode() {
+  return mic_gate_mode;
+}
+
 bool wm8960_audio_mic_test_tone() {
   return mic_test_tone;
 }
@@ -1480,7 +1493,7 @@ void wm8960_audio_service(void) {
         gate_open ? "OPEN" : "closed",
         static_cast<unsigned>(local_voice_ptt),
         static_cast<unsigned>(external_voice_ptt),
-        static_cast<unsigned>(WM8960_MIC_GATE_MODE),
+        static_cast<unsigned>(mic_gate_mode),
         static_cast<unsigned long>(mic_gate_packets),
         static_cast<unsigned>(mic_gate_input_peak),
         static_cast<unsigned>(mic_gate_sent_peak),
@@ -1491,6 +1504,7 @@ void wm8960_audio_service(void) {
     mic_gate_input_peak = mic_gate_sent_peak = 0;
   }
   // Pops: the I2S ring holds ~5 ms ahead, so longer stalls play a gap.
+#if defined(DEBUG_WM8960_GLITCH)
   static uint32_t seen_underruns = 0, seen_starved = 0, seen_capture = 0;
   static uint32_t seen_gap = 0, seen_lead = 0, seen_flash = 0;
   static uint32_t last_glitch_report_ms = 0;
@@ -1563,6 +1577,7 @@ void wm8960_audio_service(void) {
     seen_lead = lead_runs;
     seen_flash = flash_runs;
   }
+#endif  // DEBUG_WM8960_GLITCH
 #endif
   serial_was_connected = serial_connected;
   trace_audio_stage(4);

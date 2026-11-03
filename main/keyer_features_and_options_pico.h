@@ -68,7 +68,7 @@
     WM8960_MIC_ALC_MAX_GAIN < 0 || WM8960_MIC_ALC_MAX_GAIN > 7
   #error "Invalid WM8960 microphone gain configuration"
 #endif
-#define eeprom_magic_number 45          // you can change this number to have the unit re-initialize EEPROM
+#define eeprom_magic_number 47          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior

@@ -2080,6 +2080,8 @@ struct config_t {
 		uint8_t mic_pga;
 		uint8_t mic_boost;
 		bool mic_alc;
+		bool midi_vfo_reversed;
+		uint8_t mic_gate_mode;
 	#endif
 
 	// GPS and Compass
@@ -6741,7 +6743,8 @@ void check_encoder_switch() {
 void apply_encoder_step(int step) {
 	switch (encoder_function) {
 		case EncoderFunction::Vfo:
-			if (!wm8960_midi_wheel_step(step * ENCODER_VFO_DIRECTION)) {
+			if (!wm8960_midi_wheel_step(step * ENCODER_VFO_DIRECTION *
+			        (configuration.midi_vfo_reversed ? -1 : 1))) {
 				#ifdef FEATURE_DISPLAY
 					lcd_center_print_timed("MIDI unavailable", 0, 1000);
 				#else
@@ -14750,11 +14753,9 @@ void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
 }
 
 int step_audio_volume(int level, bool increase) {
-	// +/-1 dB in linear amplitude, rounded to the saved integer percentage.
-	if (increase) {
-		return constrain(max(level + 1, (level * 1122 + 500) / 1000), 0, 100);
-	}
-	return constrain(min(level - 1, (level * 891 + 500) / 1000), 0, 100);
+	// Linear taper, +/-2 per step; the earlier ~1 dB multiplicative steps
+	// were too coarse near full scale.
+	return constrain(level + (increase ? 2 : -2), 0, 100);
 }
 
 void audio_consumer_key(uint16_t usage, uint8_t modifiers) {
@@ -14852,16 +14853,22 @@ bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 		else if (name == "ALC" && (value == "ON" || value == "OFF")) alc = value == "ON";
 		else if (name == "TONE" && (value == "ON" || value == "OFF")) {
 			wm8960_audio_set_mic_test_tone(value == "ON");
+		} else if (name == "GATE" && value.length() && value.length() <= 1 &&
+		           isdigit(value[0]) && number >= 0 && number <= 3) {
+			wm8960_audio_set_mic_gate_mode(number);
+			configuration.mic_gate_mode = number;
+			config_dirty = 1;
+			config_changed_ms = millis();
 		} else ok = false;
 		if (!ok) {
-			port->println(F("Error: use MIC, MIC PGA 0..63, MIC BOOST 0..3, MIC ALC ON|OFF, MIC TONE ON|OFF"));
+			port->println(F("Error: use MIC, MIC PGA 0..63, MIC BOOST 0..3, MIC ALC ON|OFF, MIC TONE ON|OFF, MIC GATE 0..3 (0=always, 1=local PTT, 2=feedback, 3=either)"));
 			return true;
 		}
-		if (name != "TONE" && !wm8960_audio_set_mic_gain(pga, boost, alc)) {
+		if (name != "TONE" && name != "GATE" && !wm8960_audio_set_mic_gain(pga, boost, alc)) {
 			port->println(F("Error: codec write failed"));
 			return true;
 		}
-		if (name != "TONE") {
+		if (name != "TONE" && name != "GATE") {
 			configuration.mic_pga = pga;
 			configuration.mic_boost = boost;
 			configuration.mic_alc = alc;
@@ -14870,14 +14877,16 @@ bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 		}
 	}
 	static const uint8_t boost_db[] = {0, 13, 20, 29};
+	static const char *gate_names[] = {"ALWAYS", "LOCAL PTT", "FEEDBACK", "EITHER"};
 	uint16_t peak, rms;
 	uint32_t clips, samples;
 	wm8960_audio_take_mic_meter(&peak, &rms, &clips, &samples);
 	const float pga_db = -17.25f + 0.75f * pga;
 	port->println();
-	port->printf("MIC PGA %u (%+.2f dB) BOOST %u (+%u dB) total %+.2f dB, ALC %s, TONE %s\r\n",
+	port->printf("MIC PGA %u (%+.2f dB) BOOST %u (+%u dB) total %+.2f dB, ALC %s, TONE %s, GATE %u (%s)\r\n",
 	             pga, pga_db, boost, boost_db[boost], pga_db + boost_db[boost],
-	             alc ? "ON" : "OFF", wm8960_audio_mic_test_tone() ? "ON" : "OFF");
+	             alc ? "ON" : "OFF", wm8960_audio_mic_test_tone() ? "ON" : "OFF",
+	             wm8960_audio_mic_gate_mode(), gate_names[wm8960_audio_mic_gate_mode() & 3]);
 	port->printf("since last MIC: %.1f s, peak %u (%.1f dBFS), rms %u (%.1f dBFS), clipped %lu\r\n",
 	             samples / 48000.0f, peak, peak ? 20.0f * log10f(peak / 32768.0f) : -99.0f,
 	             rms, rms ? 20.0f * log10f(rms / 32768.0f) : -99.0f,
@@ -14885,11 +14894,17 @@ bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 	return true;
 }
 
+void print_midi_status(PRIMARY_SERIAL_CLS *port) {
+	wm8960_midi_print_status(*port);
+	port->printf("MIDI VFO tune direction %s\r\n",
+	    configuration.midi_vfo_reversed ? "REV" : "NORM");
+}
+
 bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
 	command.trim();
 	if (command == "MIDI") {
 		port->println();
-		wm8960_midi_print_status(*port);
+		print_midi_status(port);
 		return true;
 	}
 	const int separator = command.indexOf(' ');
@@ -14902,6 +14917,20 @@ bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
 		} else if (!wm8960_midi_wheel_step(value == "+" ? 1 : -1)) {
 			port->println(F("Error: MIDI USB disconnected or output queue faulted"));
 		}
+		return true;
+	}
+	if (name == "MIDI-VFO") {
+		if (value.length()) {
+			if (value == "NORM") configuration.midi_vfo_reversed = false;
+			else if (value == "REV") configuration.midi_vfo_reversed = true;
+			else {
+				port->println(F("Error: use MIDI-VFO NORM or REV"));
+				return true;
+			}
+			config_dirty = 1;
+		}
+		port->println();
+		print_midi_status(port);
 		return true;
 	}
 	if (name == "MIDI-MODE") {
@@ -14922,7 +14951,7 @@ bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
 			config_dirty = 1;
 		}
 		port->println();
-		wm8960_midi_print_status(*port);
+		print_midi_status(port);
 		return true;
 	}
 	if (name != "MIDI-PTT") {
@@ -14945,7 +14974,7 @@ bool cli_midi(PRIMARY_SERIAL_CLS *port, String command) {
 		config_dirty = 1;
 	}
 	port->println();
-	wm8960_midi_print_status(*port);
+	print_midi_status(port);
 	return true;
 }
 #endif
@@ -15332,6 +15361,10 @@ void sd_card_load_eeprom_from_file(PRIMARY_SERIAL_CLS * port_to_use,String filen
 		}
 		if (!wm8960_midi_set_control_mode(configuration.midi_control_mode)) {
 			port_to_use->println(F("Error: loaded MIDI control mode is invalid"));
+			return;
+		}
+		if (!wm8960_audio_set_mic_gate_mode(configuration.mic_gate_mode)) {
+			port_to_use->println(F("Error: loaded MIC gate mode is invalid"));
 			return;
 		}
 		sync_pod_volume();
@@ -20580,6 +20613,8 @@ void initialize_keyer_state(){
 		configuration.mic_pga = WM8960_MIC_PGA;
 		configuration.mic_boost = WM8960_MIC_BOOST;
 		configuration.mic_alc = WM8960_MIC_ALC;
+		configuration.midi_vfo_reversed = false;
+		configuration.mic_gate_mode = WM8960_MIC_GATE_MODE;
 	#endif
 	configuration.ptt_disabled = 0;
 	configuration.beacon_mode_on_boot_up = 0;
@@ -28529,6 +28564,9 @@ void setup_esp()
 		}
 		if (!wm8960_midi_set_control_mode(configuration.midi_control_mode)) {
 			debug_serial_port->println(F("Error: saved MIDI control mode is invalid"));
+		}
+		if (!wm8960_audio_set_mic_gate_mode(configuration.mic_gate_mode)) {
+			debug_serial_port->println(F("Error: saved MIC gate mode is invalid"));
 		}
 		sync_pod_volume();
 		if (!wm8960_audio_preset_mic_gain(configuration.mic_pga, configuration.mic_boost,

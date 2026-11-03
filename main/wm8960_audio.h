@@ -52,6 +52,9 @@ bool wm8960_audio_preset_mic_gain(uint8_t pga, uint8_t boost, bool alc);
 void wm8960_audio_get_mic_gain(uint8_t *pga, uint8_t *boost, bool *alc);
 void wm8960_audio_set_mic_test_tone(bool enabled);
 bool wm8960_audio_mic_test_tone();
+// Microphone PTT gate mode: 0=always, 1=local PTT, 2=external feedback, 3=either.
+bool wm8960_audio_set_mic_gate_mode(uint8_t mode);
+uint8_t wm8960_audio_mic_gate_mode();
 void wm8960_audio_take_mic_meter(uint16_t *peak, uint16_t *rms,
                                  uint32_t *clips, uint32_t *samples);
 
