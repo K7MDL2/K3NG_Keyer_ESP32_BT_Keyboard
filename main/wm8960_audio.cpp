@@ -447,7 +447,7 @@ volatile uint32_t mic_gate_packets = 0;
 volatile uint16_t mic_gate_input_peak = 0;
 volatile uint16_t mic_gate_sent_peak = 0;
 volatile uint32_t capture_starved_packets = 0;
-// Runtime mic tuning (MIC CLI); not saved, defaults come from the build defines.
+// Runtime mic tuning (MIC CLI); saved in EEPROM by main.cpp, defaults come from the build defines.
 uint8_t mic_pga = WM8960_MIC_PGA;
 uint8_t mic_boost = WM8960_MIC_BOOST;
 bool mic_alc = WM8960_MIC_ALC;
@@ -1493,6 +1493,7 @@ void wm8960_audio_service(void) {
   // Pops: the I2S ring holds ~5 ms ahead, so longer stalls play a gap.
   static uint32_t seen_underruns = 0, seen_starved = 0, seen_capture = 0;
   static uint32_t seen_gap = 0, seen_lead = 0, seen_flash = 0;
+  static uint32_t last_glitch_report_ms = 0;
   const uint32_t underruns = wm8960_i2s::underruns();
   const uint32_t starved = playback_starved_frames;
   const uint32_t capture = capture_starved_packets;
@@ -1502,7 +1503,9 @@ void wm8960_audio_service(void) {
   if (serial_connected && !tone_active && !midi_tone_active &&
       (underruns != seen_underruns || starved != seen_starved ||
        capture != seen_capture || flash_runs != seen_flash) &&
+      millis() - last_glitch_report_ms >= 1000 &&
       wm8960_audio_debug_port().availableForWrite() >= 200) {
+    last_glitch_report_ms = millis();
     uint32_t lead_distance = 0, since_resume_us = 0, head_from_resume = 0;
     bool lead_paused = false;
     wm8960_i2s::lead_underrun_detail(&lead_distance, &lead_paused,
