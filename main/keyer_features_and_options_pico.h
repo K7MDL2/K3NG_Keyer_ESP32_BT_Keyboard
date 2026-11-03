@@ -5,7 +5,7 @@
 //#include "../build/config/sdkconfig.h"
 #endif
 
-#define CODE_VERSION "V:K7MDL-2026.10.30"
+#define CODE_VERSION "V:K7MDL-2026.11.3"
 #ifndef WM8960_MIC_GATE_MODE
   #define WM8960_MIC_GATE_MODE 3 // 0=always, 1=manual local PTT, 2=external feedback, 3=either
 #endif
@@ -68,7 +68,7 @@
     WM8960_MIC_ALC_MAX_GAIN < 0 || WM8960_MIC_ALC_MAX_GAIN > 7
   #error "Invalid WM8960 microphone gain configuration"
 #endif
-#define eeprom_magic_number 44          // you can change this number to have the unit re-initialize EEPROM
+#define eeprom_magic_number 45          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior

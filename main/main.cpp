@@ -2077,6 +2077,9 @@ struct config_t {
 	uint8_t midi_ptt_mode;
 	#if defined(FEATURE_WM8960_USB_AUDIO)
 		uint8_t midi_control_mode;
+		uint8_t mic_pga;
+		uint8_t mic_boost;
+		bool mic_alc;
 	#endif
 
 	// GPS and Compass
@@ -14858,6 +14861,13 @@ bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 			port->println(F("Error: codec write failed"));
 			return true;
 		}
+		if (name != "TONE") {
+			configuration.mic_pga = pga;
+			configuration.mic_boost = boost;
+			configuration.mic_alc = alc;
+			config_dirty = 1;
+			config_changed_ms = millis();
+		}
 	}
 	static const uint8_t boost_db[] = {0, 13, 20, 29};
 	uint16_t peak, rms;
@@ -20567,6 +20577,9 @@ void initialize_keyer_state(){
 	configuration.midi_ptt_mode = 0;
 	#if defined(FEATURE_WM8960_USB_AUDIO)
 		configuration.midi_control_mode = WM8960_MIDI_CONTROL_MODE;
+		configuration.mic_pga = WM8960_MIC_PGA;
+		configuration.mic_boost = WM8960_MIC_BOOST;
+		configuration.mic_alc = WM8960_MIC_ALC;
 	#endif
 	configuration.ptt_disabled = 0;
 	configuration.beacon_mode_on_boot_up = 0;
@@ -28518,6 +28531,10 @@ void setup_esp()
 			debug_serial_port->println(F("Error: saved MIDI control mode is invalid"));
 		}
 		sync_pod_volume();
+		if (!wm8960_audio_preset_mic_gain(configuration.mic_pga, configuration.mic_boost,
+		                                  configuration.mic_alc)) {
+			debug_serial_port->println(F("Error: saved MIC gain is invalid"));
+		}
 		wm8960_midi_initialize();
 		#ifdef FEATURE_DISPLAY
 			if (!wm8960_audio_initialize([](const char *status) {

@@ -47,6 +47,8 @@ bool wm8960_audio_set_levels(int sidetone, int playback, int microphone,
                             bool sidetone_muted, bool playback_muted,
                             bool microphone_muted);
 bool wm8960_audio_set_mic_gain(uint8_t pga, uint8_t boost, bool alc);
+// Sets the gain that wm8960_audio_initialize() will apply; fails once the codec is running.
+bool wm8960_audio_preset_mic_gain(uint8_t pga, uint8_t boost, bool alc);
 void wm8960_audio_get_mic_gain(uint8_t *pga, uint8_t *boost, bool *alc);
 void wm8960_audio_set_mic_test_tone(bool enabled);
 bool wm8960_audio_mic_test_tone();

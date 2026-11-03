@@ -1159,6 +1159,16 @@ void wm8960_audio_get_mic_gain(uint8_t *pga, uint8_t *boost, bool *alc) {
   *alc = mic_alc;
 }
 
+bool wm8960_audio_preset_mic_gain(uint8_t pga, uint8_t boost, bool alc) {
+  if (codec_ready || pga > 63 || boost > 3) {
+    return false;
+  }
+  mic_pga = pga;
+  mic_boost = boost;
+  mic_alc = alc;
+  return true;
+}
+
 void wm8960_audio_set_mic_test_tone(bool enabled) {
   mic_test_tone = enabled;
 }

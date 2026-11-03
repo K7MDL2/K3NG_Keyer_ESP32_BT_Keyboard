@@ -558,8 +558,11 @@ with fixed gain.
 To tune without rebuilding, use the `\:MIC` CLI command. `MIC` alone prints
 the current gain and a meter (peak, RMS and clipped-sample count of the ADC
 input since the previous `MIC`). `MIC PGA n`, `MIC BOOST n` and `MIC ALC ON|OFF`
-change the codec gain immediately but are not saved; copy good values into the
-build defines. `MIC TONE ON` replaces the ADC input with a clean 1 kHz tone
+change the codec gain immediately and are saved to EEPROM after the normal
+settle delay; the build defines are only the defaults after an EEPROM reset.
+Adding these saved settings changed the EEPROM layout (Pico magic 45), so the
+first boot of this build resets saved settings. `MIC TONE` is not saved.
+`MIC TONE ON` replaces the ADC input with a clean 1 kHz tone
 at -6 dBFS. If the tone is clean on air, the distortion is in the
 microphone/analog stage rather than in the USB, PC or transmit chain.
 `MIC TONE OFF` restores the microphone.
