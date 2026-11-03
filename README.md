@@ -1,15 +1,16 @@
-| Support Targets | ![ESP32-WROOM32][esp32] | ![Pico2W][Pico2W] | ![alt text][Has_Precompiled_Firmware_Images] |
-| --- | --- | --- | --- |
+| Support Targets | ![ESP32-WROOM32][esp32] | ![Pico2W][Pico2W] | ![alt text][Has_Precompiled_Firmware_Images] | ![M5Stack_Core2][Core2] |
+| --- | --- | --- | --- | --- |
 
 | Dev Environment Used | ![alt text][ESP-IDF6] | ![Arduino IDE][Arduino]|
-| --- | --- | --- | --- |
+| --- | --- | --- |
 
 | BT Keyboards Tested | ![alt text][K380]|![alt text][K380s] | ![Rii i8+ mini][Rii_mini] |
 | --- | --- | --- | --- |
 
 [Pico2W]: https://img.shields.io/badge/Pico2W-green "ESP32"
+[Core2]: https://img.shields.io/badge/M5Stack-Core2-blue "Core2"
 [ESP32]: https://img.shields.io/badge/ESP32--WROOM-orange "ESP32-WROOM"
-[ESP-IDF6]: https://img.shields.io/badge/ESP--IDF--v6.0.1-cyan "ESP-IDF v6.0.1"
+[ESP-IDF6]: https://img.shields.io/badge/ESP--IDF--v6.1.0-cyan "ESP-IDF v6.0.1"
 [Arduino]: https://img.shields.io/badge/Arduino-cyan "Arduino v2.3.7"
 [Has_Precompiled_Firmware_Images]: https://img.shields.io/badge/Has_Precompiled_Firmware_Images-purple "Precompiled_Images"
 [K380]: https://img.shields.io/badge/K380-violet "K380"
