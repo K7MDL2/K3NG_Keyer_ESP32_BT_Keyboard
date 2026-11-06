@@ -733,6 +733,7 @@ struct MockLcd {
   int draws = 0;
   std::string label;
   std::vector<std::string> menu_value_text;
+  std::vector<std::array<int,4>> menu_text_bounds;
   int scroll_color = TFT_WHITE;
   std::vector<std::array<int,2>> scroll_glyphs;
   std::vector<std::array<int,4>> scroll_positions;
@@ -759,7 +760,8 @@ struct MockLcd {
   int text_size = 2;
   void setFreeFont(int) { free_font_active = true; }
   void setTextFont(int font) { assert(font == 1); free_font_active = false; }
-  void setTextSize(int size) { assert(size == 1 || size == 2); text_size = size; }
+  void setTextSize(int size) { assert(size >= 1 && size <= 3); text_size = size; }
+  int textWidth(String text, int font) { assert(font == 1); return int(text.str().size())*6*text_size; }
   uint16_t color565(int r, int g, int b) {
     assert(r == 144 && g == 238 && b == 144); return 0x9772;
   }
@@ -774,8 +776,9 @@ struct MockLcd {
     label = text; ++draws;
     if (simulate_menu_latency) clock_us += 10000;
     if (font == 1) {
-      assert(!free_font_active && (text_size == 1 || text_size == 2));
+      assert(!free_font_active && text_size >= 1 && text_size <= 3);
       assert(x + strlen(text)*6*text_size <= SCROLL_BOX_LEFT_SIDE+SCROLL_BOX_WIDTH);
+      menu_text_bounds.push_back({x,row,int(strlen(text))*6*text_size,8*text_size});
       menu_value_text.push_back(text);
     }
   }
@@ -2193,6 +2196,24 @@ int main() {
   assert(foreground.max_foreground_stage == 17 && foreground.max_foreground_us == 650000);
   assert(wm8960_audio_configure_rx(saved_rx.threshold,saved_rx.frequency,saved_rx.fixed_wpm,saved_rx.channel));
   puts("PASS: longest foreground diagnostic distinguishes display and BOOTSEL stalls");
+  for (int box_width : {154,232}) {
+    for (unsigned f = 0; f < static_cast<unsigned>(EncoderFunction::Count); ++f) {
+      const auto function = static_cast<EncoderFunction>(f);
+      const size_t start = lcd.menu_text_bounds.size();
+      draw_encoder_control_box(function,encoder_control_value(function),
+          SCROLL_BOX_LEFT_SIDE,SCROLL_BOX_TOP,box_width,110,TFT_BLUE);
+      assert(lcd.menu_text_bounds.size() == start+2);
+      const auto label = lcd.menu_text_bounds[start], value = lcd.menu_text_bounds[start+1];
+      assert(label[1]+label[3] <= value[1]);
+      assert(label[0]+label[2] <= SCROLL_BOX_LEFT_SIDE+box_width-4);
+      assert(value[0]+value[2] <= SCROLL_BOX_LEFT_SIDE+box_width-4);
+      assert(value[1]+value[3] <= SCROLL_BOX_TOP+110-5);
+      assert(label[3] >= 16 && value[3] >= 16);
+      if (box_width == 232) assert(label[3] == 24 && value[3] == 24);
+      assert(lcd.text_size == 1 && lcd.free_font_active);
+    }
+  }
+  puts("PASS: enlarged center labels/values fit 320/480-pixel display layouts without overlap");
   terminal_wait_test::run();
   scroll_clear_test::run();
   display_guard_test::run();

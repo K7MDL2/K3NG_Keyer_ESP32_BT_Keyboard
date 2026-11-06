@@ -969,7 +969,8 @@ discarding assignments/RX settings; Local Volume is added to encoder 1.
 - Every label box shows its current value: percentages, Hz, WPM, output
   route, RX threshold (`0 Off`) or automatic RX speed (`Auto`). Values
   use bitmap fonts (not the scroll area's large free font): the centered
-  control's value is enlarged, while side controls retain their small font.
+  control's label and value use up to 3x text size, shrinking to fit longer
+  text or smaller boxes, while side controls retain their small font.
   Values refresh while the menu is open, including changes from other controls.
 - Tap a label to select it directly in Adjust mode. Drag left/right to
   decrease/increase its setting; a drag remains attached to the starting

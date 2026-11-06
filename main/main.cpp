@@ -7016,11 +7016,19 @@ void draw_encoder_control_box(EncoderFunction function, int value,
 	const bool enlarged = height > 40;
 	const char *label = !enlarged && function == EncoderFunction::RxThreshold ?
 	    "RX Thr" : encoder_control_attributes[static_cast<unsigned>(function)].label;
-	lcd.drawString(label, x + 4, y + 1, enlarged ? 2 : 1);
+	const String value_text = encoder_control_value_text(function, value);
+	const int label_width = lcd.textWidth(label, 1);
+	const int value_width = lcd.textWidth(value_text, 1);
+	const int max_size = enlarged ? std::min(3, (height - 12) / 16) : 1;
+	const int label_size = enlarged ?
+	    std::max(1, std::min(max_size, (width - 8) / std::max(1, label_width))) : 1;
+	const int value_size = enlarged ?
+	    std::max(1, std::min(max_size, (width - 8) / std::max(1, value_width))) : 1;
+	lcd.setTextSize(label_size);
+	lcd.drawString(label, x + 4, y + (enlarged ? 3 : 1), 1);
 	service_usb_cw_decoder();
-	if (enlarged) lcd.setTextSize(2);
-	lcd.drawString(encoder_control_value_text(function, value), x + 4,
-	    enlarged ? y + height / 2 - 8 : y + 16, 1);
+	lcd.setTextSize(value_size);
+	lcd.drawString(value_text, x + 4, enlarged ? y + height / 2 : y + 16, 1);
 	service_usb_cw_decoder();
 	lcd.setTextSize(1);
 	if (!encoder_control_is_relative(function)) {
