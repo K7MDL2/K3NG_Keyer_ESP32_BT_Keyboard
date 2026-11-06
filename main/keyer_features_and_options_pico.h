@@ -68,6 +68,38 @@
     WM8960_MIC_ALC_MAX_GAIN < 0 || WM8960_MIC_ALC_MAX_GAIN > 7
   #error "Invalid WM8960 microphone gain configuration"
 #endif
+// First decoder chunk: runtime controls restart at these defaults (no EEPROM migration).
+#ifndef WM8960_RX_THRESHOLD
+  #define WM8960_RX_THRESHOLD 0 // 0 stops DSP; 1..100, higher is stricter.
+#endif
+#ifndef WM8960_RX_TEXT_COLOR
+  #define WM8960_RX_TEXT_COLOR TFT_CYAN
+#endif
+#ifndef ENCODER_MENU_SELECTION_PULSES
+  #define ENCODER_MENU_SELECTION_PULSES 2
+#endif
+#if ENCODER_MENU_SELECTION_PULSES < 1 || ENCODER_MENU_SELECTION_PULSES > 255
+  #error "ENCODER_MENU_SELECTION_PULSES must be 1..255"
+#endif
+#ifndef WM8960_RX_FREQUENCY
+  #define WM8960_RX_FREQUENCY 600
+#endif
+#ifndef WM8960_RX_WPM
+  #define WM8960_RX_WPM 20 // 0=automatic learning, otherwise 5..60.
+#endif
+#ifndef WM8960_RX_CHANNEL
+  #define WM8960_RX_CHANNEL 0 // 0=left, 1=right; do not sum opposite-phase stereo.
+#endif
+#ifndef WM8960_OUTPUT_ROUTE
+  #define WM8960_OUTPUT_ROUTE 2 // 0=speaker, 1=headphone, 2=both, 3=none.
+#endif
+#if WM8960_RX_THRESHOLD < 0 || WM8960_RX_THRESHOLD > 100 || \
+    WM8960_RX_FREQUENCY < 300 || WM8960_RX_FREQUENCY > 1200 || \
+    (WM8960_RX_WPM != 0 && (WM8960_RX_WPM < 5 || WM8960_RX_WPM > 60)) || \
+    WM8960_RX_CHANNEL < 0 || WM8960_RX_CHANNEL > 1 || \
+    WM8960_OUTPUT_ROUTE < 0 || WM8960_OUTPUT_ROUTE > 3
+  #error "Invalid WM8960 RX decoder/output defaults"
+#endif
 #define eeprom_magic_number 47          // you can change this number to have the unit re-initialize EEPROM
 
 // compile time features and options - comment or uncomment to add or delete features

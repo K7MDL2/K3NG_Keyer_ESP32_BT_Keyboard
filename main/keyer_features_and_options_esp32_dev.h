@@ -68,8 +68,8 @@
 //#define DISPLAY_TYPE TFT_1_9_IDEASPARK_LCD   // 170x320
 //#define DISPLAY_TYPE TFT_3_2_DIYMALLS_LCD  // 240x320 ST7789 with GT911 capacitive touch
 #ifndef DISPLAY_TYPE
-//#define DISPLAY_TYPE M5STACK_CORE2_LCD
-#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
+#define DISPLAY_TYPE M5STACK_CORE2_LCD
+//#define DISPLAY_TYPE TFT_HOSYOND_320x480_LCD  // Hoysond 3.5" ST7796 320x480 with XPT2046 Resistive display
 //#define DISPLAY_TYPE TFT_320x480_CAP_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 //#define DISPLAY_TYPE TFT_WAVESHARE_S3_TOUCH_LCD_43_LCD  // Sparkle or DIYMalls 3.5" ST7796 320x480 with GT911 capacitive touch
 #endif
@@ -153,6 +153,7 @@
     #ifndef BUTTON_ROWS
         #define BUTTON_ROWS 4  // Core2: two actions per page, up to eight pages.
     #endif
+    #define USE_BLE
     #define USE_CORE1
     #define USE_MAIN_TASK
     #define USE_BT_TASK

@@ -8,6 +8,7 @@
 #if defined(FEATURE_WM8960_USB_AUDIO)
 
 #include "wm8960_audio.h"
+#include "cw_rx_decoder.h"
 #include "wm8960_tinyusb_config.h"
 
 #include <Arduino.h>
@@ -46,6 +47,18 @@ extern "C" void _exit(int status);
 #endif
 
 namespace {
+
+CwRxDecoder rx_decoder;
+unsigned rx_channel = WM8960_RX_CHANNEL;
+uint32_t rx_last_packet_us = 0;
+Wm8960OutputRoute output_route = static_cast<Wm8960OutputRoute>(WM8960_OUTPUT_ROUTE);
+
+uint16_t output_power_register(Wm8960OutputRoute route) {
+  const bool speaker = route == Wm8960OutputRoute::Speaker || route == Wm8960OutputRoute::Both;
+  const bool headphone = route == Wm8960OutputRoute::Headphone || route == Wm8960OutputRoute::Both;
+  // Keep both DACs and (when used) PLL powered even with the physical outputs off.
+  return 0x180 | (WM8960_USE_PLL ? 1 : 0) | (speaker ? 0x18 : 0) | (headphone ? 0x60 : 0);
+}
 
 __attribute__((naked)) void audio_diagnostic_hard_fault() {
   __asm volatile(
@@ -692,10 +705,8 @@ bool initialize_codec_registers() {
   }
   delay(250);
   constexpr uint16_t clock_configuration = 0x005;  // PLL / 2 = 256 * 48 kHz.
-  constexpr uint16_t output_power = 0x1F9;  // Keep the PLL powered with the outputs.
 #else
   constexpr uint16_t clock_configuration = 0x000;
-  constexpr uint16_t output_power = 0x1F8;
 #endif
   if (!write_codec_register(0x19, 0x0C0) ||
       !write_codec_register(0x1C, 0x008) ||
@@ -708,7 +719,7 @@ bool initialize_codec_registers() {
       !write_codec_register(0x25, 0x100) ||
       !write_codec_register(0x2F, 0x03C) ||
       !write_codec_register(0x31, 0x0C0) ||
-      !write_codec_register(0x1A, output_power) ||
+      !write_codec_register(0x1A, output_power_register(output_route)) ||
       !write_codec_register(0x02, 0x078) ||
       !write_codec_register(0x03, 0x178) ||
       !write_codec_register(0x28, 0x078) ||
@@ -861,6 +872,13 @@ void capture_usb_playback_locked() {
           std::max(usb_playback_peak, sample_magnitude(packet[sample]));
     }
     const uint16_t frames_read = bytes_read / 4;
+    if (frames_read) {
+      const uint32_t now = micros();
+      if (rx_last_packet_us && static_cast<uint32_t>(now - rx_last_packet_us) > 50000)
+        rx_decoder.reset_stream();
+      rx_last_packet_us = now;
+      rx_decoder.submit(packet, frames_read, rx_channel);
+    }
     for (uint16_t frame = 0; frame < frames_read; ++frame) {
       playback_ring[((playback_write_index + frame) &
                      (kPlaybackRingFrames - 1)) *
@@ -1094,6 +1112,8 @@ size_t Wm8960TerminalSerial::write(uint8_t value) {
   return write(&value, 1);
 }
 
+void service_usb_cw_decoder();
+
 size_t Wm8960TerminalSerial::write(const uint8_t *buffer, size_t size) {
   size_t written = 0;
   uint32_t last_progress = millis();
@@ -1114,6 +1134,8 @@ size_t Wm8960TerminalSerial::write(const uint8_t *buffer, size_t size) {
     if (written == size || millis() - last_progress >= 1000) {
       break;
     }
+    // The USB mutex is released; decoder output rejects recursive servicing.
+    service_usb_cw_decoder();
     yield();
   }
   if (written != size) {
@@ -1152,6 +1174,67 @@ bool wm8960_audio_set_mic_gain(uint8_t pga, uint8_t boost, bool alc) {
   mic_boost = boost;
   mic_alc = alc;
   return write_mic_gain_registers();
+}
+
+bool wm8960_audio_set_output_route(Wm8960OutputRoute route) {
+  if (!codec_ready || static_cast<uint8_t>(route) > 3) return false;
+  if (!write_codec_register(0x1A, output_power_register(route))) return false;
+  output_route = route;
+  return true;
+}
+
+Wm8960OutputRoute wm8960_audio_output_route() { return output_route; }
+
+const char *wm8960_audio_output_route_name() {
+  static const char *names[] = {"SPEAKER", "HEADPHONE", "BOTH", "NONE"};
+  return names[static_cast<uint8_t>(output_route)];
+}
+
+bool wm8960_audio_configure_rx(unsigned threshold, unsigned frequency,
+                              unsigned wpm, unsigned channel) {
+  if (channel > 1) return false;
+  CoreMutex lock(&USB.mutex);
+  if (!lock) return false;
+  if (!rx_decoder.configure(threshold, frequency, wpm)) return false;
+  rx_channel = channel;
+  rx_last_packet_us = 0;
+  return true;
+}
+
+namespace {
+uint32_t rx_service_last_ms = 0, rx_service_max_gap_ms = 0, rx_process_max_us = 0;
+uint32_t rx_foreground_last_us = 0, rx_foreground_max_us = 0;
+uint8_t rx_foreground_stage = 0, rx_foreground_max_stage = 0;
+bool rx_service_seen = false;
+}
+
+Wm8960RxStatus wm8960_audio_rx_status() {
+  return {rx_decoder.threshold(), rx_decoder.frequency(), rx_decoder.fixed_wpm(),
+          rx_decoder.wpm(), rx_channel, rx_decoder.signal(), rx_decoder.noise(),
+          rx_decoder.dropped(), rx_decoder.pending_samples(), rx_service_max_gap_ms,
+          rx_process_max_us, rx_foreground_max_us, rx_foreground_max_stage,
+          rx_decoder.tracked_frequency(), rx_decoder.frequency_switches()};
+}
+
+void wm8960_audio_service_rx(void (*emit)(long)) {
+  if (get_core_num() != 0 || !initialization_attempted) return;
+  const uint32_t now_ms = millis();
+  if (rx_service_seen && rx_decoder.threshold())
+    rx_service_max_gap_ms = std::max(rx_service_max_gap_ms, now_ms - rx_service_last_ms);
+  rx_service_seen = true;
+  rx_service_last_ms = now_ms;
+  {
+    CoreMutex lock(&USB.mutex, false);
+    if (lock && rx_last_packet_us &&
+        (!tud_mounted() || static_cast<uint32_t>(micros() - rx_last_packet_us) > 50000)) {
+      rx_decoder.reset_stream();
+      rx_last_packet_us = 0;
+    }
+  }
+  const uint32_t started_us = micros();
+  // Catch up after display/foreground work, still capped at 160 ms of input.
+  rx_decoder.process(1280, emit, micros, 2000);
+  rx_process_max_us = std::max(rx_process_max_us, static_cast<uint32_t>(micros() - started_us));
 }
 
 void wm8960_audio_get_mic_gain(uint8_t *pga, uint8_t *boost, bool *alc) {
@@ -1206,6 +1289,18 @@ void wm8960_audio_take_mic_meter(uint16_t *peak, uint16_t *rms,
 }
 
 void wm8960_audio_trace_keyer(uint8_t stage) {
+  if (get_core_num() == 0 && rx_service_seen && stage >= 9 && stage <= 20) {
+    const uint32_t now = micros();
+    if (rx_foreground_stage && rx_decoder.threshold()) {
+      const uint32_t elapsed = now - rx_foreground_last_us;
+      if (elapsed > rx_foreground_max_us) {
+        rx_foreground_max_us = elapsed;
+        rx_foreground_max_stage = rx_foreground_stage;
+      }
+    }
+    rx_foreground_last_us = now;
+    rx_foreground_stage = stage;
+  }
   trace_audio_stage(stage);
 }
 
@@ -1321,6 +1416,7 @@ bool wm8960_audio_initialize(void (*report_progress)(const char *)) {
                                   audio_diagnostic_hard_fault);
   watchdog_enable(8000, true);
   initialization_attempted = true;
+  rx_decoder.configure(WM8960_RX_THRESHOLD, WM8960_RX_FREQUENCY, WM8960_RX_WPM);
   if (render_spin_lock == nullptr) {
     render_spin_lock = spin_lock_init(spin_lock_claim_unused(true));
   }
@@ -1747,6 +1843,8 @@ bool tud_audio_set_itf_cb(uint8_t rhport,
   (void)request;
   if (static_cast<uint8_t>(request->wIndex) ==
       speaker_function.control_interface + 1) {
+    rx_decoder.reset_stream();
+    rx_last_packet_us = 0;
     playback_read_index = playback_write_index = 0;
     playback_started = false;
     playback_level_q8 = kPlaybackTargetFrames * 256;
@@ -1764,7 +1862,10 @@ bool tud_audio_set_itf_cb(uint8_t rhport,
 bool tud_audio_set_itf_close_EP_cb(
     uint8_t rhport, tusb_control_request_t const *request) {
   (void)rhport;
-  (void)request;
+  if (static_cast<uint8_t>(request->wIndex) == speaker_function.control_interface + 1) {
+    rx_decoder.reset_stream();
+    rx_last_packet_us = 0;
+  }
   return true;
 }
 

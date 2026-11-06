@@ -27,6 +27,24 @@ extern Wm8960TerminalSerial Wm8960Terminal;
 HardwareSerial &wm8960_audio_debug_port();
 
 bool wm8960_audio_initialize(void (*report_progress)(const char *) = nullptr);
+enum class Wm8960OutputRoute : uint8_t { Speaker, Headphone, Both, None };
+bool wm8960_audio_set_output_route(Wm8960OutputRoute route);
+Wm8960OutputRoute wm8960_audio_output_route();
+const char *wm8960_audio_output_route_name();
+struct Wm8960RxStatus {
+  unsigned threshold, frequency, fixed_wpm, wpm, channel;
+  float signal, noise;
+  uint32_t dropped;
+  uint32_t pending_samples, max_service_gap_ms, max_process_us;
+  uint32_t max_foreground_us;
+  uint8_t max_foreground_stage;
+  unsigned tracked_frequency;
+  uint32_t frequency_switches;
+};
+bool wm8960_audio_configure_rx(unsigned threshold, unsigned frequency,
+                               unsigned wpm, unsigned channel);
+Wm8960RxStatus wm8960_audio_rx_status();
+void wm8960_audio_service_rx(void (*emit)(long));
 void wm8960_audio_service(void);
 void wm8960_audio_start_tone(uint16_t frequency, uint32_t duration_ms,
                              uint32_t mute_release_ms);

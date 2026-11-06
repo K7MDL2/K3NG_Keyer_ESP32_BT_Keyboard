@@ -150,7 +150,7 @@ struct String : std::string {
   long toInt() const { return std::stol(*this); }
 };
 int constrain(int value, int low, int high) { return std::clamp(value,low,high); }
-enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
+enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone, LocalPlayback };
 struct Config { int sidetone_volume=100, usb_play_volume=100, usb_mic_volume=100, current_ptt_line=26; bool sidetone_muted=false,usb_play_muted=false,usb_mic_muted=false,beacon_mode_on_boot_up=false; } configuration;
 int config_dirty = 0;
 bool core2_port_a_output = false, core2_port_a_saved_output = false;

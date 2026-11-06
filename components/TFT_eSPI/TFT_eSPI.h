@@ -360,7 +360,7 @@ static const uint16_t default_4bit_palette[] PROGMEM = {
 
 // This structure allows sketches to retrieve the user setup parameters at runtime
 // by calling getSetup(), zero impact on code size unless used, mainly for diagnostics
-typedef struct
+typedef struct setup_t
 {
 String  version = TFT_ESPI_VERSION;
 String  setup_info;  // Setup reference name available to use in a user setup

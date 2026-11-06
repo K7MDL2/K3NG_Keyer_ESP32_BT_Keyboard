@@ -98,7 +98,7 @@ _____________________________________________
 
 - There are now 2 serial ports, one for Winkeyer and the 2nd keyer's terminal interface and debug info.
 
-- One encoder with push switch can be used to control USB Audio Volume, USB mic audio level, VFO tune, Sidetone level and frequency.  Tap the knob to cycle through each function.  Long press to return to VFO tune.  If there is no push switch configured, then the knob controls USB audio out volume.
+- Up to four CPU encoders can control assignable audio, VFO and RX decoder functions. First press opens a compact Select/Adjust touch menu; long press closes it. All functions initially belong to encoder 1. Without a configured push switch, encoder 1 initially controls USB playback volume.
 
 - When the MCP23017 is enabled, All 6 PTT_TX and 6 TX_Key_line outputs are mapped to MCP23017 expander pins freeing up local GPIO for encoders, serial GPS, and I2S lines for the audio module.  The Paddle and Straight key inputs were already mapped there.
 
@@ -214,12 +214,13 @@ Extended terminal commands start with `\:` and end with Enter:
 |---|---|
 | `\:AUDIO` | Show all saved device levels and mute states |
 | `\:USBPLAY 65` | Set USB playback to 65% |
+| `\:LOCALRX 25` | Set local WM8960 USB-playback listening level to 25%, even in MIDI POD mode |
 | `\:USBMIC 80` | Set USB microphone level to 80% |
 | `\:SIDETONE 50` | Set sidetone to 50% |
 | `\:USBPLAY MUTE` / `\:USBPLAY UNMUTE` / `\:USBPLAY TOGGLE` | Change playback mute without losing its level |
 | `\:USBMIC +` / `\:SIDETONE -` | Adjust the selected level by 2% (linear) |
 
-All three target commands accept a level from 0 to 100, `+`, `-`, `MUTE`,
+All four target commands accept a level from 0 to 100, `+`, `-`, `MUTE`,
 `UNMUTE`, or `TOGGLE`; no argument shows status. Setting/adjusting a level
 unmutes that target. Zero level is silent. Invalid input reports an error
 without changing settings. `\S` also includes audio status; `\?` lists commands.
@@ -907,23 +908,105 @@ not MCP pin numbers:
 | Enabled | GPIO2 / GPIO3 | GPIO4 |
 | Disabled | GPIO22 / GPIO14 | GPIO42 |
 
+GPIO42 applies only to RP2350B boards; the RP2350A/Pico2-W direct-GPIO
+profile uses GPIO28 for that switch.
+
 These conditional assignments reuse CPU pins freed by moving key inputs
 and TX/PTT outputs onto the MCP23017. The current direct-GPIO profile disables
 TX/PTT GPIO outputs (zero) to free GPIO14/22. Internal pull-ups are enabled;
 connect encoder contacts/switch to ground. Review assignments before changing
 features or restoring direct TX/PTT pins.
 
-With a nonzero `rotary_switch`, the initial function is MIDI VFO tuning.
-Short press/release advances through:
+With a switch, the initial function is MIDI VFO tuning. All controls initially
+belong to encoder 1, in this linear order:
 
-**VFO -> master (USB playback) volume -> sidetone volume -> sidetone
-frequency -> CW speed -> USB microphone level -> VFO.**
+**VFO, master volume, Local Volume, sidetone volume, sidetone frequency,
+CW speed, USB microphone level, output route, RX threshold, RX frequency, RX WPM.**
 
-The switch has 20 ms debounce. Holding it for one second returns to VFO;
-release after a long hold does not advance the menu. There is no double-click
-save action. Non-VFO function/value messages appear on the LCD for one second;
-rotation updates controls immediately while idle, with live value messages
-limited to one redraw per 25 ms rather than a redraw per step. PTT or key-down
+**Local Volume** (command/assignment name `LOCALRX`) adjusts only the WM8960 USB-playback listening level in every
+MIDI mode. It uses the existing saved local playback level/mute, independently
+of PC volume in POD mode. Leave PC output high enough for decoding and turn
+Local Volume down for comfortable speaker/headphone listening; sidetone and
+microphone levels are unaffected. The decoder taps raw USB PCM before this
+gain/mute, so Local Volume can even be muted without stopping decoding.
+Master retains its existing behavior: PC volume in POD, local playback in
+other modes (where it and Local Volume adjust the same local level).
+Use `\:LOCALRX 0..100`, `+`, `-`, `MUTE`, `UNMUTE`, or `TOGGLE`, or assign
+it with `\:ENCODER 1 LOCALRX`. Old saved menu files are migrated without
+discarding assignments/RX settings; Local Volume is added to encoder 1.
+
+- First press opens a single horizontal strip in the CW text area. The
+  current control is enlarged and centered, with the previous/next assigned
+  controls shown in smaller boxes on its left/right. Selection scrolls the
+  strip through that encoder's assigned controls in a wrapping linear cycle.
+  Rotation wraps in both directions through VFO without closing the menu.
+  Selecting VFO by touch or confirming an already highlighted VFO with the
+  switch closes it. The encoder then tunes VFO without
+  displaying an adjustment popup.
+- **Select:** rotation selects the next/previous control with wrap-around,
+  without changing its value. Two decoded encoder pulses are required per
+  selection change; reversing direction cancels an unfinished move.
+  `ENCODER_MENU_SELECTION_PULSES` defaults to 2 and initializes each
+  `PicoEncoderControl::selection_pulses` attribute. Adjustment sensitivity
+  is unchanged. Press again to enter **Adjust**.
+- **Adjust:** rotation changes the highlighted control. Another press
+  returns to Select. Its highlighted background and range bar are inside
+  its label box. Relative controls, including VFO, have no range bar because
+  they do not provide an absolute setting/position.
+- Every label box shows its current value: percentages, Hz, WPM, output
+  route, RX threshold (`0 Off`) or automatic RX speed (`Auto`). Values
+  use bitmap fonts (not the scroll area's large free font): the centered
+  control's value is enlarged, while side controls retain their small font.
+  Values refresh while the menu is open, including changes from other controls.
+- Tap a label to select it directly in Adjust mode. Drag left/right to
+  decrease/increase its setting; a drag remains attached to the starting
+  label instead of jumping to other controls it crosses.
+- Hold the switch for one second, tap **Close**, or leave the menu idle
+  for five seconds to close it. Release after a long hold does not reopen it.
+  Every decoded movement resets the timer, including the first of two
+  selection pulses and adjustments at a value limit.
+  CW scroll text is restored without clearing its buffer.
+- Rotation with the menu closed adjusts the last-selected control as before.
+  A change shows a centered copy of that control's label box for one second;
+  further changes refresh its value and restart the timeout. It uses the
+  same small font, value and (absolute controls only) range bar as the menu.
+  No separate box appears while the full menu is open. The legacy text-only
+  encoder messages remain disabled on TFT builds; error notifications remain.
+
+Each entry in `encoder_control_attributes` in `main/main.cpp` provides
+`label`, `relative` and `popup_enabled`. VFO has popup disabled; other controls
+initially allow the centered box. Set `popup_enabled=false` on any entry to suppress it without
+disabling adjustment or its full-menu box. Set `relative=true` for a
+relative-only control so neither view draws a misleading range bar.
+Touch dragging is restricted to the selected control in an active menu or a
+visible, unexpired popup. Closing a view ends its drag; invisible controls cannot
+be adjusted by touching their former location. Encoder rotation continues
+adjusting its current selection until a new selection is made.
+
+On Pico WM8960 builds, assignments, each encoder's selected control and
+selection sensitivity, popup flags, output route and RX settings survive reboot.
+The transient open menu, Select/Adjust state and touch gestures are not saved.
+Existing volume, sidetone pitch and CW speed still use their existing EEPROM
+settings. A separate versioned/checksummed LittleFS file stores the new settings,
+without changing the EEPROM layout or CW memory addresses.
+
+Select **4MB (Sketch: 4032KB, FS: 64KB)** in the Arduino Flash Size menu
+(CLI board option `flash=4194304_65536`, alongside `ipbtstack=ipv4btcble`).
+Keep the same flash/partition selection in future builds to retain the file.
+The first boot initializes only a completely blank filesystem partition;
+a nonblank partition that cannot mount is never automatically formatted.
+Mount/load/save failures are reported on CDC2. Invalid files are retained
+without overwriting; settings stay runtime-only until storage is repaired.
+Writes are coalesced after two seconds without changes or encoder movement,
+only with the keyer idle, and use the existing audio pause/resume protection.
+Failed writes retry no more than once per five seconds; a temporary file is
+verified before atomic replacement. Wait at least five seconds idle before
+powering off after changing settings. Saved assignments to disabled encoders
+are retained and reported at startup, so changing wiring/build options does not
+silently discard them.
+
+The switch has 20 ms debounce. Menu drawing is bounded to one label per
+25 ms display pass, with the selected label prioritized. PTT or key-down
 pauses encoder processing, mode-icon drawing, and messages. Captured steps
 remain queued and resume when idle (subject to the existing queue capacity).
 Encoder value messages expire one second after the last displayed update;
@@ -936,9 +1019,10 @@ draw LCD messages. Normal display servicing pauses during local or MIDI
 tones, key-down, or PTT; during PTT only the T/R icon and the CW text box
 still update (between elements, at most two characters per pass), so paddle,
 straight-key and keyboard text appear as it is sent. On TFT displays the CW
-text box draws only new characters and repaints a row per pass after a
-scroll or screen message, instead of the legacy one-character-per-pass
-redraw. GPS processing also pauses during feedback tones.
+text box draws only new characters and repaints scrolled rows incrementally.
+Pico WM8960 builds clear one row in a separate pass and draw at most two
+characters per pass, including row repaints, so a full row cannot monopolize
+foreground decoder servicing. GPS processing also pauses during feedback tones.
 Touch, keyboard, and terminal command polling must remain available during
 tune/TX so stop commands can be received; audio servicing takes priority
 over GPS and LCD work. Pico WM8960 resistive touch reads use two samples
@@ -952,14 +1036,16 @@ after its requested duration plus one second, rather than hanging the caller.
 VFO uses only the status letter, without a per-step LCD message.
 The status row immediately to the right of WPM shows a light-green mode letter:
 **V** = VFO, **M** = master volume, **S** = sidetone volume,
-**F** = sidetone frequency, **W** = CW speed, **U** = USB microphone level.
-Output routing (headphone/speaker/both/none) and decoder-source selection
-are not included.
+**F** = sidetone frequency, **W** = CW speed, **U** = USB microphone level,
+**O** = output routing, **D** = RX threshold, **R** = RX frequency,
+**C** = RX decode WPM.
 
-Setting `rotary_switch` to **0** disables all switch pin setup/reads and fixes
-the encoder function to **master/USB playback volume**, not speed.
-Menu selection is not saved; audio/pitch/speed settings use normal deferred
-EEPROM saving, with no layout or magic-number change.
+Setting `rotary_switch` to **0** disables that switch's setup/reads and starts
+encoder 1 on **master/USB playback volume**, not speed. A runtime assignment
+can select a different control even without a switch.
+Menu selection/assignment, output routing and RX controls are not yet saved.
+Existing audio/pitch/speed settings retain their deferred EEPROM saving,
+with no layout or magic-number change.
 
 Volume functions use the same linear 2% steps and
 unmute the selected path. Master volume changes the existing saved USB playback
@@ -974,6 +1060,9 @@ to reverse VFO tuning; set **+1** for the original direction. The saved
 without rebuilding (this saved setting and `\:MIC GATE` bumped the Pico EEPROM
 magic to 47, so the first boot resets saved settings). Other modes
 are unaffected.
+The graphical Select/Adjust menu requires a TFT. Non-TFT builds retain
+short-press function cycling and long-press return to the first assigned
+control, with their existing value messages.
 The existing half-step quadrature decoder is reused. Pico GPIO CHANGE
 interrupts capture transitions and queue up to 127 timestamped steps while
 foreground display/audio work runs. Only foreground code changes settings,
@@ -988,8 +1077,241 @@ setup, ADC reads, or potentiometer enable/help/UI commands are compiled in.
 Saved activation is ignored/cleared when settings load. A nonzero
 potentiometer pin retains existing feature-controlled behavior.
 
-Host menu/button/volume tests and Pico builds with MCP23017 enabled/disabled
-pass; physical encoder/menu testing remains pending.
+#### Additional encoders and pin budget
+
+With MCP23017 enabled, CPU GPIO26/27 and switch GPIO28 can support encoder 2
+without removing any of the six transmitter pairs. It is **disabled by
+default**: set `PICO_ENCODER2_ENABLED=1` in the Pico pin configuration or
+compiler definitions when wired. Encoder 1 remains GPIO2/3, switch GPIO4.
+GPIO14 is reserved as `PICO_COMMAND_BUTTON_GPIO` for a future digital
+Command-mode button; this chunk does not implement that button.
+
+The live terminal command `\:ENCODER` lists bindings. For example:
+
+```text
+\:ENCODER 2 MASTER
+\:ENCODER 2 OUTPUT
+\:ENCODER 1 ALL
+```
+
+A control has exactly one owner. Assigning it moves it from its previous
+encoder; all controls initially belong to encoder 1. The recipient selects
+the transferred control immediately. Multiple controls on a switchless
+encoder can still be selected through subsequent assignments or a future
+menu-launch touch/button action.
+
+Slots 3/4 default to disabled (`PICO_ENCODER3_A/B/SWITCH` and
+`PICO_ENCODER4_A/B/SWITCH` are -1). RP2350B boards expose additional GPIOs
+that can be assigned after checking their physical wiring. The standard
+Pico2-W with this TFT/touch/audio/GPS wiring does not have enough spare
+header GPIOs for four three-contact encoders while retaining the reserved
+button and UART0 pair. Startup validation rejects overlaps with the configured
+display, audio, GPS, keying, encoder and reserved button pins.
+
+The current MCP23017 map uses three key inputs and twelve transmitter
+outputs, leaving only B7 free. A three-contact expander encoder would need
+at least one transmitter pair removed; more expander encoders would require
+further reductions. No expander encoder backend is enabled: the available
+CPU interrupt pins avoid I2C edge-loss risk and preserve all six TX pairs.
+
+The direct-key/no-MCP profile reserves GPIO26 instead; encoder 2's default
+26/27/28 wiring must be reassigned before enabling it there.
+
+`open_encoder_menu(index)`, `encoder_menu_switch(index)` and
+`close_encoder_menu()` are the shared foreground hooks for a future touch
+launcher or standalone switch (index is 0..3). They do not require an encoder
+rotation to operate the touch menu.
+
+Run `.\tests\wm8960_midi_host_test.ps1 -CwEncodersOnly` for the targeted
+actual-source routing, binding, switch, Select/Adjust, highlight, touch drag
+and timeout tests.
+Pico2-W with encoder 2 enabled and RP2350B builds pass. Physical encoder/menu
+and touch-drag testing remains pending.
+
+### Pico USB RX CW decoder: first hardware-test chunk
+
+The decoder consumes one channel of signed stereo 48 kHz USB playback
+before local/USB device playback trim, mute, output routing or local/MIDI
+sidetone mixing. It does not decode the microphone or locally generated
+sidetone. Route the receiver's audio to the keyer's USB speaker endpoint
+from the PC. A PC application that mutes or stops supplying PCM cannot
+be bypassed by the decoder tap.
+
+This adapts the streaming detector design from
+`RP2350-SDR-CW-Interface`: 48-to-8 kHz averaging, 20 ms Goertzel windows,
+5 ms hops, hysteresis and debounce, with bounded foreground DSP rather
+than launching another core-1 task. Timing comes from samples, not delayed
+foreground wall-clock intervals. Fixed speed is available, with automatic
+learning from marks and actual inter-element gaps. Stream gaps, overflow,
+USB alternate-setting changes and receive-setting changes reset partial
+decodes instead of joining unrelated audio.
+
+Decoded text goes to the CW text box and **CDC2 terminal only**, never the
+primary WinKey CDC channel. PCM/text drops are counted and reported on
+CDC2 when space is available; decoder work never waits for terminal output.
+Received glyphs use `WM8960_RX_TEXT_COLOR` from the Pico feature configuration,
+default **TFT_CYAN**; local sent text retains white. Colors follow individual
+characters through scrolling and redraws. Each decoded character/word space
+resets the backlight inactivity timer and wakes the TFT backlight.
+
+```text
+\:OUTPUT BOTH
+\:RXFREQ 600
+\:RXWPM 20
+\:RXCHANNEL 0
+\:RXTHRESHOLD 20
+\:RX
+\:RXTHRESHOLD 0
+```
+
+- `OUTPUT SPEAKER|HEADPHONE|BOTH|NONE` powers the corresponding codec
+  output stages. It affects USB playback and generated tones alike, but
+  does not disable capture, USB endpoints or receive decoding.
+- `RXTHRESHOLD 0` stops PCM decimation/DSP, not just text output.
+  **1..100: higher is stricter**. This sensitivity control is not a percent
+  audio volume; its tone-amplitude floor ranges approximately -66..-26 dBFS,
+  with an additional adaptive noise threshold.
+- `RXFREQ 300..1200` sets the saved receive center, independent of sidetone
+  frequency. Automatic tone tracking searches within +/-40 Hz of this center,
+  clipped to 300..1200 Hz. The menu continues to show the center; `RX` also
+  reports the actual tracked frequency and switch count since the last
+  stream/settings reset.
+- `RXWPM 5..60` sets fixed speed; `0` enables automatic learning. Send a
+  short training sequence such as repeated V characters before judging
+  auto-speed text. It does not measure carrier-frequency offset.
+- `RXCHANNEL 0|1` selects left/right. Channels are not summed, avoiding
+  cancellation when the receiver supplies opposite-phase stereo.
+- `RX` displays settings, signal/noise amplitude and drop counters.
+
+Defaults in `main/keyer_features_and_options_pico.h` are RX disabled,
+600 Hz, fixed 20 WPM, left channel and both physical outputs. Overrides:
+`WM8960_RX_THRESHOLD`, `WM8960_RX_FREQUENCY`, `WM8960_RX_WPM`,
+`WM8960_RX_CHANNEL`, `WM8960_OUTPUT_ROUTE`. These are first-boot defaults;
+valid saved menu settings take precedence. See the LittleFS partition and
+persistence requirements above; existing EEPROM CW memories are preserved.
+The legacy analog/digital `FEATURE_CW_DECODER` is separate and need not be
+enabled for USB decoding.
+
+Run `.\tests\cw_rx_host_test.ps1` for exact synthetic SOS output from
+5..60 WPM, 300..1200 Hz, either stereo channel, auto learning after training,
+stricter threshold rejection, white-noise/off-frequency rejection, disable
+and overflow/frequency-reset recovery. Fixed-speed SOS is checked at every
+integer speed from 5 through 60 WPM. Additional cases cover short bursts,
+interrupted dahs, spacing after rejected pulses and Auto learning immunity
+to rejected bursts.
+
+Once speed is fixed or Auto has acquired four marks, pulses shorter than
+half the estimated dit (with a 15 ms minimum) are normally rejected.
+A short dit of at least 15 ms can be rescued after an accepted dah inside
+a character, with a preceding gap of 0.5..1.75 dits and strong tone evidence
+in at least two 5 ms hops: spectral amplitude above 1.15 times broadband RMS
+and eight times the estimated noise. Isolated short bursts are not rescued;
+neither rescued nor rejected pulses enter speed learning.
+Key-up confirmation scales with dit length, from
+10 to 15 ms, bridging brief detector dropouts inside marks. At 27 WPM this
+rejects 20 ms detector marks and bridges the observed 10 ms dah dropout.
+Confirmed edges retain their first-candidate sample timestamps, and rejected
+pulses remain part of the surrounding gap rather than restarting spacing.
+Auto acquisition initially retains the 15 ms minimum and 10 ms confirmation
+so a slow initial estimate does not reject genuine fast-speed training.
+Longer noise bursts can still look like legitimate Morse elements.
+
+After fixed-speed selection or Auto acquisition, a mark beginning after at
+least five dits of silence (and at least 200 ms) is provisional if it lacks
+two consecutive high-quality 5 ms hops. These require spectral amplitude
+above eight times estimated noise and 1.25 times broadband RMS; below a
+30 ms dit, the RMS factor is 1.15 to preserve fast keyed-window edges.
+A provisional lone E/T is discarded at the character boundary and excluded
+from speed learning. If another accepted element follows before that boundary,
+the weak first element is retained, avoiding lost onsets in multi-element
+characters. In-character hold detection and the short-dit rescue are unchanged.
+This reduces pause noise, but can also suppress weak genuine isolated E/T
+characters; noise forming multiple elements can still pass.
+
+Frequency tracking is enabled automatically. A 5 Hz Goertzel search grid
+requires four supported 5 ms hops, with spectral amplitude above 1.15 times
+RMS and at least six times estimated noise (minimum 1000 PCM amplitude).
+A 20 Hz switching deadband avoids small pitch jitter. The tracker holds its
+lock through brief fades/gaps and permits reacquisition after 150 ms without
+credible matching tone. It returns to the selected center on stream reset,
+without changing saved settings, WPM, sidetone or encoder assignments.
+Overlapping signals, first-element acquisition and weak callers can still
+produce errors. DSP remains foreground-only and uses the existing 2 ms
+cooperative budget; check queue/drop and processing diagnostics on hardware.
+
+The USB decoder estimates the background from a rolling lower envelope,
+excluding coherent tone energy, even when startup noise initially trips
+the detector. This prevents a loud background from leaving the noise estimate
+stuck at its quiet startup value. Threshold 1..100 sets a minimum amplitude
+floor and scales the adaptive noise and tone-onset peak limits: 1 is about 0.63 times,
+50 preserves the baseline, and 100 is 1.6 times. Higher values are stricter;
+0 disables decoding. The tone-coherence requirement remains independent.
+The peak hold limit remains unchanged to preserve fast keyed-edge timing.
+The adaptive limit may exceed the amplitude floor. Real noisy recordings
+can still produce timing errors; raising the threshold alone is not a cure.
+Tone detection uses a 20 ms spectral window with 5 ms hops and a decaying
+signal-peak gate to separate the keyed tone from broadband background.
+The peak decays by 2% per hop (about 172 ms half-life), allowing quieter
+letters after louder ones instead of holding the old amplitude gate for
+multiple characters. Host tests cover a sudden amplitude reduction between letters.
+Tone onset also requires spectral amplitude above the window RMS, with a
+lower 0.65-times-RMS hold limit to avoid chattering at keyed edges. This
+rejects broadband bursts and nearby off-target tones more strongly; tune RX Hz
+to the station's actual pitch. Weak or overlapping stations can still lose marks.
+Auto timing changes require supported mark-history estimates; a single short
+key-up gap no longer directly changes the dit estimate.
+
+For local recording regression, `cw_rx_host_test.ps1` accepts
+`-RecordingPcm <path> -ExpectedSubstring <text>` in addition to its synthetic
+tests. Supply headerless signed 16-bit little-endian stereo PCM at 48 kHz;
+the replay uses channel 0, 700 Hz, threshold 50 and fixed 20 WPM.
+It checks zero PCM drops and the specified reference substring, not full
+transcript accuracy. User recordings stay outside the repository.
+`RX` also reports queued samples, the maximum decoder-service gap, maximum
+processing time, and the longest instrumented foreground stage (including
+serial, touch, keyboard/GPS, settings, display and BOOTSEL). These maxima are
+cumulative since boot; reboot after flashing to compare a new build.
+Processing catches up with at most 1280 samples (160 ms of
+8 kHz input) per call and checks a 2 ms wall-clock budget after each DSP window.
+Cooperative `myDelay` waits also service decoding on core 0, with a reentry
+guard; decoded text defers scroll-box clearing to display service instead of
+performing a full TFT clear inside DSP. Main-loop stage boundaries also service
+decoding. A slow-display host regression models 40 ms glyph/row-clear calls
+and verifies at most 80 ms per incremental renderer pass with zero PCM drops.
+This bounds that renderer, not every potentially blocking foreground call.
+Pico WM8960 full scroll-box clears use eight-pixel strips with RX servicing
+between TFT transactions; twelve-pixel rounded end caps preserve the corners.
+This reduces uninterrupted clear time without changing the queue capacity.
+Encoder menu clears and control-box backgrounds likewise fill in eight-pixel
+strips, with RX servicing between fills, labels and queued encoder actions.
+This keeps RX WPM adjustments between stations cooperative.
+CDC2 terminal writes also service RX outside the USB mutex while waiting
+for host buffer space; their existing one-second no-progress timeout and
+write-error reporting remain unchanged. A host test applies 600 ms of CDC
+backpressure and checks zero PCM drops. Foreground timing separates serial
+handling from send-buffer/PTT and potentiometer/encoder work.
+The queue holds 512 ms. Growing PCM-drop
+counters indicate queue overflow and discarded partial characters, separately
+from recognition errors. Counters/high-water timing values are cumulative
+since boot, so compare successive readings rather than one snapshot.
+
+`.\tests\wm8960_midi_host_test.ps1 -CwEncodersOnly` also exercises decoded
+text through the TFT incremental renderer beyond three full boxes, including
+word-space wrapping and appending after an empty-buffer repaint.
+
+Hardware acceptance order:
+Small-font control values and headphone/speaker switching have been
+hardware-confirmed. The remaining checks below are still required.
+
+1. Check SPEAKER, HEADPHONE, BOTH and NONE using a quiet test tone; verify
+   sidetone, microphone capture and both serial channels still work.
+2. Send clean known 20-WPM/600-Hz CW over USB; confirm CDC2/display text and
+   no unsolicited WinKey bytes. Adjust RX threshold; verify 0 stops decoding.
+3. Test the encoder menu, direct label taps, drag direction, timeout and
+   per-encoder assignments with encoder 2 wired; then test real noisy RX audio.
+4. Change the selected control, assignments, output route and RX settings;
+   wait five seconds idle, power-cycle and verify restoration and unchanged
+   CW memories. Receiver-noise tuning follows this hardware checkpoint.
 
 ### Pending Pico integration worklist
 
@@ -1000,8 +1322,8 @@ All items below are pending; order follows the requested worklist.
    the left edge; physical touch testing, including stop-TX/tune controls,
    is blocked until working hardware is available.
 2. Test Command mode using a single button.
-3. Add touch buttons for volume and mute controls, usable without a serial
-   terminal or keyboard.
+3. Add a touch launcher for the new audio/decoder menu (and a dedicated
+   mute control), usable without a serial terminal, keyboard or encoder switch.
 4. Port this project's Pico Bluetooth keyboard support into
    `RP2350-SDR-CW-Interface`.
 

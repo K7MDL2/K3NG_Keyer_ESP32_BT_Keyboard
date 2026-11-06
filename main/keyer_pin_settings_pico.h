@@ -276,8 +276,59 @@ FEATURE_SIDETONE_SWITCH
     #define rotary_pin1  22 //34 Needs external 10k Pullup   // CW Encoder Pin  Not all ESP32 pins supports PULLUP SP5IOU
     #define rotary_pin2  14 //35 Needs external 10k Pullup   // CCW Encoder Pin  Not all ESP32 pins supports PULLUP SP5IOU
     #define OPTION_ENCODER_ENABLE_PULLUPS     // define to enable weak pullups.
-    #define rotary_switch 42 // Rotary encoder switch pin
+    #if defined(PICO_RP2350A) && PICO_RP2350A
+      #define rotary_switch 28
+    #else
+      #define rotary_switch 42 // RP2350B board only
+    #endif
   #endif
+#if defined(FEATURE_WM8960_USB_AUDIO)
+  #ifndef PICO_ENCODER2_ENABLED
+    #define PICO_ENCODER2_ENABLED 0
+  #endif
+  #ifndef PICO_ENCODER2_A
+    #define PICO_ENCODER2_A 26
+  #endif
+  #ifndef PICO_ENCODER2_B
+    #define PICO_ENCODER2_B 27
+  #endif
+  #ifndef PICO_ENCODER2_SWITCH
+    #define PICO_ENCODER2_SWITCH 28
+  #endif
+  #ifndef PICO_ENCODER3_A
+    #define PICO_ENCODER3_A -1
+  #endif
+  #ifndef PICO_ENCODER3_B
+    #define PICO_ENCODER3_B -1
+  #endif
+  #ifndef PICO_ENCODER3_SWITCH
+    #define PICO_ENCODER3_SWITCH -1
+  #endif
+  #ifndef PICO_ENCODER4_A
+    #define PICO_ENCODER4_A -1
+  #endif
+  #ifndef PICO_ENCODER4_B
+    #define PICO_ENCODER4_B -1
+  #endif
+  #ifndef PICO_ENCODER4_SWITCH
+    #define PICO_ENCODER4_SWITCH -1
+  #endif
+  #ifndef PICO_COMMAND_BUTTON_GPIO
+    #ifdef FEATURE_MCP23017_EXPANDER
+      #define PICO_COMMAND_BUTTON_GPIO 14
+    #else
+      #define PICO_COMMAND_BUTTON_GPIO 26
+    #endif
+  #endif
+  static constexpr int pico_encoder_pins[4][3] = {
+    {rotary_pin1, rotary_pin2, rotary_switch ? rotary_switch : -1},
+    {PICO_ENCODER2_ENABLED ? PICO_ENCODER2_A : -1,
+     PICO_ENCODER2_ENABLED ? PICO_ENCODER2_B : -1,
+     PICO_ENCODER2_ENABLED ? PICO_ENCODER2_SWITCH : -1},
+    {PICO_ENCODER3_A, PICO_ENCODER3_B, PICO_ENCODER3_SWITCH},
+    {PICO_ENCODER4_A, PICO_ENCODER4_B, PICO_ENCODER4_SWITCH}
+  };
+#endif
 #endif //FEATURE_ROTARY_ENCODER
 
 #ifdef FEATURE_LED_RING

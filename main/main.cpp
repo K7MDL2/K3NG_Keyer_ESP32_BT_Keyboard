@@ -1607,6 +1607,8 @@ If you offer a hardware kit using this software, show your appreciation by sendi
 
 #if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 	#include "wm8960_audio.h"
+	#include "encoder_menu.h"
+	#include "encoder_settings.h"
 	#include "wm8960_midi.h"
 #endif
 
@@ -2135,7 +2137,7 @@ struct config_t {
 } configuration;
 
 #if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
-enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone };
+enum class AudioVolumeTarget : uint8_t { Playback, Sidetone, Microphone, LocalPlayback };
 void print_audio_volumes(PRIMARY_SERIAL_CLS *port);
 bool apply_audio_levels();
 void audio_consumer_key(uint16_t usage, uint8_t modifiers);
@@ -2166,6 +2168,7 @@ void service_keyer_midi();
 void service_host_ptt_feedback();
 void sync_pod_volume();
 bool midi_pod_mode();
+void service_usb_cw_decoder();
 // POD mode PC-side levels: sent to the PC only; local playback/mic levels stay fixed.
 uint8_t pod_play_volume = 100;
 bool pod_play_muted = false;
@@ -2205,6 +2208,15 @@ void check_rotary_encoder();
 #if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 char encoder_mode_letter();
 void draw_encoder_mode(int row, bool redraw);
+bool encoder_menu_active();
+void service_encoder_menu();
+void close_encoder_menu();
+void open_encoder_menu(uint8_t encoder);
+void encoder_menu_switch(uint8_t encoder);
+void initialize_encoder_settings();
+void service_encoder_settings();
+bool encoder_menu_touch(bool pressed, int x, int y);
+bool encoder_menu_touch_capture = false;
 #endif
 int convert_cw_number_to_ascii (long number_in);
 void cli_timing_print(PRIMARY_SERIAL_CLS * port_to_use);
@@ -2241,6 +2253,7 @@ void send_serial_number(byte cut_numbers,int increment_serial_number,byte buffer
 void serial_receive_transmit_echo_menu(PRIMARY_SERIAL_CLS * port_to_use);
 byte play_memory(byte memory_number);
 void display_scroll_print_char(char charin);
+void display_scroll_print_char_color(char charin, uint16_t color);
 void service_display();
 #ifdef FEATURE_DISPLAY
 void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned int duration);
@@ -2866,6 +2879,11 @@ volatile bool do_process = false;
 	byte lcd_previous_status = LCD_CLEAR;
 	byte lcd_scroll_buffer_dirty = 0;
 	String lcd_scroll_buffer[LCD_ROWS];
+	#ifdef FEATURE_TFT_DISPLAY
+		uint16_t lcd_scroll_colors[LCD_ROWS][LCD_COLUMNS] = {};
+		uint16_t lcd_scroll_holding_color = TFT_WHITE;
+		bool lcd_scroll_needs_clear = false;
+	#endif
 	byte lcd_scroll_flag = 0;
 	byte lcd_paddle_echo = 1;
 	byte lcd_send_echo = 1;
@@ -2874,6 +2892,7 @@ volatile bool do_process = false;
 		byte lcd_scroll_drawn_row = 0;
 		byte lcd_scroll_drawn_col = 0;
 		byte lcd_scroll_repaint_row = LCD_ROWS;  // < LCD_ROWS: rows still to repaint after a scroll
+		byte lcd_scroll_repaint_col = 255;
 	#endif
 #endif //FEATURE_DISPLAY
 
@@ -4688,18 +4707,50 @@ void check_backlight() {
 // claer the scrollable text area of the display
 #ifdef FEATURE_DISPLAY
 
+#if defined(FEATURE_TFT_DISPLAY) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+void tft_fill_rect_cooperative(int x, int y, int width, int height, uint16_t color) {
+	for (int row = 0; row < height; row += 8) {
+		lcd.fillRect(x, y + row, width, std::min(8, height - row), color);
+		service_usb_cw_decoder();
+	}
+}
+
+void tft_clear_scroll_box_pixels() {
+	service_usb_cw_decoder();
+	lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, 12, 6, TFT_BLACK);
+	service_usb_cw_decoder();
+	for (int y = 6; y < SCROLL_BOX_HEIGHT - 6; y += 8) {
+		const int height = std::min(8, SCROLL_BOX_HEIGHT - 6 - y);
+		lcd.fillRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP + y, SCROLL_BOX_WIDTH, height, TFT_BLACK);
+		service_usb_cw_decoder();
+	}
+	lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP + SCROLL_BOX_HEIGHT - 12,
+	                 SCROLL_BOX_WIDTH, 12, 6, TFT_BLACK);
+	service_usb_cw_decoder();
+}
+#endif
+
 void lcd_scroll_box_clear() {
 		#ifdef FEATURE_TFT_DISPLAY
-				if (popup_active) {
+				if (popup_active
+					#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						|| encoder_menu_active()
+					#endif
+				) {
 					//debug_serial_port->println(F("Skipping Popup while in lcd_scroll_clear()"));
 					return;  // skip this when a popup window is up, else will corrupt popup window content
 				}
 			//if (TFT_VIEWPORT_EXISTS) {
 			//    debug_serial_port->println(F("Close Viewport"));
-					lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						tft_clear_scroll_box_pixels();
+					#else
+						lcd.fillRoundRect(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 6, TFT_BLACK);
+					#endif
 					lcd_scroll_drawn_row = 0;
 					lcd_scroll_drawn_col = 0;
 					lcd_scroll_repaint_row = LCD_ROWS;
+					lcd_scroll_repaint_col = 255;
 					myDelay(0);
 			//    lcd.resetViewport();
 			//}
@@ -5024,6 +5075,7 @@ int32_t tft_scroll_row_y(byte row) {
 
 void tft_draw_scroll_char(byte row, byte col) {
 	const char c = lcd_scroll_buffer[row].charAt(col);
+	lcd.setTextColor(lcd_scroll_colors[row][col]);
 	if (c > 0 && c != ' ') {
 		#ifdef FEATURE_M5STACK_CORE2
 			lcd.drawChar(c, SCROLL_TEXT_LEFT_SIDE+(col*COLUMN_WIDTH), tft_scroll_row_y(row));
@@ -5033,9 +5085,12 @@ void tft_draw_scroll_char(byte row, byte col) {
 	}
 }
 
-// Brings the scroll box up to date in small steps: one row repaint after a
-// scroll, otherwise up to max_chars new characters. Returns true when done.
+// Repaints and appends at most max_chars characters per pass.
 bool tft_draw_pending_scroll_chars(byte max_chars) {
+	if (lcd_scroll_needs_clear) {
+		lcd_scroll_needs_clear = false;
+		lcd_scroll_box_clear();
+	}
 	lcd.setTextDatum(SCROLL_BOX_DATUM);
 	lcd.setFreeFont(SCROLL_BOX_FONT);
 	lcd.setTextColor(TFT_WHITE);
@@ -5047,14 +5102,25 @@ bool tft_draw_pending_scroll_chars(byte max_chars) {
 		const byte row = lcd_scroll_repaint_row;
 		// Free-font glyphs sit on the baseline: about 3/4 of the row pitch above, 1/4 below.
 		const int32_t pitch = FONT_HEIGHT;
-		lcd.fillRect(SCROLL_BOX_LEFT_SIDE+3, tft_scroll_row_y(row)-(pitch*3/4),
-		             SCROLL_BOX_WIDTH-6, pitch, TFT_BLACK);
-		for (byte col = 0; col < lcd_scroll_buffer[row].length(); col++) {
-			tft_draw_scroll_char(row, col);
+		if (lcd_scroll_repaint_col == 255) {
+			lcd.fillRect(SCROLL_BOX_LEFT_SIDE+3, tft_scroll_row_y(row)-(pitch*3/4),
+			             SCROLL_BOX_WIDTH-6, pitch, TFT_BLACK);
+			lcd_scroll_repaint_col = 0;
+			return false;
 		}
-		lcd_scroll_drawn_row = row;
-		lcd_scroll_drawn_col = lcd_scroll_buffer[row].length();
+		byte drawn = 0;
+		while (lcd_scroll_repaint_col < lcd_scroll_buffer[row].length() && drawn < max_chars) {
+			tft_draw_scroll_char(row, lcd_scroll_repaint_col++);
+			++drawn;
+		}
+		if (lcd_scroll_repaint_col < lcd_scroll_buffer[row].length()) return false;
+		// Empty trailing rows must not move the append cursor past incoming text.
+		if (row == 0 || lcd_scroll_buffer[row].length() > 0) {
+			lcd_scroll_drawn_row = row;
+			lcd_scroll_drawn_col = lcd_scroll_buffer[row].length();
+		}
 		lcd_scroll_repaint_row++;
+		lcd_scroll_repaint_col = 255;
 		return false;
 	}
 
@@ -5092,16 +5158,27 @@ void service_display() {
 			// (audio is timer-rendered); other LCD work waits.
 			#ifdef FEATURE_TFT_DISPLAY
 				draw_tx_icon();
-				if (!popup_active && lcd_status == LCD_SCROLL_MSG && lcd_scroll_buffer_dirty) {
+				if (!popup_active && lcd_status == LCD_SCROLL_MSG && lcd_scroll_buffer_dirty
+					#ifdef FEATURE_ROTARY_ENCODER
+						&& !encoder_menu_active()
+					#endif
+				) {
 					if (lcd_scroll_flag) {
 						lcd_scroll_flag = 0;
 						lcd_scroll_repaint_row = 0;
+						lcd_scroll_repaint_col = 255;
 					}
 					if (tft_draw_pending_scroll_chars(2)) lcd_scroll_buffer_dirty = 0;
 				}
 			#endif
 			return;
 		}
+		#ifdef FEATURE_ROTARY_ENCODER
+			if (encoder_menu_active()) {
+				service_encoder_menu();
+				return;
+			}
+		#endif
 	#endif
 
 	#ifdef DEBUG_LOOP
@@ -5120,6 +5197,10 @@ void service_display() {
 	#ifdef FEATURE_TFT_DISPLAY
 		update_icons();
 		if (popup_active) return;  // do not overwrite the window
+		if (lcd_scroll_needs_clear) {
+			lcd_scroll_needs_clear = false;
+			lcd_scroll_box_clear();
+		}
 	#endif
 
 	if (lcd_timed_message_expired()) {
@@ -5180,13 +5261,14 @@ void service_display() {
 
 					uint32_t x1 = SCROLL_TEXT_LEFT_SIDE+(x*COLUMN_WIDTH);
 
-					lcd.setTextColor(TFT_WHITE);
+					lcd.setTextColor(lcd_scroll_colors[y][x]);
 
 					#ifdef DO_STRING
 						//lcd.setTextPadding(2);
 						//int16_t w = lcd.textWidth(lcd_scroll_buffer[y]);  // width of string with font specified
 						//lcd.drawRect(SCROLL_TEXT_LEFT_SIDE, y1, w, FONT_HEIGHT, TFT_BLACK);
-						lcd.drawString(lcd_scroll_buffer[y], SCROLL_TEXT_LEFT_SIDE, y1, GFXFF);
+						for (byte col = 0; col < lcd_scroll_buffer[y].length(); ++col)
+							tft_draw_scroll_char(y, col);
 					#else  // do char by char
 						char c = lcd_scroll_buffer[y].charAt(x);
 						#ifdef FEATURE_M5STACK_CORE2
@@ -5239,13 +5321,17 @@ void service_display() {
 				case LCD_SCROLL_MSG:
 					if (lcd_scroll_buffer_dirty) {
 						#ifdef FEATURE_TFT_DISPLAY
-							// Repaint rows after a scroll and draw only new characters, a row per
-							// call at most, instead of the legacy one-character-per-pass redraw.
+							// Repaint scrolled rows and append new text within the same character budget.
 							if (lcd_scroll_flag) {
 								lcd_scroll_flag = 0;
 								lcd_scroll_repaint_row = 0;
+								lcd_scroll_repaint_col = 255;
 							}
-							if (tft_draw_pending_scroll_chars(LCD_COLUMNS)) lcd_scroll_buffer_dirty = 0;
+							#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+								if (tft_draw_pending_scroll_chars(2)) lcd_scroll_buffer_dirty = 0;
+							#else
+								if (tft_draw_pending_scroll_chars(LCD_COLUMNS)) lcd_scroll_buffer_dirty = 0;
+							#endif
 						#else
 							if (lcd_scroll_flag) {
 								lcd_scroll_box_clear();
@@ -5272,6 +5358,9 @@ byte lcd_scroll_holding_space = 0;
 void reset_display_scroll_text() {
 	for (byte row = 0; row < LCD_ROWS; ++row) {
 		lcd_scroll_buffer[row] = "";
+		#ifdef FEATURE_TFT_DISPLAY
+			for (byte col = 0; col < LCD_COLUMNS; ++col) lcd_scroll_colors[row][col] = TFT_WHITE;
+		#endif
 	}
 	lcd_scroll_column_pointer = 0;
 	lcd_scroll_row_pointer = 0;
@@ -5282,10 +5371,19 @@ void reset_display_scroll_text() {
 		lcd_scroll_drawn_row = 0;
 		lcd_scroll_drawn_col = 0;
 		lcd_scroll_repaint_row = 0;
+		lcd_scroll_repaint_col = 255;
 	#endif
 }
 
 void display_scroll_print_char(char charin){
+	#ifdef FEATURE_TFT_DISPLAY
+		display_scroll_print_char_color(charin, TFT_WHITE);
+	#else
+		display_scroll_print_char_color(charin, 0);
+	#endif
+}
+
+void display_scroll_print_char_color(char charin, uint16_t color){
 	#ifdef FEATURE_M5STACK_CORE2
 		if (static_cast<uint8_t>(charin) < 32 || charin == 127) return;
 	#endif
@@ -5321,6 +5419,9 @@ void display_scroll_print_char(char charin){
 
 	if (charin == ' '){
 		holding_space = 1;
+		#ifdef FEATURE_TFT_DISPLAY
+			lcd_scroll_holding_color = color;
+		#endif
 		return;
 	}
 
@@ -5331,6 +5432,9 @@ void display_scroll_print_char(char charin){
 			if (row_pointer > (LCD_ROWS-1)) {
 				for (x = 0; x < (LCD_ROWS-1); x++) {
 					lcd_scroll_buffer[x] = lcd_scroll_buffer[x+1];
+					#ifdef FEATURE_TFT_DISPLAY
+						memcpy(lcd_scroll_colors[x], lcd_scroll_colors[x+1], sizeof(lcd_scroll_colors[x]));
+					#endif
 				}
 				lcd_scroll_buffer[x] = "";
 				row_pointer--;
@@ -5339,6 +5443,9 @@ void display_scroll_print_char(char charin){
 		}
 		if (column_pointer > 0){ // don't put a space in the first column
 			lcd_scroll_buffer[row_pointer].concat(' ');
+			#ifdef FEATURE_TFT_DISPLAY
+				lcd_scroll_colors[row_pointer][column_pointer] = lcd_scroll_holding_color;
+			#endif
 			column_pointer++;
 		}
 		holding_space = 0;
@@ -5350,6 +5457,9 @@ void display_scroll_print_char(char charin){
 		if (row_pointer > (LCD_ROWS-1)) {
 			for (x = 0; x < (LCD_ROWS-1); x++) {
 				lcd_scroll_buffer[x] = lcd_scroll_buffer[x+1];
+				#ifdef FEATURE_TFT_DISPLAY
+					memcpy(lcd_scroll_colors[x], lcd_scroll_colors[x+1], sizeof(lcd_scroll_colors[x]));
+				#endif
 			}
 			lcd_scroll_buffer[x] = "";
 			row_pointer--;
@@ -5357,6 +5467,9 @@ void display_scroll_print_char(char charin){
 		}
 	}
 	lcd_scroll_buffer[row_pointer].concat(charin);
+	#ifdef FEATURE_TFT_DISPLAY
+		lcd_scroll_colors[row_pointer][column_pointer] = color;
+	#endif
 	column_pointer++;
 
 	lcd_scroll_buffer_dirty = 1;
@@ -5438,7 +5551,11 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 		#endif
 	#endif  //FEATURE_LCD_BACKLIGHT_AUTO_DIM
 	#ifdef FEATURE_TFT_DISPLAY
-		if (popup_active) {
+		if (popup_active
+			#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+				|| encoder_menu_active()
+			#endif
+		) {
 			//debug_serial_port->println(F("Skipping Popup while in Timed Message"));
 			return;  // skip this when a popup window is up, else will corrupt popup window content
 		}
@@ -5492,6 +5609,9 @@ void lcd_center_print_timed(String lcd_print_string, byte row_number, unsigned i
 
 void check_for_dirty_configuration()
 {
+	#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		service_encoder_settings();
+	#endif
 	#ifdef DEBUG_LOOP
 		debug_serial_port->print(F("loop: entering check_for_dirty_configuration - config_dirty = "));
 		debug_serial_port->println(config_dirty);
@@ -6750,17 +6870,29 @@ void debug_capture_dump()
 struct EncoderEvent {
 	uint8_t direction;
 	uint32_t time_ms;
+	uint8_t encoder;
 };
 volatile EncoderEvent encoder_events[128];
 volatile uint8_t encoder_event_head = 0;
 volatile uint8_t encoder_event_tail = 0;
 volatile bool encoder_event_overflow = false;
+volatile uint32_t encoder_movement_ms[4] = {};
 
-void capture_encoder_transition() {
-	const uint8_t pins = (digitalRead(rotary_pin2) << 1) | digitalRead(rotary_pin1);
-	state = ttable[state & 0x0f][pins];
-	const uint8_t direction = state & 0x30;
+uint8_t encoder_states[4] = {};
+bool encoder_pin_map_valid = true;
+
+void capture_encoder_index(uint8_t encoder) {
+	#if defined(FEATURE_WM8960_USB_AUDIO)
+		if (!encoder_pin_map_valid) return;
+		const uint8_t pins = (digitalRead(pico_encoder_pins[encoder][1]) << 1) |
+		    digitalRead(pico_encoder_pins[encoder][0]);
+	#else
+		const uint8_t pins = (digitalRead(rotary_pin2) << 1) | digitalRead(rotary_pin1);
+	#endif
+	encoder_states[encoder] = ttable[encoder_states[encoder] & 0x0f][pins];
+	const uint8_t direction = encoder_states[encoder] & 0x30;
 	if (!direction) return;
+	encoder_movement_ms[encoder] = millis();
 	const uint8_t next = (encoder_event_head + 1) & 127;
 	if (next == encoder_event_tail) {
 		encoder_event_overflow = true;
@@ -6768,30 +6900,543 @@ void capture_encoder_transition() {
 	}
 	encoder_events[encoder_event_head].direction = direction;
 	encoder_events[encoder_event_head].time_ms = millis();
+	encoder_events[encoder_event_head].encoder = encoder;
 	encoder_event_head = next;
 }
+void capture_encoder_transition() { capture_encoder_index(0); }
+void capture_encoder2_transition() { capture_encoder_index(1); }
+void capture_encoder3_transition() { capture_encoder_index(2); }
+void capture_encoder4_transition() { capture_encoder_index(3); }
 #endif
 
 #if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 enum class EncoderFunction : uint8_t {
-	Vfo, Master, Sidetone, Frequency, Speed, Microphone, Count
+	Vfo, Master, Sidetone, Frequency, Speed, Microphone,
+	Output, RxThreshold, RxFrequency, RxSpeed, LocalRx, Count
 };
-EncoderFunction encoder_function =
-    rotary_switch ? EncoderFunction::Vfo : EncoderFunction::Master;
-bool encoder_button_candidate = false;
-bool encoder_button_pressed = false;
-bool encoder_long_press = false;
-uint32_t encoder_button_changed_ms = 0;
-uint32_t encoder_button_down_ms = 0;
+struct PicoEncoderControl {
+	EncoderFunction function = EncoderFunction::Master;
+	uint8_t selection_pulses = ENCODER_MENU_SELECTION_PULSES;
+	bool candidate = false, pressed = false, long_press = false;
+	uint32_t changed_ms = 0, down_ms = 0;
+	bool opened_menu = false;
+};
+struct EncoderControlAttributes {
+	const char *label;
+	bool relative;
+	bool popup_enabled;
+};
+EncoderControlAttributes encoder_control_attributes[] = {
+	{"VFO", true, false}, {"Master", false, true},
+	{"Sidetone", false, true}, {"Tone Hz", false, true},
+	{"CW Speed", false, true}, {"USB Mic", false, true},
+	{"Output", false, true}, {"RX Threshold", false, true},
+	{"RX Hz", false, true}, {"RX WPM", false, true}, {"Local Volume", false, true}
+};
+static_assert(sizeof(encoder_control_attributes) / sizeof(encoder_control_attributes[0]) ==
+    static_cast<unsigned>(EncoderFunction::Count));
+PicoEncoderControl encoder_controls[4];
+EncoderFunction &encoder_function = encoder_controls[0].function;
+// Every function starts on encoder 1. A function has one owner, never duplicate bindings.
+uint8_t encoder_function_owner[static_cast<unsigned>(EncoderFunction::Count)] = {};
+uint8_t encoder_display_index = 0;
+constexpr EncoderFunction encoder_menu_order[] = {
+	EncoderFunction::Vfo, EncoderFunction::Master, EncoderFunction::LocalRx,
+	EncoderFunction::Sidetone, EncoderFunction::Frequency, EncoderFunction::Speed,
+	EncoderFunction::Microphone, EncoderFunction::Output, EncoderFunction::RxThreshold,
+	EncoderFunction::RxFrequency, EncoderFunction::RxSpeed
+};
+static_assert(sizeof(encoder_menu_order) / sizeof(encoder_menu_order[0]) ==
+    static_cast<unsigned>(EncoderFunction::Count));
+EncoderMenu encoder_menu;
+uint32_t encoder_menu_movement_ms = 0;
+uint16_t encoder_menu_dirty = 0;
+bool encoder_menu_header_dirty = false;
+int encoder_menu_values[EncoderMenu::MaxControls] = {};
+struct EncoderControlPopup {
+	bool active = false, dirty = false, drawn = false;
+	EncoderFunction function = EncoderFunction::Count;
+	uint32_t changed_ms = 0, drawn_ms = 0;
+	int value = 0;
+	uint8_t encoder = 0;
+	bool touch_down = false;
+	int drag_x = -1;
+} encoder_control_popup;
+
+bool encoder_menu_active() { return encoder_menu.open || encoder_control_popup.active; }
+void apply_encoder_step(int step, uint8_t encoder = 0);
+void close_encoder_control_popup();
+int encoder_control_value(EncoderFunction function);
+
+void show_encoder_control_popup(EncoderFunction function, uint8_t encoder) {
+	#ifdef FEATURE_TFT_DISPLAY
+		if (encoder_menu.open || popup_active || in_pairing_mode ||
+		    !encoder_control_attributes[static_cast<unsigned>(function)].popup_enabled) return;
+		if (encoder_control_popup.function != function || encoder_control_popup.encoder != encoder)
+			encoder_control_popup.touch_down = false;
+		encoder_control_popup.active = true;
+		encoder_control_popup.dirty = true;
+		encoder_control_popup.function = function;
+		encoder_control_popup.encoder = encoder;
+		encoder_control_popup.changed_ms = millis();
+	#endif
+}
+
+void close_encoder_control_popup() {
+	if (!encoder_control_popup.active) return;
+	const bool drawn = encoder_control_popup.drawn;
+	encoder_control_popup.active = encoder_control_popup.drawn = false;
+	encoder_control_popup.touch_down = false;
+	#ifdef FEATURE_TFT_DISPLAY
+		if (drawn) {
+			lcd_scroll_box_clear();
+			lcd_scroll_buffer_dirty = 1;
+		}
+	#endif
+}
+
+void invalidate_encoder_menu() {
+	encoder_menu_dirty = encoder_menu.count ? (1u << encoder_menu.count) - 1 : 0;
+	encoder_menu_header_dirty = true;
+}
+
+bool validate_pico_encoder_pins() {
+	bool used[NUM_BANK0_GPIOS] = {};
+	auto reserve = [&](int pin) {
+		if (pin >= 0 && pin < NUM_BANK0_GPIOS) used[pin] = true;
+	};
+	reserve(WM8960_I2C_SDA_PIN); reserve(WM8960_I2C_SCL_PIN);
+	reserve(WM8960_I2S_BCLK_PIN); reserve(WM8960_I2S_LRCLK_PIN);
+	reserve(WM8960_I2S_DOUT_PIN); reserve(WM8960_I2S_DIN_PIN);
+	#ifdef FEATURE_TFT_DISPLAY
+		reserve(TFT_CS); reserve(TFT_DC); reserve(TFT_RST); reserve(TFT_BL);
+		reserve(TFT_MISO); reserve(TFT_MOSI); reserve(TFT_SCLK);
+		#ifdef TOUCH_CS
+			reserve(TOUCH_CS);
+		#endif
+	#endif
+	reserve(17); // Retain the display module's optional touch IRQ wiring.
+	reserve(23); reserve(24); reserve(25); // Board/wireless signals, not spare Pico header pins.
+	if (NUM_BANK0_GPIOS == 30) reserve(29); // Pico VSYS/wireless signal, not exposed on the header.
+	#ifdef FEATURE_GPS
+		reserve(GPS_RX_PIN); reserve(GPS_TX_PIN);
+	#endif
+	#ifdef FEATURE_MCP23017_EXPANDER
+		reserve(MCP23017_INTA_GPIO);
+	#else
+		reserve(paddle_left); reserve(paddle_right);
+		#ifdef FEATURE_STRAIGHT_KEY
+			reserve(pin_straight_key);
+		#endif
+	#endif
+	const int outputs[] = {tx_key_line_1, ptt_tx_1, tx_key_line_2, ptt_tx_2,
+	    tx_key_line_3, ptt_tx_3, tx_key_line_4, ptt_tx_4,
+	    tx_key_line_5, ptt_tx_5, tx_key_line_6, ptt_tx_6,
+	    sidetone_line, potentiometer, bt_keyboard_LED};
+	for (int pin : outputs) if (pin) reserve(pin);
+	if (PICO_COMMAND_BUTTON_GPIO < 0 || PICO_COMMAND_BUTTON_GPIO >= NUM_BANK0_GPIOS ||
+	    used[PICO_COMMAND_BUTTON_GPIO]) return false;
+	reserve(PICO_COMMAND_BUTTON_GPIO);
+	for (const auto &pins : pico_encoder_pins) {
+		if (pins[0] < 0 && pins[1] < 0 && pins[2] < 0) continue;
+		if (pins[0] < 0 || pins[1] < 0) return false;
+		for (int pin : pins) {
+			if (pin < 0) continue;
+			if (pin >= NUM_BANK0_GPIOS || used[pin]) return false;
+			used[pin] = true;
+		}
+	}
+	return true;
+}
+
+const char *encoder_function_name(EncoderFunction function) {
+	static const char *names[] = {"VFO", "MASTER", "SIDETONE", "FREQUENCY", "SPEED",
+	    "MICROPHONE", "OUTPUT", "RXTHRESHOLD", "RXFREQ", "RXWPM", "LOCALRX", "NONE"};
+	return names[static_cast<unsigned>(function)];
+}
+
+bool encoder_has_function(uint8_t encoder, EncoderFunction function) {
+	return encoder_function_owner[static_cast<unsigned>(function)] == encoder;
+}
+
+void select_encoder_function(uint8_t encoder, bool home) {
+	PicoEncoderControl &control = encoder_controls[encoder];
+	const unsigned count = static_cast<unsigned>(EncoderFunction::Count);
+	const unsigned start = home ? count - 1 : static_cast<unsigned>(control.function);
+	for (unsigned offset = 1; offset <= count; ++offset) {
+		const EncoderFunction next = static_cast<EncoderFunction>((start + offset) % count);
+		if (encoder_has_function(encoder, next)) {
+			control.function = next;
+			return;
+		}
+	}
+	control.function = EncoderFunction::Count;
+}
+
+void open_encoder_menu(uint8_t encoder) {
+	if (encoder >= 4) {
+		debug_serial_port->println(F("Error: encoder menu index must be 0..3"));
+		return;
+	}
+	if (ptt_line_activated || key_state || wm8960_audio_tone_active() || in_pairing_mode) return;
+	#ifdef FEATURE_TFT_DISPLAY
+		if (popup_active) {
+			debug_serial_port->println(F("Error: close popup before opening encoder menu"));
+			return;
+		}
+	#endif
+	close_encoder_control_popup();
+	uint8_t items[EncoderMenu::MaxControls];
+	uint8_t count = 0;
+	static_assert(static_cast<unsigned>(EncoderFunction::Count) <= EncoderMenu::MaxControls);
+	for (EncoderFunction function : encoder_menu_order)
+		if (encoder_function_owner[static_cast<unsigned>(function)] == encoder)
+			items[count++] = static_cast<uint8_t>(function);
+	encoder_menu.show(encoder, items, count,
+	    static_cast<uint8_t>(encoder_controls[encoder].function), millis());
+	encoder_menu.selection_pulses = encoder_controls[encoder].selection_pulses;
+	encoder_menu_movement_ms = encoder_movement_ms[encoder];
+	const uint32_t irq_state = save_and_disable_interrupts();
+	encoder_event_tail = encoder_event_head;
+	restore_interrupts(irq_state);
+	encoder_display_index = encoder;
+	invalidate_encoder_menu();
+	#ifdef FEATURE_TFT_DISPLAY
+		tft_fill_rect_cooperative(SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, TFT_BLACK);
+	#endif
+}
+
+void close_encoder_menu() {
+	if (!encoder_menu.open) return;
+	encoder_menu.open = false;
+	encoder_menu.touch_down = false;
+	#ifdef FEATURE_TFT_DISPLAY
+		lcd_scroll_box_clear();
+		lcd_scroll_buffer_dirty = 1;
+	#endif
+}
+
+void encoder_menu_switch(uint8_t encoder) {
+	if (ptt_line_activated || key_state || wm8960_audio_tone_active()) return;
+	if (!encoder_menu.open || encoder_menu.encoder != encoder) {
+		open_encoder_menu(encoder);
+	} else {
+		if (encoder_controls[encoder].function == EncoderFunction::Vfo) {
+			close_encoder_menu();
+			return;
+		}
+		encoder_menu.adjusting = !encoder_menu.adjusting;
+		encoder_menu.selection_pending = 0;
+		encoder_menu.activity_ms = millis();
+		invalidate_encoder_menu();
+	}
+}
+
+void encoder_menu_rotate(int step, uint8_t encoder) {
+	if (encoder_menu.open) {
+		if (encoder_menu.encoder != encoder) {
+			open_encoder_menu(encoder);
+			if (encoder_menu.encoder != encoder) return;
+		}
+		encoder_menu.activity_ms = millis();
+		if (!encoder_menu.count) return;
+		if (!encoder_menu.adjusting) {
+			if (!encoder_menu.select(step, millis())) return;
+			encoder_controls[encoder].function = static_cast<EncoderFunction>(encoder_menu.controls[encoder_menu.selected]);
+			invalidate_encoder_menu();
+			return;
+		}
+	}
+	apply_encoder_step(step, encoder);
+}
+
+int encoder_control_value(EncoderFunction function) {
+	const Wm8960RxStatus rx = wm8960_audio_rx_status();
+	switch (function) {
+		case EncoderFunction::Vfo: return 50;
+		case EncoderFunction::Master: return audio_volume(AudioVolumeTarget::Playback);
+		case EncoderFunction::LocalRx: return audio_volume(AudioVolumeTarget::LocalPlayback);
+		case EncoderFunction::Sidetone: return audio_volume(AudioVolumeTarget::Sidetone);
+		case EncoderFunction::Microphone: return audio_volume(AudioVolumeTarget::Microphone);
+		case EncoderFunction::Frequency: return configuration.hz_sidetone;
+		case EncoderFunction::Speed: return keyer_machine_mode == KEYER_COMMAND_MODE ?
+		    configuration.wpm_command_mode : configuration.wpm;
+		case EncoderFunction::Output: return static_cast<int>(wm8960_audio_output_route());
+		case EncoderFunction::RxThreshold: return rx.threshold;
+		case EncoderFunction::RxFrequency: return rx.frequency;
+		case EncoderFunction::RxSpeed: return rx.fixed_wpm;
+		case EncoderFunction::Count: return 0;
+	}
+	return 0;
+}
+
+int encoder_control_percent(EncoderFunction function, int value) {
+	switch (function) {
+		case EncoderFunction::Frequency:
+		case EncoderFunction::RxFrequency: return constrain((value - 300) * 100 / 900, 0, 100);
+		case EncoderFunction::Speed: return constrain(value, 0, 100);
+		case EncoderFunction::RxSpeed: return constrain(value * 100 / 60, 0, 100);
+		case EncoderFunction::Output: return value * 100 / 3;
+		default: return constrain(value, 0, 100);
+	}
+}
+
+bool encoder_control_is_relative(EncoderFunction function) {
+	return function != EncoderFunction::Count &&
+	    encoder_control_attributes[static_cast<unsigned>(function)].relative;
+}
+
+String encoder_control_value_text(EncoderFunction function, int value) {
+	switch (function) {
+		case EncoderFunction::Vfo: return "Relative";
+		case EncoderFunction::Master:
+		case EncoderFunction::LocalRx:
+		case EncoderFunction::Sidetone:
+		case EncoderFunction::Microphone: return String(value) + "%";
+		case EncoderFunction::Frequency:
+		case EncoderFunction::RxFrequency: return String(value) + " Hz";
+		case EncoderFunction::Speed: return String(value) + " WPM";
+		case EncoderFunction::Output: return wm8960_audio_output_route_name();
+		case EncoderFunction::RxThreshold: return value ? String(value) : String("0 Off");
+		case EncoderFunction::RxSpeed: return value ? String(value) + " WPM" : String("Auto");
+		case EncoderFunction::Count: return "";
+	}
+	return "";
+}
+
+#ifdef FEATURE_TFT_DISPLAY
+EncoderMenuLayout encoder_menu_layout() {
+	return {SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP, SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT,
+	    encoder_menu.count, encoder_menu.selected};
+}
+
+void draw_encoder_control_box(EncoderFunction function, int value,
+                              int x, int y, int width, int height, uint16_t background) {
+	// Font 1 otherwise uses the scroll area's active GFX free font.
+	lcd.setTextFont(1);
+	lcd.setTextSize(1);
+	lcd.setTextDatum(TL_DATUM);
+	lcd.setTextPadding(0);
+	lcd.fillRoundRect(x, y, width, 6, 3, background);
+	service_usb_cw_decoder();
+	tft_fill_rect_cooperative(x, y + 3, width, height - 6, background);
+	lcd.fillRoundRect(x, y + height - 6, width, 6, 3, background);
+	service_usb_cw_decoder();
+	lcd.setTextColor(TFT_WHITE, background);
+	const bool enlarged = height > 40;
+	const char *label = !enlarged && function == EncoderFunction::RxThreshold ?
+	    "RX Thr" : encoder_control_attributes[static_cast<unsigned>(function)].label;
+	lcd.drawString(label, x + 4, y + 1, enlarged ? 2 : 1);
+	service_usb_cw_decoder();
+	if (enlarged) lcd.setTextSize(2);
+	lcd.drawString(encoder_control_value_text(function, value), x + 4,
+	    enlarged ? y + height / 2 - 8 : y + 16, 1);
+	service_usb_cw_decoder();
+	lcd.setTextSize(1);
+	if (!encoder_control_is_relative(function)) {
+		lcd.fillRect(x + 4, y + height - 5, width - 8, 3, TFT_BLACK);
+		lcd.fillRect(x + 4, y + height - 5,
+		    (width - 8) * encoder_control_percent(function, value) / 100, 3, TFT_YELLOW);
+	}
+	lcd.setFreeFont(SCROLL_BOX_FONT);
+	lcd.setTextDatum(SCROLL_BOX_DATUM);
+}
+
+void service_encoder_control_popup() {
+	if (!encoder_control_popup.active) return;
+	if (popup_active || in_pairing_mode ||
+	    !encoder_control_attributes[static_cast<unsigned>(encoder_control_popup.function)].popup_enabled ||
+	    static_cast<uint32_t>(millis() - encoder_control_popup.changed_ms) >= 1000) {
+		close_encoder_control_popup();
+		return;
+	}
+	const int value = encoder_control_value(encoder_control_popup.function);
+	if (encoder_control_popup.drawn && !encoder_control_popup.dirty &&
+	    encoder_control_popup.value == value) return;
+	if (encoder_control_popup.drawn &&
+	    static_cast<uint32_t>(millis() - encoder_control_popup.drawn_ms) < 25) return;
+	// Match the enlarged selected menu control.
+	const EncoderMenuLayout layout = {SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP,
+	    SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, static_cast<int>(EncoderFunction::Count)};
+	const int width = layout.center_width();
+	const int height = layout.center_height();
+	draw_encoder_control_box(encoder_control_popup.function, value,
+	    layout.x + (layout.width - width) / 2, layout.y + (layout.height - height) / 2,
+	    width, height, TFT_DARKGREEN);
+	encoder_control_popup.drawn = true;
+	encoder_control_popup.dirty = false;
+	encoder_control_popup.value = value;
+	encoder_control_popup.drawn_ms = millis();
+}
+#endif
+
+void service_encoder_menu() {
+	if (ptt_line_activated || key_state || wm8960_audio_tone_active()) return;
+	if (!encoder_menu.open) {
+		#ifdef FEATURE_TFT_DISPLAY
+			service_encoder_control_popup();
+		#endif
+		return;
+	}
+	// Display service can run before the foreground queue drain.
+	const uint32_t movement_ms = encoder_movement_ms[encoder_menu.encoder];
+	if (movement_ms != encoder_menu_movement_ms) {
+		encoder_menu_movement_ms = movement_ms;
+		if (static_cast<uint32_t>(millis() - movement_ms) <
+		    static_cast<uint32_t>(millis() - encoder_menu.activity_ms))
+			encoder_menu.activity_ms = movement_ms;
+	}
+	if (encoder_menu.expired(millis())) {
+		close_encoder_menu();
+		return;
+	}
+	#ifdef FEATURE_TFT_DISPLAY
+		static uint32_t last_draw_ms = 0;
+		if (static_cast<uint32_t>(millis() - last_draw_ms) < 25) return;
+		const EncoderMenuLayout layout = encoder_menu_layout();
+		// Font 1 otherwise uses the scroll area's active GFX free font.
+		lcd.setTextFont(1);
+		lcd.setTextSize(1);
+		lcd.setTextDatum(TL_DATUM);
+		lcd.setTextPadding(0);
+		if (encoder_menu_header_dirty) {
+			tft_fill_rect_cooperative(layout.x, layout.y, layout.width, layout.height, TFT_BLACK);
+			lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+			String heading = String("Encoder ") + String(encoder_menu.encoder + 1) +
+			    (encoder_menu.adjusting ? " Adjust" : " Select");
+			lcd.drawString(heading, layout.x + 4, layout.y + 2, 2);
+			service_usb_cw_decoder();
+			lcd.drawString("Close", layout.x + layout.width - 56, layout.y + 2, 2);
+			service_usb_cw_decoder();
+			if (!encoder_menu.count) lcd.drawString("No assigned controls", layout.x + 4, layout.y + 28, 2);
+			encoder_menu_header_dirty = false;
+			last_draw_ms = millis();
+		} else {
+			for (uint8_t offset = 0; offset < encoder_menu.count; ++offset) {
+				const uint8_t index = (encoder_menu.selected + offset) % encoder_menu.count;
+				if (!layout.visible(index)) continue;
+				const EncoderFunction function = static_cast<EncoderFunction>(encoder_menu.controls[index]);
+				const int value = encoder_control_value(function);
+				if (!(encoder_menu_dirty & (1u << index)) && encoder_menu_values[index] == value) continue;
+				const int x = layout.cell_x(index), y = layout.cell_y(index);
+				const int width = layout.box_width(index);
+				const int height = layout.box_height(index);
+				const bool active = encoder_menu.selected == index;
+				const uint16_t background = active ? (encoder_menu.adjusting ? TFT_DARKGREEN : TFT_BLUE) : TFT_DARKGREY;
+				draw_encoder_control_box(function, value, x, y, width, height, background);
+				encoder_menu_values[index] = value;
+				encoder_menu_dirty &= ~(1u << index);
+				last_draw_ms = millis();
+				break;
+			}
+		}
+		lcd.setFreeFont(SCROLL_BOX_FONT);
+		lcd.setTextDatum(SCROLL_BOX_DATUM);
+	#endif
+}
+
+bool encoder_menu_touch(bool pressed, int x, int y) {
+	#ifdef FEATURE_TFT_DISPLAY
+		if (!encoder_menu.open) {
+			if (encoder_control_popup.active && encoder_control_popup.drawn) {
+				encoder_menu_touch_capture = pressed;
+				if (!pressed) {
+					encoder_control_popup.touch_down = false;
+					return true;
+				}
+				if (ptt_line_activated || key_state || wm8960_audio_tone_active()) return true;
+				if (static_cast<uint32_t>(millis() - encoder_control_popup.changed_ms) >= 1000) {
+					close_encoder_control_popup();
+					return true;
+				}
+				const EncoderMenuLayout layout = {SCROLL_BOX_LEFT_SIDE, SCROLL_BOX_TOP,
+				    SCROLL_BOX_WIDTH, SCROLL_BOX_HEIGHT, 1};
+				const int left = layout.x + (layout.width - layout.center_width()) / 2;
+				const int top = layout.y + (layout.height - layout.center_height()) / 2;
+				if (!encoder_control_popup.touch_down) {
+					encoder_control_popup.touch_down = true;
+					encoder_control_popup.drag_x = x >= left && x < left + layout.center_width() &&
+					    y >= top && y < top + layout.center_height() ? x : -1;
+				} else if (encoder_control_popup.drag_x >= 0 &&
+				    encoder_controls[encoder_control_popup.encoder].function == encoder_control_popup.function) {
+					int steps = constrain((x - encoder_control_popup.drag_x) / 8, -4, 4);
+					encoder_control_popup.drag_x += steps * 8;
+					while (steps) {
+						const int direction = steps > 0 ? 1 : -1;
+						apply_encoder_step(direction, encoder_control_popup.encoder);
+						steps -= direction;
+					}
+					service_keyer_midi();
+				}
+				if (encoder_control_popup.drag_x >= 0) encoder_control_popup.changed_ms = millis();
+				return true;
+			}
+			if (encoder_menu_touch_capture) {
+				if (!pressed) encoder_menu_touch_capture = false;
+				return true;
+			}
+			return false;
+		}
+		encoder_menu_touch_capture = pressed;
+		if (!pressed) {
+			encoder_menu.touch_down = false;
+			return true;
+		}
+		if (ptt_line_activated || key_state || wm8960_audio_tone_active()) return true;
+		encoder_menu.activity_ms = millis();
+		const EncoderMenuLayout layout = encoder_menu_layout();
+		if (!encoder_menu.touch_down) {
+			encoder_menu.touch_down = true;
+			encoder_menu.drag_x = x;
+			if (layout.close_hit(x, y)) {
+				close_encoder_menu();
+				return true;
+			}
+			const int index = layout.hit(x, y);
+			if (index >= 0) {
+				encoder_menu.selected = index;
+				encoder_menu.selection_pending = 0;
+				encoder_menu.adjusting = true;
+				encoder_controls[encoder_menu.encoder].function =
+				    static_cast<EncoderFunction>(encoder_menu.controls[index]);
+				if (encoder_controls[encoder_menu.encoder].function == EncoderFunction::Vfo) {
+					close_encoder_menu();
+					return true;
+				}
+				invalidate_encoder_menu();
+			} else encoder_menu.drag_x = -1;
+		} else if (encoder_menu.drag_x >= 0 && encoder_menu.count &&
+		    encoder_controls[encoder_menu.encoder].function ==
+		    static_cast<EncoderFunction>(encoder_menu.controls[encoder_menu.selected])) {
+			int steps = (x - encoder_menu.drag_x) / 8;
+			steps = constrain(steps, -4, 4);
+			encoder_menu.drag_x += steps * 8;
+			while (steps) {
+				const int direction = steps > 0 ? 1 : -1;
+				apply_encoder_step(direction, encoder_menu.encoder);
+				steps -= direction;
+			}
+			service_keyer_midi();
+		}
+		return true;
+	#else
+		return false;
+	#endif
+}
 
 char encoder_mode_letter() {
-	switch (encoder_function) {
+	switch (encoder_controls[encoder_display_index].function) {
 		case EncoderFunction::Vfo: return 'V';
 		case EncoderFunction::Master: return 'M';
 		case EncoderFunction::Sidetone: return 'S';
 		case EncoderFunction::Frequency: return 'F';
 		case EncoderFunction::Speed: return 'W';
 		case EncoderFunction::Microphone: return 'U';
+		case EncoderFunction::Output: return 'O';
+		case EncoderFunction::RxThreshold: return 'D';
+		case EncoderFunction::RxFrequency: return 'R';
+		case EncoderFunction::RxSpeed: return 'C';
+		case EncoderFunction::LocalRx: return 'L';
 		case EncoderFunction::Count: return '?';
 	}
 	return '?';
@@ -6814,8 +7459,11 @@ void draw_encoder_mode(int row, bool redraw) {
 	#endif
 }
 
-void show_encoder_function() {
+void show_encoder_function(uint8_t encoder = 0) {
+	#ifndef FEATURE_TFT_DISPLAY
 	if (ptt_line_activated || key_state) return;
+	if (encoder_menu.open) return;
+	const EncoderFunction encoder_function = encoder_controls[encoder].function;
 	#ifdef FEATURE_DISPLAY
 		String text;
 		switch (encoder_function) {
@@ -6833,17 +7481,35 @@ void show_encoder_function() {
 			case EncoderFunction::Microphone:
 				text = String(midi_pod_mode() ? "PC USB Mic " : "USB Mic ") +
 				    String(audio_volume(AudioVolumeTarget::Microphone)) + "%"; break;
+			case EncoderFunction::LocalRx:
+				text = "Local Volume " + String(audio_volume(AudioVolumeTarget::LocalPlayback)) + "%"; break;
+			case EncoderFunction::Output:
+				text = String("Out ") + wm8960_audio_output_route_name(); break;
+			case EncoderFunction::RxThreshold:
+				text = "RX threshold " + String(wm8960_audio_rx_status().threshold); break;
+			case EncoderFunction::RxFrequency:
+				text = "RX " + String(wm8960_audio_rx_status().frequency) + " Hz"; break;
+			case EncoderFunction::RxSpeed:
+				text = "RX WPM " + String(wm8960_audio_rx_status().fixed_wpm); break;
 			case EncoderFunction::Count: return;
 		}
 		lcd_center_print_timed(text, 0, 1000);
 	#endif
+	#endif
 }
 
-void check_encoder_switch() {
+void check_encoder_switch(uint8_t encoder = 0) {
 	if (ptt_line_activated || key_state) return;
-	#if rotary_switch != 0
+		if (!encoder_pin_map_valid || pico_encoder_pins[encoder][0] < 0 ||
+		    pico_encoder_pins[encoder][2] < 0) return;
+		PicoEncoderControl &control = encoder_controls[encoder];
+		bool &encoder_button_candidate = control.candidate;
+		bool &encoder_button_pressed = control.pressed;
+		bool &encoder_long_press = control.long_press;
+		uint32_t &encoder_button_changed_ms = control.changed_ms;
+		uint32_t &encoder_button_down_ms = control.down_ms;
 		const uint32_t now = millis();
-		const bool pressed = digitalRead(rotary_switch) == LOW;
+		const bool pressed = digitalRead(pico_encoder_pins[encoder][2]) == LOW;
 		if (pressed != encoder_button_candidate) {
 			encoder_button_candidate = pressed;
 			encoder_button_changed_ms = now;
@@ -6854,15 +7520,23 @@ void check_encoder_switch() {
 			if (encoder_button_pressed) {
 				encoder_button_down_ms = now;
 				encoder_long_press = false;
+				#ifdef FEATURE_TFT_DISPLAY
+				control.opened_menu = !encoder_menu.open || encoder_menu.encoder != encoder;
+				if (control.opened_menu) open_encoder_menu(encoder);
+				#else
+					control.opened_menu = false;
+				#endif
 			} else if (!encoder_long_press) {
+				#ifdef FEATURE_TFT_DISPLAY
 				if (static_cast<uint32_t>(now - encoder_button_down_ms) >= 1000) {
-					encoder_function = EncoderFunction::Vfo;
-				} else {
-					encoder_function = static_cast<EncoderFunction>(
-					    (static_cast<uint8_t>(encoder_function) + 1) %
-					    static_cast<uint8_t>(EncoderFunction::Count));
-				}
-				show_encoder_function();
+					close_encoder_menu();
+				} else if (!control.opened_menu) encoder_menu_switch(encoder);
+				#else
+					select_encoder_function(encoder,
+					    static_cast<uint32_t>(now - encoder_button_down_ms) >= 1000);
+					show_encoder_function(encoder);
+				#endif
+				encoder_display_index = encoder;
 			}
 			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
 				last_active_time = now;
@@ -6871,16 +7545,26 @@ void check_encoder_switch() {
 		if (encoder_button_pressed && !encoder_long_press &&
 		    static_cast<uint32_t>(now - encoder_button_down_ms) >= 1000) {
 			encoder_long_press = true;
-			encoder_function = EncoderFunction::Vfo;
-			show_encoder_function();
+			#ifdef FEATURE_TFT_DISPLAY
+			close_encoder_menu();
+			#else
+				select_encoder_function(encoder, true);
+				show_encoder_function(encoder);
+			#endif
+			encoder_display_index = encoder;
 			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
 				last_active_time = now;
 			#endif
 		}
-	#endif
 }
 
-void apply_encoder_step(int step) {
+void apply_encoder_step(int step, uint8_t encoder) {
+	const EncoderFunction encoder_function = encoder_controls[encoder].function;
+	if (encoder_function == EncoderFunction::Count ||
+	    !encoder_has_function(encoder, encoder_function)) return;
+	if (encoder_control_popup.active && (encoder_control_popup.function != encoder_function ||
+	    encoder_control_popup.encoder != encoder)) close_encoder_control_popup();
+	const int old_value = encoder_control_value(encoder_function);
 	switch (encoder_function) {
 		case EncoderFunction::Vfo:
 			if (!wm8960_midi_wheel_step(step * ENCODER_VFO_DIRECTION *
@@ -6894,10 +7578,12 @@ void apply_encoder_step(int step) {
 			}
 			break;
 		case EncoderFunction::Master:
+		case EncoderFunction::LocalRx:
 		case EncoderFunction::Sidetone:
 		case EncoderFunction::Microphone: {
 			const AudioVolumeTarget target =
 			    encoder_function == EncoderFunction::Master ? AudioVolumeTarget::Playback :
+			    encoder_function == EncoderFunction::LocalRx ? AudioVolumeTarget::LocalPlayback :
 			    encoder_function == EncoderFunction::Sidetone ? AudioVolumeTarget::Sidetone :
 			    AudioVolumeTarget::Microphone;
 			set_audio_volume(target, step_audio_volume(audio_volume(target), step > 0), false);
@@ -6919,14 +7605,40 @@ void apply_encoder_step(int step) {
 				}
 			#endif
 			break;
+		case EncoderFunction::Output: {
+			const int next = (static_cast<int>(wm8960_audio_output_route()) + (step > 0 ? 1 : 3)) % 4;
+			if (!wm8960_audio_set_output_route(static_cast<Wm8960OutputRoute>(next)))
+				debug_serial_port->println(F("Error: codec output route write failed"));
+			break;
+		}
+		case EncoderFunction::RxThreshold:
+		case EncoderFunction::RxFrequency:
+		case EncoderFunction::RxSpeed: {
+			Wm8960RxStatus rx = wm8960_audio_rx_status();
+			if (encoder_function == EncoderFunction::RxThreshold)
+				rx.threshold = constrain(static_cast<int>(rx.threshold) + (step > 0 ? 1 : -1), 0, 100);
+			else if (encoder_function == EncoderFunction::RxFrequency)
+				rx.frequency = constrain(static_cast<int>(rx.frequency) + (step > 0 ? 10 : -10), 300, 1200);
+			else {
+				const int next = static_cast<int>(rx.fixed_wpm) + (step > 0 ? 1 : -1);
+				rx.fixed_wpm = next < 5 ? (step > 0 ? 5 : 0) : std::min(next, 60);
+			}
+			if (!wm8960_audio_configure_rx(rx.threshold, rx.frequency, rx.fixed_wpm, rx.channel))
+				debug_serial_port->println(F("Error: RX decoder configuration failed"));
+			break;
+		}
 		case EncoderFunction::Count: return;
 	}
+	if (encoder_control_is_relative(encoder_function) ||
+	    encoder_control_value(encoder_function) != old_value)
+		show_encoder_control_popup(encoder_function, encoder);
 }
 #endif
 
-int chk_rotary_encoder(){
+int chk_rotary_encoder(uint8_t *encoder_id = nullptr){
 
-	static unsigned long timestamp[5];
+	static unsigned long timestamps[4][5];
+	uint8_t encoder = 0;
 
 	#if defined(ARDUINO_ARCH_RP2040)
 		uint8_t result = 0;
@@ -6937,6 +7649,7 @@ int chk_rotary_encoder(){
 		if (encoder_event_tail != encoder_event_head) {
 			result = encoder_events[encoder_event_tail].direction;
 			event_time = encoder_events[encoder_event_tail].time_ms;
+			encoder = encoder_events[encoder_event_tail].encoder;
 			encoder_event_tail = (encoder_event_tail + 1) & 127;
 		}
 		restore_interrupts(irq_state);
@@ -6947,6 +7660,8 @@ int chk_rotary_encoder(){
 	unsigned char result = (state & 0x30);
 	const unsigned long event_time = millis();
 	#endif
+	if (encoder_id) *encoder_id = encoder;
+	unsigned long *timestamp = timestamps[encoder];
 	if (result) {
 		timestamp[0] = timestamp[1];                    // Encoder step timer
 		timestamp[1] = timestamp[2];
@@ -6970,37 +7685,53 @@ void check_rotary_encoder(){
 
 	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 		if (ptt_line_activated || key_state) return;
+		#ifndef FEATURE_TFT_DISPLAY
 		static bool value_message_pending = false;
 		static uint32_t last_message_ms = 0;
 		static EncoderFunction message_function = encoder_function;
+		#endif
 		#ifdef FEATURE_DISPLAY
 			if (lcd_timed_message_expired()) service_display();
 		#endif
-		check_encoder_switch();
-		if (message_function != encoder_function) {
-			value_message_pending = false;
-			message_function = encoder_function;
+		for (uint8_t encoder = 0; encoder < 4; ++encoder) {
+			check_encoder_switch(encoder);
+			service_usb_cw_decoder();
 		}
+		#ifndef FEATURE_TFT_DISPLAY
+		if (message_function != encoder_controls[encoder_display_index].function) {
+			value_message_pending = false;
+			message_function = encoder_controls[encoder_display_index].function;
+		}
+		#endif
 		bool moved = false;
 		for (uint8_t count = 0; count < 16; ++count) {
-			const int step = chk_rotary_encoder();
+			uint8_t encoder = 0;
+			const int step = chk_rotary_encoder(&encoder);
 			if (!step) break;
-			apply_encoder_step(step);
+			encoder_menu_rotate(step, encoder);
+			service_usb_cw_decoder();
+			encoder_display_index = encoder;
 			moved = true;
 		}
 		if (moved) {
-			value_message_pending = encoder_function != EncoderFunction::Vfo;
+			#ifndef FEATURE_TFT_DISPLAY
+			value_message_pending = encoder_controls[encoder_display_index].function != EncoderFunction::Vfo &&
+			    encoder_controls[encoder_display_index].function != EncoderFunction::Count;
+			#endif
 			service_keyer_midi();
 			#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
 				last_active_time = millis();
 			#endif
 		}
+		#ifndef FEATURE_TFT_DISPLAY
 		if (value_message_pending &&
 		    static_cast<uint32_t>(millis() - last_message_ms) >= 25) {
 			value_message_pending = false;
-			show_encoder_function();
+			show_encoder_function(encoder_display_index);
 			last_message_ms = millis();
 		}
+		#endif
+		service_encoder_menu();
 	#else
 	int step = chk_rotary_encoder();
 
@@ -14802,7 +15533,7 @@ void service_keyer_midi() {
 			}
 		#endif
 	}
-	// POD mode mirrors PC-side levels; the local WM8960 playback/mic gains stay fixed.
+	// POD feedback mirrors PC-side levels without changing local WM8960 gains.
 	uint16_t pod_value;
 	if (wm8960_midi_take_host_control(Wm8960MidiHostControl::MasterVolume, &pod_value)) {
 		pod_play_volume = pod_value;
@@ -14855,6 +15586,12 @@ void sync_pod_volume() {
 #if (defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)) || defined(FEATURE_CORE2_AUDIO)
 int audio_volume(AudioVolumeTarget target) {
 	switch (target) {
+		case AudioVolumeTarget::LocalPlayback:
+			#ifdef FEATURE_CORE2_AUDIO
+			return 0;
+			#else
+			return configuration.usb_play_volume;
+			#endif
 		case AudioVolumeTarget::Playback:
 			#ifdef FEATURE_CORE2_AUDIO
 			return configuration.sidetone_volume;
@@ -14874,6 +15611,12 @@ int audio_volume(AudioVolumeTarget target) {
 
 bool audio_muted(AudioVolumeTarget target) {
 	switch (target) {
+		case AudioVolumeTarget::LocalPlayback:
+			#ifdef FEATURE_CORE2_AUDIO
+			return true;
+			#else
+			return configuration.usb_play_muted;
+			#endif
 		case AudioVolumeTarget::Playback:
 			#ifdef FEATURE_CORE2_AUDIO
 			return configuration.sidetone_muted;
@@ -14906,13 +15649,13 @@ bool apply_audio_levels() {
 
 void set_audio_volume(AudioVolumeTarget target, int level, bool muted) {
 	#ifdef FEATURE_CORE2_AUDIO
-	if (target == AudioVolumeTarget::Microphone) {
-		debug_serial_port->println(F("Error: Core2 microphone audio is not supported"));
+	if (target == AudioVolumeTarget::Microphone || target == AudioVolumeTarget::LocalPlayback) {
+		debug_serial_port->println(F("Error: Core2 USB audio is not supported"));
 		return;
 	}
 	target = AudioVolumeTarget::Sidetone;
 	#else
-	if (target != AudioVolumeTarget::Sidetone && midi_pod_mode()) {
+	if ((target == AudioVolumeTarget::Playback || target == AudioVolumeTarget::Microphone) && midi_pod_mode()) {
 		const bool mic = target == AudioVolumeTarget::Microphone;
 		(mic ? pod_mic_volume : pod_play_volume) = static_cast<uint8_t>(constrain(level, 0, 100));
 		(mic ? pod_mic_muted : pod_play_muted) = muted;
@@ -14921,6 +15664,7 @@ void set_audio_volume(AudioVolumeTarget target, int level, bool muted) {
 	#endif
 	switch (target) {
 		case AudioVolumeTarget::Playback:
+		case AudioVolumeTarget::LocalPlayback:
 			configuration.usb_play_volume = level;
 			configuration.usb_play_muted = muted;
 			break;
@@ -14946,7 +15690,7 @@ void print_audio_volumes(PRIMARY_SERIAL_CLS *port) {
 	port->printf("SIDETONE %d%% %s\r\n", configuration.sidetone_volume,
 	    configuration.sidetone_muted ? "MUTED" : "ON");
 	#else
-	port->printf("USBPLAY %u%% %s\r\nSIDETONE %d%% %s\r\nUSBMIC %u%% %s\r\n",
+	port->printf("LOCALRX / USBPLAY local %u%% %s\r\nSIDETONE %d%% %s\r\nUSBMIC %u%% %s\r\n",
 	    configuration.usb_play_volume,
 	    configuration.usb_play_muted ? "MUTED" : "ON",
 	    configuration.sidetone_volume,
@@ -15030,6 +15774,8 @@ bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 		target = AudioVolumeTarget::Sidetone;
 	} else if (name == "USBMIC") {
 		target = AudioVolumeTarget::Microphone;
+	} else if (name == "LOCALRX") {
+		target = AudioVolumeTarget::LocalPlayback;
 	} else {
 		return false;
 	}
@@ -15075,7 +15821,181 @@ bool cli_audio_volume(PRIMARY_SERIAL_CLS *port, String command) {
 #endif
 
 #if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+uint32_t rx_text_dropped = 0;
+
+void emit_usb_cw_character(long pattern) {
+	const char character = pattern ? convert_cw_number_to_ascii(pattern) : ' ';
+	#ifdef FEATURE_LCD_BACKLIGHT_AUTO_DIM
+		last_active_time = millis();
+		#ifdef FEATURE_TFT_DISPLAY
+			tft_backlight(1);
+		#endif
+	#endif
+	#ifdef FEATURE_DISPLAY
+		#ifdef FEATURE_TFT_DISPLAY
+			if (lcd_status != LCD_SCROLL_MSG) {
+				lcd_status = LCD_SCROLL_MSG;
+				lcd_scroll_needs_clear = true;
+			}
+			display_scroll_print_char_color(character, WM8960_RX_TEXT_COLOR);
+		#else
+			display_scroll_print_char(character);
+		#endif
+	#endif
+	if (Wm8960Terminal && Wm8960Terminal.availableForWrite() >= 1) {
+		if (Wm8960Terminal.write(static_cast<uint8_t>(character)) != 1) ++rx_text_dropped;
+	} else ++rx_text_dropped;
+}
+
+void service_usb_cw_decoder() {
+	if (get_core_num() != 0) return;
+	static bool servicing = false;
+	if (servicing) return; // Text output can enter myDelay through display notifications.
+	servicing = true;
+	wm8960_audio_service_rx(emit_usb_cw_character);
+	static uint32_t reported_drops = 0;
+	const uint32_t drops = wm8960_audio_rx_status().dropped + rx_text_dropped;
+	if (drops != reported_drops && Wm8960Terminal && Wm8960Terminal.availableForWrite() >= 96) {
+		Wm8960Terminal.printf("\r\nError: RX decoder PCM/text drops %lu/%lu\r\n",
+		    static_cast<unsigned long>(wm8960_audio_rx_status().dropped),
+		    static_cast<unsigned long>(rx_text_dropped));
+		reported_drops = drops;
+	}
+	servicing = false;
+}
+
 #if defined(FEATURE_SERIAL) && defined(FEATURE_COMMAND_LINE_INTERFACE) && !defined(OPTION_EXCLUDE_EXTENDED_CLI_COMMANDS)
+bool cli_rx_audio(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	const int separator = command.indexOf(' ');
+	const String name = separator < 0 ? command : command.substring(0, separator);
+	String value = separator < 0 ? "" : command.substring(separator + 1);
+	value.trim();
+	if (name == "OUTPUT") {
+		if (value.length()) {
+			Wm8960OutputRoute route;
+			if (value == "SPEAKER") route = Wm8960OutputRoute::Speaker;
+			else if (value == "HEADPHONE") route = Wm8960OutputRoute::Headphone;
+			else if (value == "BOTH") route = Wm8960OutputRoute::Both;
+			else if (value == "NONE") route = Wm8960OutputRoute::None;
+			else {
+				port->println(F("Error: OUTPUT SPEAKER|HEADPHONE|BOTH|NONE"));
+				return true;
+			}
+			if (!wm8960_audio_set_output_route(route)) {
+				port->println(F("Error: codec output route write failed"));
+				return true;
+			}
+		}
+		port->printf("\r\nOUTPUT %s\r\n", wm8960_audio_output_route_name());
+		return true;
+	}
+	if (name != "RX" && name != "RXTHRESHOLD" && name != "RXFREQ" && name != "RXWPM" && name != "RXCHANNEL")
+		return false;
+	Wm8960RxStatus rx = wm8960_audio_rx_status();
+	if (value.length()) {
+		bool valid = value.length() <= 4;
+		for (unsigned i = 0; i < value.length(); ++i)
+			valid = valid && value[i] >= '0' && value[i] <= '9';
+		const unsigned number = value.toInt();
+		if (name == "RXTHRESHOLD") rx.threshold = number;
+		else if (name == "RXFREQ") rx.frequency = number;
+		else if (name == "RXWPM") rx.fixed_wpm = number;
+		else if (name == "RXCHANNEL") rx.channel = number;
+		else valid = false;
+		if (!valid || !wm8960_audio_configure_rx(rx.threshold, rx.frequency, rx.fixed_wpm, rx.channel)) {
+			port->println(F("Error: RX, RXTHRESHOLD 0..100 (0=off), RXFREQ 300..1200, RXWPM 0|5..60, RXCHANNEL 0|1"));
+			return true;
+		}
+		rx = wm8960_audio_rx_status();
+	}
+	port->printf("\r\nRX threshold %u, frequency %u Hz, WPM %u (0=auto), estimated %u, channel %u\r\n",
+	    rx.threshold, rx.frequency, rx.fixed_wpm, rx.wpm, rx.channel);
+	port->printf("RX tracked frequency %u Hz, switches %lu (search +/-40 Hz)\r\n",
+	    rx.tracked_frequency, static_cast<unsigned long>(rx.frequency_switches));
+	port->printf("RX amplitude %.1f, noise %.1f, PCM drops %lu, text drops %lu\r\n",
+	    rx.signal, rx.noise, static_cast<unsigned long>(rx.dropped),
+	    static_cast<unsigned long>(rx_text_dropped));
+	port->printf("RX queue %lu samples, max service gap %lu ms, max processing %lu us\r\n",
+	    static_cast<unsigned long>(rx.pending_samples),
+	    static_cast<unsigned long>(rx.max_service_gap_ms),
+	    static_cast<unsigned long>(rx.max_process_us));
+	const char *stage = "none";
+	switch (rx.max_foreground_stage) {
+		case 9: stage = "keyer/buttons"; break;
+		case 10: stage = "serial"; break;
+		case 11: stage = "touch"; break;
+		case 12: stage = "Bluetooth keyboard"; break;
+		case 13: stage = "keyboard/GPS"; break;
+		case 14: stage = "settings/memories"; break;
+		case 15: stage = "display"; break;
+		case 16: stage = "other foreground"; break;
+		case 17: stage = "BOOTSEL"; break;
+		case 18: stage = "loop/audio"; break;
+		case 19: stage = "send buffer/PTT"; break;
+		case 20: stage = "potentiometer/encoders"; break;
+	}
+	port->printf("RX longest foreground stage %s: %lu us\r\n", stage,
+	    static_cast<unsigned long>(rx.max_foreground_us));
+	return true;
+}
+
+#ifdef FEATURE_ROTARY_ENCODER
+bool cli_encoder_assignment(PRIMARY_SERIAL_CLS *port, String command) {
+	command.trim();
+	if (command != "ENCODER" && !command.startsWith("ENCODER ")) return false;
+	String args = command.substring(7);
+	args.trim();
+	if (args.length()) {
+		const int separator = args.indexOf(' ');
+		if (separator != 1 || args[0] < '1' || args[0] > '4') {
+			port->println(F("Error: ENCODER 1..4 function|ALL; use ENCODER to list"));
+			return true;
+		}
+		const uint8_t encoder = args[0] - '1';
+		String name = args.substring(separator + 1);
+		name.trim();
+		if (!encoder_pin_map_valid || pico_encoder_pins[encoder][0] < 0) {
+			port->println(F("Error: encoder hardware disabled or GPIO map invalid"));
+			return true;
+		}
+		const bool all = name == "ALL";
+		unsigned function = 0;
+		for (; function < static_cast<unsigned>(EncoderFunction::Count); ++function)
+			if (name == encoder_function_name(static_cast<EncoderFunction>(function))) break;
+		if (!all && function == static_cast<unsigned>(EncoderFunction::Count)) {
+			port->println(F("Error: function VFO|MASTER|SIDETONE|FREQUENCY|SPEED|MICROPHONE|OUTPUT|RXTHRESHOLD|RXFREQ|RXWPM|LOCALRX|ALL"));
+			return true;
+		}
+		const uint32_t irq_state = save_and_disable_interrupts();
+		encoder_event_tail = encoder_event_head;
+		restore_interrupts(irq_state);
+		if (all) {
+			for (uint8_t &owner : encoder_function_owner) owner = encoder;
+		} else encoder_function_owner[function] = encoder;
+		for (uint8_t index = 0; index < 4; ++index) {
+			if (encoder_controls[index].function == EncoderFunction::Count ||
+			    !encoder_has_function(index, encoder_controls[index].function))
+				select_encoder_function(index, true);
+		}
+		encoder_controls[encoder].function = all ? EncoderFunction::Vfo : static_cast<EncoderFunction>(function);
+		encoder_display_index = encoder;
+		if (encoder_menu.open) open_encoder_menu(encoder_menu.encoder);
+	}
+	port->println(F("\r\nEncoder assignment (defaults: all functions on encoder 1)"));
+	for (uint8_t encoder = 0; encoder < 4; ++encoder) {
+		port->printf("%u %s, selected %s:", encoder + 1,
+		    encoder_pin_map_valid && pico_encoder_pins[encoder][0] >= 0 ? "enabled" : "disabled",
+		    encoder_function_name(encoder_controls[encoder].function));
+		for (unsigned function = 0; function < static_cast<unsigned>(EncoderFunction::Count); ++function)
+			if (encoder_function_owner[function] == encoder)
+				port->printf(" %s", encoder_function_name(static_cast<EncoderFunction>(function)));
+		port->println();
+	}
+	return true;
+}
+#endif
+
 bool cli_mic(PRIMARY_SERIAL_CLS *port, String command) {
 	command.trim();
 	if (command != "MIC" && !command.startsWith("MIC ")) {
@@ -15286,6 +16206,10 @@ void cli_extended_commands(PRIMARY_SERIAL_CLS * port_to_use)
 	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 		if (cli_midi(port_to_use, userinput)) { return; }
 		if (cli_mic(port_to_use, userinput)) { return; }
+		if (cli_rx_audio(port_to_use, userinput)) { return; }
+		#ifdef FEATURE_ROTARY_ENCODER
+			if (cli_encoder_assignment(port_to_use, userinput)) { return; }
+		#endif
 		if (userinput == "I2CTEST" || userinput.startsWith("I2CTEST ")) {
 			long count = userinput.length() > 8 ? userinput.substring(8).toInt() : 100;
 			if (count < 1 || count > 1000) count = 100;
@@ -21059,6 +21983,107 @@ void initialize_keyer_state(){
 }
 
 //---------------------------------------------------------------------
+#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+bool encoder_settings_ready = false;
+EncoderSettings encoder_settings_saved{}, encoder_settings_pending{};
+uint32_t encoder_settings_changed_ms = 0, encoder_settings_attempt_ms = 0;
+
+EncoderSettings current_encoder_settings() {
+	static_assert(static_cast<unsigned>(EncoderFunction::Count) == 11);
+	EncoderSettings settings{};
+	for (unsigned i = 0; i < 11; ++i) {
+		settings[i] = encoder_function_owner[i];
+		settings[19+i] = encoder_control_attributes[i].popup_enabled;
+	}
+	for (unsigned i = 0; i < 4; ++i) {
+		settings[11+i] = static_cast<uint8_t>(encoder_controls[i].function);
+		settings[15+i] = encoder_controls[i].selection_pulses;
+	}
+	const Wm8960RxStatus rx = wm8960_audio_rx_status();
+	settings[30] = rx.threshold;
+	settings[31] = rx.frequency & 255;
+	settings[32] = rx.frequency >> 8;
+	settings[33] = rx.fixed_wpm;
+	settings[34] = rx.channel;
+	settings[35] = static_cast<uint8_t>(wm8960_audio_output_route());
+	return settings;
+}
+
+bool valid_encoder_settings(const EncoderSettings &settings) {
+	for (unsigned i = 0; i < 11; ++i)
+		if (settings[i] >= 4 || settings[19+i] > 1) return false;
+	for (unsigned i = 0; i < 4; ++i) {
+		const unsigned selected = settings[11+i];
+		if (selected > 11 || !settings[15+i]) return false;
+		if (selected < 11 && settings[selected] != i) return false;
+		if (selected == 11)
+			for (unsigned function = 0; function < 11; ++function)
+				if (settings[function] == i) return false;
+	}
+	const unsigned frequency = settings[31] | (unsigned(settings[32]) << 8);
+	return settings[30] <= 100 && frequency >= 300 && frequency <= 1200 &&
+	    (settings[33] == 0 || (settings[33] >= 5 && settings[33] <= 60)) &&
+	    settings[34] <= 1 && settings[35] <= 3;
+}
+
+void initialize_encoder_settings() {
+	if (!encoder_settings_begin()) {
+		debug_serial_port->println(F("Error: menu storage unavailable; settings are runtime-only"));
+		return;
+	}
+	EncoderSettings settings{};
+	bool found = false;
+	if (!encoder_settings_load(settings, found) || (found && !valid_encoder_settings(settings))) {
+		debug_serial_port->println(F("Error: invalid/unreadable menu settings; defaults retained, file not overwritten"));
+		return;
+	}
+	if (found) {
+		if (!wm8960_audio_set_output_route(static_cast<Wm8960OutputRoute>(settings[35])) ||
+		    !wm8960_audio_configure_rx(settings[30], settings[31] | (unsigned(settings[32]) << 8),
+		        settings[33], settings[34])) {
+			debug_serial_port->println(F("Error: saved menu audio settings could not be applied"));
+			return;
+		}
+		for (unsigned i = 0; i < 11; ++i) {
+			encoder_function_owner[i] = settings[i];
+			encoder_control_attributes[i].popup_enabled = settings[19+i];
+		}
+		for (unsigned i = 0; i < 4; ++i) {
+			encoder_controls[i].function = static_cast<EncoderFunction>(settings[11+i]);
+			encoder_controls[i].selection_pulses = settings[15+i];
+			if (settings[11+i] < 11 && pico_encoder_pins[i][0] < 0)
+				debug_serial_port->printf("Warning: saved controls assigned to disabled encoder %u\r\n", i+1);
+		}
+	}
+	encoder_settings_saved = encoder_settings_pending = current_encoder_settings();
+	encoder_settings_changed_ms = encoder_settings_attempt_ms = millis();
+	encoder_settings_ready = true;
+}
+
+void service_encoder_settings() {
+	if (!encoder_settings_ready) return;
+	const uint32_t now = millis();
+	const EncoderSettings settings = current_encoder_settings();
+	if (settings != encoder_settings_pending) {
+		encoder_settings_pending = settings;
+		encoder_settings_changed_ms = now;
+	}
+	if (settings == encoder_settings_saved || now - encoder_settings_changed_ms < 2000 ||
+	    now - encoder_settings_attempt_ms < 5000) return;
+	for (uint8_t i = 0; i < 4; ++i)
+		if (now - encoder_movement_ms[i] < 2000) return;
+	if (send_buffer_bytes || ptt_line_activated || key_state || dit_buffer || dah_buffer ||
+	    async_eeprom_write || wm8960_audio_tone_active() || wm8960_audio_external_ptt() ||
+	    paddle_pin_read(paddle_left) != HIGH || paddle_pin_read(paddle_right) != HIGH) return;
+	encoder_settings_attempt_ms = now;
+	if (!valid_encoder_settings(settings) || !encoder_settings_save(settings)) {
+		debug_serial_port->println(F("Error: menu settings save failed; will retry when idle"));
+		return;
+	}
+	encoder_settings_saved = settings;
+}
+#endif
+
 void initialize_potentiometer(){
 
 	#ifdef FEATURE_POTENTIOMETER
@@ -21077,6 +22102,40 @@ void initialize_potentiometer(){
 void initialize_rotary_encoder(){
 
 	#ifdef FEATURE_ROTARY_ENCODER
+		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			encoder_pin_map_valid = validate_pico_encoder_pins();
+			if (!encoder_pin_map_valid) {
+				debug_serial_port->println(F("Error: encoder GPIO map conflicts or is invalid; encoders disabled"));
+				return;
+			}
+			void (*handlers[4])() = {capture_encoder_transition, capture_encoder2_transition,
+			    capture_encoder3_transition, capture_encoder4_transition};
+			encoder_event_head = encoder_event_tail = 0;
+			encoder_event_overflow = false;
+			for (uint8_t encoder = 0; encoder < 4; ++encoder) {
+				select_encoder_function(encoder, true);
+				if (pico_encoder_pins[encoder][0] < 0) continue;
+				#ifdef OPTION_ENCODER_ENABLE_PULLUPS
+					const int mode = INPUT_PULLUP;
+				#else
+					const int mode = INPUT;
+				#endif
+				pinMode(pico_encoder_pins[encoder][0], mode);
+				pinMode(pico_encoder_pins[encoder][1], mode);
+				encoder_states[encoder] = 0;
+				capture_encoder_index(encoder);
+				attachInterrupt(digitalPinToInterrupt(pico_encoder_pins[encoder][0]), handlers[encoder], CHANGE);
+				attachInterrupt(digitalPinToInterrupt(pico_encoder_pins[encoder][1]), handlers[encoder], CHANGE);
+				if (pico_encoder_pins[encoder][2] >= 0) {
+					pinMode(pico_encoder_pins[encoder][2], INPUT_PULLUP);
+					PicoEncoderControl &control = encoder_controls[encoder];
+					control.candidate = control.pressed = digitalRead(pico_encoder_pins[encoder][2]) == LOW;
+					control.changed_ms = control.down_ms = millis();
+					control.long_press = false;
+				}
+			}
+			if (pico_encoder_pins[0][2] < 0) encoder_function = EncoderFunction::Master;
+		#else
 		#ifdef OPTION_ENCODER_ENABLE_PULLUPS
 			#if defined (ARDUINO_MAPLE_MINI)||defined(ARDUINO_GENERIC_STM32F103C) ||defined(HARDWARE_ESP32_DEV) || defined(ARDUINO_ARCH_RP2040)
 				pinMode(rotary_pin1, INPUT_PULLUP);//sp5iou 20180329
@@ -21099,14 +22158,6 @@ void initialize_rotary_encoder(){
 			attachInterrupt(digitalPinToInterrupt(rotary_pin1), capture_encoder_transition, CHANGE);
 			attachInterrupt(digitalPinToInterrupt(rotary_pin2), capture_encoder_transition, CHANGE);
 		#endif
-		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
-			#if rotary_switch != 0
-				pinMode(rotary_switch, INPUT_PULLUP);
-				encoder_button_candidate = encoder_button_pressed =
-				    digitalRead(rotary_switch) == LOW;
-				encoder_button_changed_ms = encoder_button_down_ms = millis();
-				encoder_long_press = false;
-			#endif
 		#endif
 	#endif //FEATURE_ROTARY_ENCODER
 
@@ -21824,6 +22875,7 @@ void myDelay(uint32_t _ms)
 			do {
 				service_keyer_midi();
 				wm8960_audio_service();
+				service_usb_cw_decoder();
 				if (_ms != 0) {
 					delay(1);
 				} else {
@@ -22019,6 +23071,12 @@ void popup_toggle() {  // toggle popup on and off
 void popup(bool show)
 {
 	#ifdef FEATURE_TFT_DISPLAY
+		#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+			if (show) {
+				close_encoder_control_popup();
+				close_encoder_menu();
+			}
+		#endif
 		if (!show && popup_active) {  // remove popup window unless it is a repeat key
 			#ifdef FEATURE_M5STACK_CORE2
 				lcd.clearClipRect();
@@ -22031,6 +23089,7 @@ void popup(bool show)
 			lcd_scroll_drawn_row = 0;  // box was blanked; redraw all scroll text
 			lcd_scroll_drawn_col = 0;
 			lcd_scroll_repaint_row = LCD_ROWS;
+			lcd_scroll_repaint_col = 255;
 			display_scroll_print_char('~');
 			popup_active = false;
 			update_heading_display_flag = false;
@@ -22589,6 +23648,13 @@ bool read_audio_safe_touch(uint16_t *x, uint16_t *y, uint16_t threshold) {
 						#endif
 						//  xSemaphoreGive (xMutex);  // release the mutex
 						//}
+					#endif
+
+					#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						if (encoder_menu_touch(pressed, t_x, t_y)) {
+							service_encoder_menu();
+							return;
+						}
 					#endif
 
 					if (pressed) {
@@ -28711,6 +29777,8 @@ void mainloop(void)
 		#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 			service_keyer_midi();
 			wm8960_audio_service();
+			service_usb_cw_decoder();
+			wm8960_audio_trace_keyer(9);
 		#endif
 
 		#ifdef OPTION_WATCHDOG_TIMER
@@ -28767,8 +29835,13 @@ void mainloop(void)
 				#if defined(FEATURE_SERIAL)
 						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 							wm8960_audio_trace_keyer(10);
+							service_usb_cw_decoder();
 						#endif
 						check_serial();
+						#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+							wm8960_audio_trace_keyer(19);
+							service_usb_cw_decoder();
+						#endif
 						check_paddles();
 						service_dit_dah_buffers();
 				#endif
@@ -28776,6 +29849,10 @@ void mainloop(void)
 				service_send_buffer(PRINTCHAR);
 				check_ptt_tail();
 
+				#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+					wm8960_audio_trace_keyer(20);
+					service_usb_cw_decoder();
+				#endif
 				#ifdef FEATURE_POTENTIOMETER
 					check_potentiometer();
 				#endif
@@ -28791,6 +29868,7 @@ void mainloop(void)
 				#if defined(FEATURE_TOUCH_DISPLAY)
 					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 						wm8960_audio_trace_keyer(11);
+						service_usb_cw_decoder();
 					#endif
 					#ifndef USE_TOUCH_TASK
 						check_touch_buttons();
@@ -28801,6 +29879,7 @@ void mainloop(void)
 				#ifdef FEATURE_BT_KEYBOARD
 					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 						wm8960_audio_trace_keyer(12);
+						service_usb_cw_decoder();
 					#endif
 					BT_Keyboard_Status();
 					#ifndef USE_BT_TASK
@@ -28811,6 +29890,7 @@ void mainloop(void)
 				#if defined (FEATURE_PS2_KEYBOARD) || defined (FEATURE_BT_KEYBOARD) || defined(FEATURE_TOUCH_DISPLAY)
 					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 						wm8960_audio_trace_keyer(13);
+						service_usb_cw_decoder();
 					#endif
 					check_ps2_keyboard();
 				#endif
@@ -28832,6 +29912,7 @@ void mainloop(void)
 
 				#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 					wm8960_audio_trace_keyer(14);
+					service_usb_cw_decoder();
 				#endif
 				check_for_dirty_configuration();
 
@@ -28846,6 +29927,7 @@ void mainloop(void)
 				#ifdef FEATURE_DISPLAY
 					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
 						wm8960_audio_trace_keyer(15);
+						service_usb_cw_decoder();
 					#endif
 					check_paddles();
 					service_send_buffer(PRINTCHAR);
@@ -28853,6 +29935,10 @@ void mainloop(void)
 						service_core2_audio_message();
 					#endif
 					service_display();
+					#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+						wm8960_audio_trace_keyer(16);
+						service_usb_cw_decoder();
+					#endif
 				#endif
 
 				#ifdef FEATURE_CW_DECODER
@@ -29068,6 +30154,9 @@ void setup_esp()
 		#else
 			(void)wm8960_audio_initialize();
 		#endif
+	#endif
+	#if defined(FEATURE_ROTARY_ENCODER) && defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
+		initialize_encoder_settings();
 	#endif
 	initialize_cw_keyboard();
 	#if defined(FEATURE_WM8960_USB_AUDIO) && defined(ARDUINO_ARCH_RP2040)
@@ -29328,7 +30417,14 @@ void app_main(void)
 		myDelay(0);
 
 		#if defined(FEATURE_BT_KEYBOARD) && defined(ARDUINO_RASPBERRY_PI_PICO_W)
+			#if defined(FEATURE_WM8960_USB_AUDIO)
+				wm8960_audio_trace_keyer(17);
+				service_usb_cw_decoder();
+			#endif
 			bootsel_pressed = BOOTSEL;  // sample on core0; core1 reads the flag
+			#if defined(FEATURE_WM8960_USB_AUDIO)
+				wm8960_audio_trace_keyer(18);
+			#endif
 		#endif
 
 		uint32_t current_time = millis();
