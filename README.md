@@ -176,6 +176,13 @@ The optional WM8960 path is Pico-only. It adds 48 kHz,
 16-bit stereo USB speaker playback, mono USB microphone capture, and routes
 K3NG sidetone/beeps through the codec. ESP32-WROOM32 audio behavior is unchanged.
 
+Standalone Arduino-Pico sketches that demonstrate the USB composite overlay
+used here (dual CDC, USB MIDI, UAC2 audio with feedback) are in
+[examples/arduino-pico-composite-usb](examples/arduino-pico-composite-usb/README.md).
+`CompositeUSB` needs no codec; `WM8960USB` (Pico 2/RP2350) adds real WM8960
+48 kHz playback/capture with DMA and scheduling. These examples are not part
+of the keyer build.
+
 ### Saved audio levels and controls
 
 The dormant `FEATURE_SINEWAVE_SIDETONE` DAC/timer implementation was removed.
