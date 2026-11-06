@@ -1,5 +1,13 @@
 // keyer_dependencies.h
 
+#if defined(FEATURE_PS2_KEYBOARD) || defined(FEATURE_USB_KEYBOARD)
+  #error "Physical PS/2 and USB-host keyboards are no longer supported; use FEATURE_BT_KEYBOARD"
+#endif
+
+#if defined(OPTION_PS2_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT) && !defined(OPTION_KEYBOARD_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT)
+  #define OPTION_KEYBOARD_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT
+#endif
+
 #if defined(FEATURE_LCD_4BIT) || defined(FEATURE_LCD_8BIT) || defined(FEATURE_LCD_ADAFRUIT_I2C) || defined(FEATURE_LCD_ADAFRUIT_BACKPACK) \
   || defined(FEATURE_LCD_YDv1) ||defined(FEATURE_LCD1602_N07DH) || defined(FEATURE_LCD_SAINSMART_I2C) || defined(FEATURE_M5STACK_CORE2) \
   || defined(FEATURE_LCD_FABO_PCF8574) || defined(FEATURE_LCD_MATHERTEL_PCF8574) || defined(FEATURE_LCD_HD44780) \
@@ -74,4 +82,3 @@
 //#if defined(FEATURE_TOUCH_DISPLAY) && (((BUTTON_ROWS + 0) == 0)  || ((BUTTON_ROWS + 0) > 4))  // check value exists and is not empty, must be 1-4.
 //  #error "BUTTON_ROWS must be defined with a value = 1-4, or, TOUCH_BUTTON_16 must be defined in keyer_features_and_options.h. Defualting to 4 Rows."
 //#endif
-

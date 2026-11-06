@@ -24,7 +24,7 @@ if(CONFIG_DISPLAY_TYPE STREQUAL "M5STACK_CORE2_LCD" OR CONFIG_DISPLAY_TYPE STREQ
     list(APPEND core2_requirements m5stack__m5unified)
 endif()
 
-idf_component_register(SRCS "main.cpp" ${app_sources}
+idf_component_register(SRCS "main.cpp" "keyer_diagnostics.cpp" "keyer_gps.cpp" "keyer_morse.cpp" ${app_sources}
     INCLUDE_DIRS "."  ${include_dirs}
     REQUIRES nvs_flash bt_keyboard bt TFT_eSPI gt911-arduino LiquidCrystal_I2C arduino-esp32
     TinyGPSPlus-ESP32 TimeLib IST8310 MCP23017 Goertzel espcoredump

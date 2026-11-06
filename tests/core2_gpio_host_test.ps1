@@ -28,7 +28,7 @@ $portAMode = [regex]::Match($main, '(?s)void load_core2_port_a_mode\(\) \{.*?\r?
     [regex]::Match($main, '(?s)bool cli_core2_port_a\(PRIMARY_SERIAL_CLS \*port, String command\) \{.*?\r?\n\}').Value
 $paddleRead = [regex]::Match($main, '(?s)int paddle_pin_read\(int pin_to_read\) \{.*?\r?\n\}').Value
 $beaconToggle = [regex]::Match($main, '(?s)\tvoid toggle_beacon_setting\(\) \{.*?\r?\n\t\}').Value
-if ($main -notmatch '(?s)case PS2_Q_CTRL:\s*toggle_beacon_setting\(\);' -or
+if ($main -notmatch '(?s)case BT_KEY_Q_CTRL:\s*toggle_beacon_setting\(\);' -or
     $main -notmatch '(?s)case ''_'':.*?toggle_beacon_setting\(\);') { throw 'Beacon keyboard/CLI routing missing' }
 $outputInit = [regex]::Match($main, '(?s)\tif \(tx_key_line_1\) \{\r?\n\t\tkeyer_output_initialize.*?(?=\tif \(sidetone_line\))').Value
 $outputHelpers = [regex]::Match($main, '(?s)void keyer_output_write\(uint8_t pin, uint8_t state\) \{.*?(?=\r?\nvoid ptt_key)').Value
@@ -189,7 +189,7 @@ int created = 0, refreshed = -1, queued = -1, action = -1;
 unsigned long last_active_time = 0;
 const int number_of_memories = 8;
 const char *btn2_text = "", *btn3_text = "";
-enum { PS2_UPARROW, PS2_DOWNARROW, PS2_F_CTRL, PS2_T_CTRL, PS2_L_CTRL, PS2_O_CTRL, PS2_ESC };
+enum { BT_KEY_UPARROW, BT_KEY_DOWNARROW, BT_KEY_F_CTRL, BT_KEY_T_CTRL, BT_KEY_L_CTRL, BT_KEY_O_CTRL, BT_KEY_ESC };
 unsigned long millis() { return 100; }
 void create_buttons() { ++created; }
 void refresh_button_row(uint8_t row) { refreshed = row; }
@@ -252,7 +252,7 @@ $buttonChecks = @'
   btn[2].len = 3;
   btn[2].p_btn.press(true);
   process_buttons();
-  assert(queued == PS2_F_CTRL);
+  assert(queued == BT_KEY_F_CTRL);
   action = -1;
   btn[1].len = 2;
   btn[1].p_btn.press(true);
@@ -262,7 +262,7 @@ $buttonChecks = @'
   btn[3].len = 1;
   btn[3].p_btn.press(true);
   process_buttons();
-  assert(queued == PS2_ESC);
+  assert(queued == BT_KEY_ESC);
   process_buttons(); // No pending button must not index beyond the key array.
   uint16_t x = 0, y = 0;
   assert(!read_core2_touch(&x, &y));

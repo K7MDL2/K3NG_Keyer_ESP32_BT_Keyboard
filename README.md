@@ -40,6 +40,66 @@ arduino-cli compile --fqbn rp2040:rp2040:waveshare_rp2350b_plus_w:ipbtstack=ipv4
 
 Under Arduino, for ESP32 and Pico only,  I automatically detect the board type and set the proper #define for that board, no need to edit the keyere-hardware.h file.  If you have a different display, or no display, update the settings in Feature and Options header file.  TFT_eSPI library is used for both ESP32 and Pico.  Your TFT display needs to be one of the types supported in TFT_eSPI's UserSetup.h file.  I have tested displays with both the GT911 and XPT2046 touch controllers.  The XPT2046 has built in support in the TFT_eSPI libary.  GT911 is an i2c controller and uses a separate library.  It should be easy to substitute other touch controllers, just need a 'pressed' event (polled) with x and y values.
 
+## Platform matrix and cleanup baseline
+
+This fork retains ESP32, Pico (RP2040/RP2350), and Teensy 4.0/4.1 as its CPU scope. Architecture selection alone does not mean that every board has a working firmware profile.
+
+| Target | Build path and configuration | Status |
+| --- | --- | --- |
+| ESP32-WROOM32 / M5Stack Core2 | ESP-IDF; `keyer_features_and_options_esp32_dev.h`, `keyer_pin_settings_esp32_dev.h`, `keyer_settings_esp32_dev.h` | Existing profiles retained, including TFT and text-LCD/no-display options. ESP-IDF is required for full supported Bluetooth keyboard operation. |
+| ESP32 under Arduino | Same ESP32 headers | Compile compatibility retained; not equivalent Bluetooth keyboard coverage to ESP-IDF. |
+| Pico / Pico W / Pico 2 / Pico 2 W (RP2040/RP2350) | Arduino-Pico; corresponding `keyer_*_pico.h` headers | Existing architecture selection retained. This cleanup's full firmware build was checked on Waveshare RP2350B Plus W; other boards still require their pin/display/audio configuration to be verified. |
+| Waveshare RP2350B Plus W with WM8960 | Arduino-Pico, `waveshare_rp2350b_plus_w`, Bluetooth stack enabled, 4 MB flash with 64 KB filesystem | Current primary Pico configuration: dual CDC serial, USB audio input/output, MIDI, codec tones and local CW decoding retained. |
+| Teensy 4.0 / 4.1 | Teensyduino, IMXRT1062 | Architecture retained; firmware bring-up pending. No feature/pin/settings profile exists yet, so a build reports an explicit pending-profile error instead of selecting missing generic headers. |
+| AVR boards, Due/SAM, SAMD, STM32, PIC32, Teensy 2.x/3.x | None in this fork | Unsupported CPU selection is rejected; obsolete board-profile include branches have been removed. |
+
+The first cleanup milestone changes board selection only and extracts the pure foreground-stage diagnostic name lookup into [keyer_diagnostics.cpp](main/keyer_diagnostics.cpp) and [keyer_diagnostics.h](main/keyer_diagnostics.h). Arduino compiles the new translation unit alongside the sketch; ESP-IDF lists it explicitly in [main/CMakeLists.txt](main/CMakeLists.txt). [main.ino](main/main.ino) is already a sketch shim; the implementation being gradually split is [main.cpp](main/main.cpp).
+
+No pin assignments, EEPROM layouts, feature defaults, decoder algorithms, sidetone methods, or scheduling are changed by this milestone. Disabled optional features are not automatically dead code: valid text-LCD, digital/analog decoder, and GPIO sidetone paths remain for later platform-by-platform review.
+
+Windows host regression commands (Visual Studio C++ tools required):
+
+```powershell
+.\tests\keyer_platform_host_test.ps1
+.\tests\keyer_morse_host_test.ps1
+.\tests\wm8960_midi_host_test.ps1 -CwEncodersOnly
+.\tests\esp32_shared_host_test.ps1
+.\tests\core2_gpio_host_test.ps1
+.\tests\keyer_expander_host_test.ps1
+```
+
+For ESP-IDF validation, load the installed ESP-IDF PowerShell profile and run the build in the same shell. For an unattended command, omit `-NoExit`. The following uses the local installation path (adjust it for another machine), builds the Core2 application without flashing or copying binaries into `precompiled_images`, and puts build output in a separate directory:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -NoProfile -Command '& { . "C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1"; $env:PYTHONUTF8 = "1"; idf.py -B build-platform-check -D "SDKCONFIG=$PWD\sdkconfig" -D KEYER_DISPLAY_TYPE=M5STACK_CORE2_LCD app; exit $LASTEXITCODE }'
+```
+
+The platform test checks serial types, unsupported-target rejection, unchanged Pico Bluetooth flash-bank layout, and all 256 diagnostic stage values through a separately compiled module. The WM8960 test covers six configuration variants. These tests, the RP2350B firmware build, and the ESP-IDF 6.1 Core2 application build passed for this milestone; a Teensy 4.1 compile probe confirmed the pending-profile diagnostic. Hardware flashing/testing remains a separate gate.
+
+The shared ESP32 host harness has been updated for the current incremental TFT renderer: clear and character repaint are separate bounded passes, per-character colors survive row shifts, and empty trailing rows do not displace the append cursor. It checks GPIO inputs with/without the straight key, GPS freshness/holdover boundaries, TFT insertion/reset/repaint, and legacy text-LCD insertion/reset in three build variants. All three pass; firmware code is unchanged by this harness repair.
+
+The next extraction moves the pure GPS helpers into [keyer_gps.cpp](main/keyer_gps.cpp) and [keyer_gps.h](main/keyer_gps.h): eight-character Maidenhead conversion, the five-second fresh-data check, and the sixty-second location holdover. Conversion now takes latitude/longitude explicitly instead of using a temporary global position. GPS serial polling, clock/icon updates, grid persistence, and beep timing remain in `main.cpp` unchanged. The conversion still expects finite GPS coordinates and a nine-byte output buffer; this is a behavior-preserving extraction, not a new coordinate-validation policy.
+
+[keyer_gps_host_test.cpp](tests/keyer_gps_host_test.cpp), run by `esp32_shared_host_test.ps1`, checks known grid vectors, 129,625 coordinates against the pre-extraction algorithm (including exact boundaries), output termination/bounds, and freshness/holdover limits. Both affected host suites link the real GPS module separately. GPS tests, all three shared ESP32 variants, all six WM8960 variants, the RP2350B firmware build, and the ESP-IDF 6.1 Core2 application build passed after extraction.
+
+The GPS dead-code pass removes the uncalled `ftoa`/`intToStr`/`reverse` formatting chain, the unused `NMEA_MAX_LENGTH` macro, and the declaration-only `ConvertToMinutes`. These are not part of TinyGPSPlus parsing or the active `GPS_TEST` path. GPS processing, grid conversion, and all optional decoder/sidetone methods remain intact.
+
+The Morse-number lookup is now a separate pure module, [keyer_morse.cpp](main/keyer_morse.cpp) / [keyer_morse.h](main/keyer_morse.h). The existing `convert_cw_number_to_ascii` wrapper still selects the configured prosign/non-English/LCD options and owns the unknown-character fallback and optional error tone. All existing callers use that wrapper; sending and receive timing algorithms are unchanged. Options are passed explicitly so the module does not depend on board-specific feature headers.
+
+`keyer_morse_host_test.ps1` compiles the actual wrapper with all 16 combinations of prosign, non-English, keyboard LCD, and error-tone options, linking a separately compiled lookup object. Each variant checks all 510 dit/dah patterns through eight elements plus space and invalid patterns, including the distinction between a recognized BK `*` and an unknown-character fallback. The web-server extraction remains deferred.
+
+### Keyboard consolidation
+
+Keyboard input is now Bluetooth-only, with touch buttons using the same command path. Physical PS/2 and USB-host keyboard implementations, startup/reset code, pin settings, and configuration suggestions have been removed. Defining `FEATURE_PS2_KEYBOARD` or `FEATURE_USB_KEYBOARD` now produces a build error directing the user to `FEATURE_BT_KEYBOARD`; these options no longer silently select inactive code.
+
+The shared command dispatcher is named `service_keyboard_commands`, with `keyboard_play_memory`, `keyboard_program_memory`, and `keyboard_get_number_input` helpers. Internal key constants use `BT_KEY_*` names, centralized in [keyer_keyboard_codes.h](main/keyer_keyboard_codes.h) instead of duplicated in the ESP32 and Pico settings headers. US/German/French byte values and modifier mappings are unchanged. BT pairing, reconnect, task/core ownership, queues, and media-key behavior are unchanged. Touch commands, numeric entry, and memory programming still use the existing shared input queue.
+
+No PS/2 library needs to be imported or renamed: the shared command codes were already local to the two settings headers and have been moved into the new header. The dormant `libraries/K3NG_PS2Keyboard` directory is no longer a firmware dependency. The USB Host Shield library and USB mouse implementation are left in place for mouse support. USB CDC serial, audio/MIDI, and CW-to-computer keyboard output are separate features and are not removed.
+
+`configuration.wpm_ps2_usb_keyboard` is renamed to `configuration.wpm_keyboard` without changing field type, order, EEPROM layout, or stored values. The LCD character option is now `OPTION_KEYBOARD_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT`; the old `OPTION_PS2_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT` spelling remains a compatibility alias. The platform host test checks all three BT layouts and rejection of the removed transports.
+
+Validation passed: RP2350B and ESP-IDF 6.1 Core2 builds, platform/layout tests, Core2 touch tests, all 16 Morse-option combinations, and all six WM8960 integration variants. Pre/post preprocessing comparisons confirmed unchanged shared command code for BT-only, touch-only, and combined input in lean/rich configurations, every key-code value from both previous platform headers, the configuration layout, and USB mouse initialization/service/callback code. Physical Bluetooth pairing/reconnect and touch operation still require a hardware check after flashing.
+
 _____________________________________________
 ## From the original K3NG site:
 
@@ -143,7 +203,7 @@ ESP32: I am using ESP-IDF to compile.  Arduino-esp32 is added as a component.  I
 
 Pico: Using Arduino IDE to compile with the arduino-pico board package.  Supports BT Classic or BLE based on a compile time switch.  BLE connects and reconnects, No PIN required.  BT Classic connects with a PIN adn but requires pushing the keyboard Pair button each connection aftawrds, no PIN required though.
 
-The BT keyboard code translates BT key codes to match the PS2 keycodes and calls into the slightly modified PS2 keyboard function.  See the K3NG docs for USB\PS2 Keyboard commands. I have a copy of the BT keyboard commands on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/BT-Keyboard-Key-Assignments.   Not all keys on a PS2/USB keyboard are present on these compact BT keyboards.   I may alter some of the key assignments over time.
+The BT keyboard code translates HID reports into the shared `BT_KEY_*` command codes and calls `service_keyboard_commands`, also used by touch buttons. Physical PS/2 and USB-host keyboards are no longer supported. The existing command assignments are preserved on this Wiki page https://github.com/K7MDL2/K3NG_Keyer_ESP32_BT_Keyboard/wiki/BT-Keyboard-Key-Assignments. Not all keys from a full-size keyboard are present on compact BT keyboards.
 
 Tested with BLE K380s and Rthe ii i8+ mini keyboards, and the Logitech K380, which uses BT classic.
 
@@ -1014,10 +1074,14 @@ stack-start/ready startup diagnostics have been removed; pairing prompts
 and errors remain.
 WM8960 feedback beeps finish with audio servicing before their callers
 draw LCD messages. Normal display servicing pauses during local or MIDI
-tones, key-down, or PTT; during PTT only the T/R icon and the CW text box
-still update (between elements, at most two characters per pass), so paddle,
+tones, key-down, or PTT, except that the cached T/R icon updates even during
+held tune/key-down. During PTT the CW text box also updates
+(between elements, at most two characters per pass), so paddle,
 straight-key and keyboard text appear as it is sent. On TFT displays the CW
 text box draws only new characters and repaints scrolled rows incrementally.
+Typed keyboard CW uses the paddle PTT hang/tail policy; the T/R icon follows
+the actual PTT state. Serial/WinKey text and memory playback retain their
+automatic-send PTT timing.
 Pico WM8960 builds clear one row in a separate pass and draw at most two
 characters per pass, including row repaints, so a full row cannot monopolize
 foreground decoder servicing. GPS processing also pauses during feedback tones.

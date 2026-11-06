@@ -13,7 +13,7 @@
 // #define DEBUG_HELL_TEST
 // #define DEBUG_WINKEY_PROTOCOL_USING_CW
 // #define DEBUG_CHECK_SERIAL
-// #define DEBUG_PS2_KEYBOARD
+// #define DEBUG_BT_KEYBOARD
 // #define DEBUG_VARIABLE_DUMP
 // #define DEBUG_BUTTONS
 // #define DEBUG_COMMAND_MODE
@@ -26,7 +26,6 @@
 // #define DEBUG_BACKLIGHT
 // #define DEBUG_BUTTON_ARRAY
 // #define DEBUG_USB
-// #define DEBUG_USB_KEYBOARD
 // #define DEBUG_CAPACITIVE_PADDLE
 // #define DEBUG_DISPLAY_SCROLL_PRINT_CHAR
 // #define DEBUG_WINKEY   // <- to use this you must have a multi-serial port Arduino and use FEATURE_COMMAND_LINE_INTERFACE_ON_SECONDARY_PORT

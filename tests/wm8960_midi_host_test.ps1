@@ -130,12 +130,230 @@ void run() {
 }
 '@
 $toneFunction = Get-CppFunction $main 's_tone'
+$keyboardScope = [regex]::Match($main, '(?s)struct KeyboardSendingScope \{.*?\r?\n\};').Value
+if (!$keyboardScope) { throw 'Keyboard sending scope not found' }
+$pttTailFunction = [regex]::Match($main, '(?ms)^void check_ptt_tail\(\)\s*\{.*?^\}').Value
+if (!$pttTailFunction) { throw 'PTT tail function not found' }
+$txKeyFunction = [regex]::Match($main, '(?ms)^void tx_and_sidetone_key \(int state\)\s*\{.*?^\}').Value
+if (!$txKeyFunction) { throw 'TX key function not found' }
+if ([regex]::Matches((Get-CppFunction $main 'service_send_buffer'),
+    'send_char\(send_buffer_array\[0\],[^,;]+,send_buffer_from_keyboard\[0\]\)').Count -ne 3 -or
+    (Get-CppFunction $main 'service_keyboard_commands') -notmatch 'add_to_send_buffer\(keystroke, true\)' -or
+    $main -notmatch 'send_buffer_from_keyboard\[serial_buffer_position_to_overwrite\] = false;') {
+    throw 'Keyboard source must follow ordinary/prosign text through the shared buffer and WinKey overwrites'
+}
+$keyboardPttTest = ''
+$keyboardPttRuns = ''
+foreach ($wk in 0..1) {
+    foreach ($policy in 0..2) {
+        $ns = "keyboard_ptt_${wk}_${policy}"
+        $keyboardPttRuns += "  ${ns}::run();`n"
+        $keyboardPttTest += "`nnamespace $ns {`n"
+        if ($wk) { $keyboardPttTest += "#define FEATURE_WINKEY_EMULATION`n" }
+        if ($policy -gt 0) { $keyboardPttTest += "#define OPTION_INCLUDE_PTT_TAIL_FOR_MANUAL_SENDING`n" }
+        if ($policy -eq 2) { $keyboardPttTest += "#define OPTION_EXCLUDE_PTT_HANG_TIME_FOR_MANUAL_SENDING`n" }
+        $keyboardPttTest += @'
+constexpr int MANUAL_SENDING = 0, AUTOMATIC_SENDING = 1, KEYER_NORMAL = 0;
+constexpr int KEYER_COMMAND_MODE = 2, CW = 0, HELL = 1, AMERICAN_MORSE = 2;
+constexpr int OMIT_LETTERSPACE = 1, SIDETONE_ON = 1, SIDETONE_PADDLE_ONLY = 2;
+constexpr int SENDING_DIT = 1, SENDING_DAH = 3;
+constexpr int tx_key_line_active_state = 1, tx_key_line_inactive_state = 0;
+constexpr int ptt_input_pin = 0, ptt_input_pin_active_state = 1, winkey_xon_threshold = 2;
+constexpr int winkey_xoff_threshold = 7, send_buffer_size = 8, length_letterspace = 3;
+bool keyboard_sending = false, keyboard_ptt_hang = false;
+bool key_state = false, ptt_line_activated = false, key_tx = true;
+int sending_mode = MANUAL_SENDING, last_sending_mode = MANUAL_SENDING;
+int keyer_machine_mode = KEYER_NORMAL, char_send_mode = CW, being_sent = SENDING_DIT;
+int current_tx_key_line = 0, first_extension_time = 0;
+int manual_ptt_invoke = 0, manual_ptt_invoke_ptt_input_pin = 0;
+bool winkey_host_open = false, winkey_xoff = false;
+int winkey_sending = 0, winkey_session_ptt_tail = 10;
+byte send_buffer_array[send_buffer_size]{}, send_buffer_bytes = 0;
+bool send_buffer_from_keyboard[send_buffer_size]{};
+float ptt_hang_time_wordspace_units = 1;
+unsigned long now_ms = 0, ptt_time = 0;
+struct {
+  int wpm = 20, wpm_command_mode = 20, length_wordspace = 7, sidetone_mode = 0, hz_sidetone = 700;
+  unsigned int ptt_tail_time[1] = {50};
+  int current_tx = 1;
+  bool ptt_buffer_hold_active = false;
+} configuration;
+bool pause_sending_buffer = false;
+unsigned long millis() { return now_ms; }
+int digitalRead(int) { return 0; }
+void ptt_key() { ptt_line_activated = true; ptt_time = millis(); }
+void ptt_unkey() { ptt_line_activated = false; }
+void service_host_ptt_feedback() {}
+void keyer_output_write(int,int) {}
+void myDelay(int) {}
+void s_tone(int,int,int) {}
+void s_noTone(int) {}
+void wm8960_midi_key(bool) {}
+void wm8960_audio_trace_key_edge(bool,int,int) {}
+void winkey_port_write(int,int) {}
+void loop_element_lengths(float,float,int) {}
+'@ + "`n" + $keyboardScope + "`n" +
+            $pttTailFunction + "`n" +
+            $txKeyFunction + @'
+
+void send_the_dits_and_dahs(const char *) {
+  last_sending_mode = sending_mode;
+  tx_and_sidetone_key(1);
+  tx_and_sidetone_key(0);
+}
+void send_char(byte,byte,bool = false);
+void add_to_send_buffer(byte,bool = false);
+'@ + "`n" + (Get-CppFunction $main 'send_char') + "`n" +
+            (Get-CppFunction $main 'add_to_send_buffer') + "`n" +
+            (Get-CppFunction $main 'remove_from_send_buffer') + @'
+
+unsigned long release_time(bool keyboard, bool paddle) {
+  now_ms = ptt_time = 0;
+  key_state = ptt_line_activated = false;
+  keyboard_sending = keyboard_ptt_hang = false;
+  if (paddle) {
+    sending_mode = last_sending_mode = MANUAL_SENDING;
+    tx_and_sidetone_key(1); tx_and_sidetone_key(0);
+  } else {
+    send_char('E',KEYER_NORMAL,keyboard);
+    assert(!keyboard_sending);
+  }
+  while (ptt_line_activated && now_ms < 2000) { ++now_ms; check_ptt_tail(); }
+  assert(now_ms < 2000);
+  return now_ms;
+}
+void run() {
+  for (bool host : {false,true}) {
+    winkey_host_open = host;
+    const auto paddle = release_time(false,true);
+    unsigned long expected = 420;
+#ifdef OPTION_INCLUDE_PTT_TAIL_FOR_MANUAL_SENDING
+#ifdef FEATURE_WINKEY_EMULATION
+    const unsigned long tail = host ? 280 : 50;
+#else
+    const unsigned long tail = 50;
+#endif
+#ifdef OPTION_EXCLUDE_PTT_HANG_TIME_FOR_MANUAL_SENDING
+    expected = tail;
+#else
+    expected += tail;
+#endif
+#endif
+    assert(paddle == expected);
+    assert(release_time(true,false) == paddle);
+    const auto serial = release_time(false,false);
+#ifdef FEATURE_WINKEY_EMULATION
+    assert(serial == (host ? 281 : 51));
+#else
+    assert(serial == 51);
+#endif
+    release_time(true,false);
+    assert(keyboard_ptt_hang);
+    tx_and_sidetone_key(1); // Direct automatic keying must not inherit keyboard hang.
+    assert(!keyboard_ptt_hang);
+    tx_and_sidetone_key(0);
+    send_char('|',KEYER_NORMAL,true);
+    assert(!keyboard_sending);
+    send_char(13,KEYER_NORMAL,true);
+    assert(!keyboard_sending);
+  }
+  add_to_send_buffer('A',true);
+  add_to_send_buffer('B');
+  add_to_send_buffer('C',true);
+  assert(send_buffer_from_keyboard[0] && !send_buffer_from_keyboard[1]);
+  remove_from_send_buffer();
+  assert(send_buffer_array[0] == 'B' && !send_buffer_from_keyboard[0]);
+  assert(send_buffer_array[1] == 'C' && send_buffer_from_keyboard[1]);
+  add_to_send_buffer(127); // Backspace, followed by replacement from another source.
+  add_to_send_buffer('D');
+  assert(send_buffer_array[1] == 'D' && !send_buffer_from_keyboard[1]);
+  for (int i = 0; i < send_buffer_size; ++i) add_to_send_buffer('K',true);
+  assert(send_buffer_bytes == send_buffer_size);
+  add_to_send_buffer('Z');
+  assert(send_buffer_array[send_buffer_size-1] == 'K' && send_buffer_from_keyboard[send_buffer_size-1]);
+  puts("PASS: typed keyboard PTT matches paddle policy; serial timing and mixed-buffer sources preserved");
+}
+}
+#undef FEATURE_WINKEY_EMULATION
+#undef OPTION_INCLUDE_PTT_TAIL_FOR_MANUAL_SENDING
+#undef OPTION_EXCLUDE_PTT_HANG_TIME_FOR_MANUAL_SENDING
+
+'@
+    }
+}
+$displayFunction = Get-CppFunction $main 'service_display'
+$displayGuardEnd = $displayFunction.IndexOf('#ifdef DEBUG_LOOP')
+if ($displayGuardEnd -lt 0) { throw 'Display guard boundary not found' }
+$displayGuardTest = @'
+namespace display_guard_test {
+bool popup_active = false, key_state = false, ptt_line_activated = false;
+bool tone = false;
+bool wm8960_audio_tone_active() { return tone; }
+bool encoder_menu_active() { return false; }
+void service_encoder_menu() { assert(false); }
+constexpr int STATUS_BAR_Y_CURSOR = 0, MY_DATUM = 0, STATUS_BAR_FONT = 1;
+constexpr int ICON_ANCHOR = 0, ICON_SPACING = 1, TFT_RED = 2, TFT_GREEN = 3;
+constexpr int TFT_BLACK = 0, LCD_SCROLL_MSG = 3;
+int normal_calls = 0, scroll_calls = 0;
+int lcd_status = LCD_SCROLL_MSG;
+bool lcd_scroll_buffer_dirty = false, lcd_scroll_flag = false;
+int lcd_scroll_repaint_row = 0, lcd_scroll_repaint_col = 0;
+bool tft_draw_pending_scroll_chars(int budget) {
+  assert(budget == 2); ++scroll_calls; return true;
+}
+struct {
+  int draws = 0, color = 0;
+  char icon = 0;
+  void setTextDatum(int) {}
+  void setTextFont(int) {}
+  void setTextColor(int foreground, int) { color = foreground; }
+  void drawChar(char c, int, int) { ++draws; icon = c; }
+} lcd;
+'@ + "`n" + (Get-CppFunction $main 'draw_tx_icon') + "`n" +
+    $displayFunction.Substring(0,$displayGuardEnd) + "`n++normal_calls;`n}`n" + @'
+void run() {
+  service_display();
+  assert(lcd.icon == 'R' && lcd.color == TFT_GREEN && normal_calls == 1);
+  key_state = ptt_line_activated = tone = true; // Ctrl-T holds key and sidetone.
+  lcd_scroll_buffer_dirty = true;
+  service_display();
+  assert(lcd.icon == 'T' && lcd.color == TFT_RED);
+  assert(normal_calls == 1 && scroll_calls == 0);
+  const int draws = lcd.draws;
+  service_display();
+  assert(lcd.draws == draws); // No repeated LCD writes while held.
+  for (int element = 0; element < 3; ++element) { // Keyboard-sent CW, PTT held across gaps.
+    key_state = tone = false;
+    service_display();
+    key_state = tone = true;
+    service_display();
+    assert(lcd.icon == 'T' && lcd.draws == draws && normal_calls == 1);
+  }
+  assert(scroll_calls == 1);
+  key_state = tone = false; // Ctrl-U / PTT tail permits bounded text.
+  service_display();
+  assert(lcd.icon == 'T' && scroll_calls == 1 && normal_calls == 1);
+  popup_active = true;
+  ptt_line_activated = false;
+  tone = true;
+  service_display();
+  assert(lcd.draws == draws);
+  popup_active = false;
+  service_display();
+  assert(lcd.icon == 'R' && lcd.color == TFT_GREEN && normal_calls == 1);
+  tone = false;
+  service_display();
+  assert(normal_calls == 2);
+  puts("PASS: held tune updates cached T/R icon, defers text/LCD work, respects popup");
+}
+}
+'@
 if ($toneFunction -notmatch 'wm8960_audio_start_tone\(frequency, duration_ms, mute_release_ms\);\s*if \(duration_ms\)' -or
     $toneFunction -notmatch 'while \(wm8960_audio_feedback_pending\(\)\)' -or
     $toneFunction -notmatch 'millis\(\) - drain_started_ms < 6' -or
     $toneFunction -notmatch 'Error: WM8960 feedback tone stalled' -or
-    $main -notmatch '(?s)void service_display\(\) \{\s*#if[^\r\n]*\r?\n\s*if \(key_state \|\| wm8960_audio_tone_active\(\)\) return;\s*if \(ptt_line_activated\) \{.*?draw_tx_icon\(\);.*?tft_draw_pending_scroll_chars\(2\).*?#endif\s*return;') {
-    throw 'Feedback tones must service audio before LCD work, and display servicing must defer during tones/keying (PTT allows only T/R icon and bounded live text)'
+    $main -notmatch '(?s)void service_display\(\) \{\s*#if[^\r\n]*\r?\n\s*#ifdef FEATURE_TFT_DISPLAY\s*draw_tx_icon\(\);\s*#endif\s*if \(key_state \|\| wm8960_audio_tone_active\(\)\) return;\s*if \(ptt_line_activated\) \{.*?tft_draw_pending_scroll_chars\(2\).*?#endif\s*return;') {
+    throw 'Display servicing must update the cached T/R icon before deferring during tones/keying; PTT also allows bounded live text'
 }
 $sine = [regex]::Match($audio, '(?s)constexpr int16_t kSineTable\[64\] = \{.*?\};').Value
 if (!$sine) { throw 'Sine table not found' }
@@ -179,7 +397,7 @@ $encoderTable = [regex]::Match($main, '(?s)#ifdef OPTION_ENCODER_HALF_STEP_MODE.
 $settings = Get-Content (Join-Path $root 'main\keyer_settings_pico.h') -Raw
 $encoderDirection = [regex]::Match($settings, '(?s)#ifndef ENCODER_VFO_DIRECTION.*?(?=\r?\n#define sd_card_spi_ss_line)').Value
 if (!$encoderDirection) { throw 'Encoder VFO direction setting not found' }
-$encoderFunctions = @('read_audio_safe_touch', 'lcd_timed_message_expired', 'gps_updates_paused', 'gps_data_fresh', 'gps_location_held', 'update_gps_clock_icon', 'service_host_ptt_feedback', 'service_keyer_midi', 'midi_pod_mode', 'sync_pod_volume', 'audio_volume', 'audio_muted', 'step_audio_volume', 'apply_audio_levels', 'set_audio_volume', 'print_audio_volumes', 'cli_audio_volume',
+$encoderFunctions = @('read_audio_safe_touch', 'lcd_timed_message_expired', 'gps_updates_paused', 'update_gps_clock_icon', 'service_host_ptt_feedback', 'service_keyer_midi', 'midi_pod_mode', 'sync_pod_volume', 'audio_volume', 'audio_muted', 'step_audio_volume', 'apply_audio_levels', 'set_audio_volume', 'print_audio_volumes', 'cli_audio_volume',
     'initialize_potentiometer', 'initialize_rotary_encoder', 'chk_rotary_encoder',
     'check_rotary_encoder') |
     ForEach-Object { Get-CppFunction $main $_ }
@@ -201,6 +419,8 @@ $mock = @'
 #include <vector>
 #include <map>
 #include "cw_rx_decoder.h"
+#include "keyer_diagnostics.h"
+#include "keyer_gps.h"
 #include "encoder_menu.h"
 #include "encoder_settings.h"
 #define ARDUINO_ARCH_RP2040
@@ -1975,6 +2195,7 @@ int main() {
   puts("PASS: longest foreground diagnostic distinguishes display and BOOTSEL stalls");
   terminal_wait_test::run();
   scroll_clear_test::run();
+  display_guard_test::run();
   lcd.simulate_menu_latency = true;
   cooperative_max_gap_us = 0;
   cooperative_last_us = micros();
@@ -2107,6 +2328,8 @@ int main() {
 }
 '@
 
+$checks = $checks.Replace('  display_guard_test::run();',
+    "  display_guard_test::run();`n" + $keyboardPttRuns)
 $temp = Join-Path ([IO.Path]::GetTempPath()) ("keyer-midi-test-" + [guid]::NewGuid())
 $null = New-Item -ItemType Directory -Path $temp
 $source = Join-Path $temp 'test.cpp'
@@ -2114,7 +2337,7 @@ $exe = Join-Path $temp 'test.exe'
 $obj = Join-Path $temp 'test.obj'
 try {
     Set-Content -LiteralPath $source -Value (
-        $mock + "`n" + $rxHeader + "`n" + $rxGlobals + "`n" + $sine + "`n" + ($audioFunctions -join "`n") + "`n" + $terminalWaitTest + "`n" + $clearTest +
+        $mock + "`n" + $rxHeader + "`n" + $rxGlobals + "`n" + $sine + "`n" + ($audioFunctions -join "`n") + "`n" + $terminalWaitTest + "`n" + $clearTest + "`n" + $displayGuardTest + "`n" + $keyboardPttTest +
         "`n" + $header + "`n" + $midi + "`n" + $config +
         "`n" + $midiStatus + "`n" + $cli + "`n" + $potGuard + "`n" + $encoderMocks +
         "`n" + $keyInterrupts + "`n" + $encoderDirection + "`n" + $encoderTable + "`n" + $encoderCapture +
@@ -2129,6 +2352,12 @@ try {
     $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if (!$vs) { throw 'Visual Studio C++ tools not found' }
     $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+    $diagnosticsObj = Join-Path $temp 'keyer_diagnostics.obj'
+    & $env:ComSpec /c "call `"$vcvars`" >nul && cl /nologo /std:c++17 /EHsc /W3 /c /Fo`"$diagnosticsObj`" `"$root\main\keyer_diagnostics.cpp`""
+    if ($LASTEXITCODE -ne 0) { throw 'Diagnostics module compilation failed' }
+    $gpsObj = Join-Path $temp 'keyer_gps.obj'
+    & $env:ComSpec /c "call `"$vcvars`" >nul && cl /nologo /std:c++17 /EHsc /W3 /c /Fo`"$gpsObj`" `"$root\main\keyer_gps.cpp`""
+    if ($LASTEXITCODE -ne 0) { throw 'GPS module compilation failed' }
     $variants = if ($CwEncodersOnly) {
         @('', '/Drotary_switch=0', '/Drotary_switch=42', '/DENCODER_VFO_DIRECTION=1', '/DTEST_ENCODER_FULL_STEP', '/DWM8960_RX_TEXT_COLOR=0xFFE0')
     } else {
@@ -2136,13 +2365,13 @@ try {
     }
     foreach ($defines in $variants) {
         if ($CwEncodersOnly) { $defines += ' /DTEST_CW_ENCODERS_ONLY' }
-        & $env:ComSpec /c "call `"$vcvars`" >nul && cl /nologo /std:c++17 /EHsc /W3 /I`"$root\main`" $defines /Fo`"$obj`" /Fe`"$exe`" `"$source`""
+        & $env:ComSpec /c "call `"$vcvars`" >nul && cl /nologo /std:c++17 /EHsc /W3 /I`"$root\main`" $defines /Fo`"$obj`" /Fe`"$exe`" `"$source`" `"$diagnosticsObj`" `"$gpsObj`""
         if ($LASTEXITCODE -ne 0) { throw "Host compilation failed: $defines" }
         & $exe
         if ($LASTEXITCODE -ne 0) { throw "Host assertions failed: $defines" }
     }
 } finally {
-    foreach ($file in @($source, $exe, $obj)) {
+    foreach ($file in @($source, $exe, $obj, (Join-Path $temp 'keyer_diagnostics.obj'), (Join-Path $temp 'keyer_gps.obj'))) {
         if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }
     }
     Remove-Item -LiteralPath $temp

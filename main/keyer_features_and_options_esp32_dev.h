@@ -25,8 +25,6 @@
 //#define FEATURE_SIDETONE_NEWTONE      // Use the NewTone library, ~1k smaller code size than the standard tone library. Uses timer1 (pins 9 or 10)  https://bitbucket.org/teckel12/arduino-new-tone/wiki/Home
 #define FEATURE_SERIAL_HELP
 //#define FEATURE_HELL
-////// #define FEATURE_PS2_KEYBOARD        // Use a PS2 keyboard to send code - Change keyboard layout (non-US) in K3NG_PS2Keyboard.h.  Additional options below.
-////// #define FEATURE_USB_KEYBOARD          // Use a USB keyboard to send code - Uncomment three lines in k3ng_keyer.ino (search for note_usb_uncomment_lines)
 
 #define FEATURE_BT_KEYBOARD  // ESP32-WROOM-32  BT 4.2 BLE and BT Classic Bluetooth using a BT Keyboard class library AND  Pico 2W boards
 // #define USE_BLE          // ESP32: use BLE HID keyboard; leave commented for Classic Bluetooth
@@ -314,8 +312,7 @@
 // #define OPTION_UNKNOWN_CHARACTER_ERROR_TONE
 #define OPTION_DO_NOT_SAY_HI
 #define OPTION_BT_KEYBOARD_US  // for ESP32 BT keyboard
- // #define OPTION_PS2_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT // makes some non-English characters from the PS2 keyboard display correctly in the LCD display (donated by Marcin sp5iou)
-// #define OPTION_PS2_KEYBOARD_RESET // reset the PS2 keyboard upon startup with 0xFF (contributed by Bill, W9BEL)
+ // #define OPTION_KEYBOARD_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT // non-English keyboard characters on the LCD (donated by Marcin sp5iou)
 // #define OPTION_SAVE_MEMORY_NANOKEYER
 ///#define OPTION_CW_KEYBOARD_CAPSLOCK_BEEP
 // #define OPTION_CW_KEYBOARD_ITALIAN
