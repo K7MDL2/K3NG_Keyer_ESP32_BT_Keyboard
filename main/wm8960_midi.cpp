@@ -427,12 +427,12 @@ void wm8960_midi_service(uint16_t sidetone_frequency, uint32_t speed_wpm,
           static_cast<uint16_t>(constrain(master_volume, 0, 100)),
           static_cast<uint16_t>(constrain(sidetone_volume, 0, 100)),
           static_cast<uint16_t>(constrain(microphone_volume, 0, 100)),
-          static_cast<uint16_t>(constrain(sidetone_frequency, 300, 1000))};
+          static_cast<uint16_t>(constrain(sidetone_frequency, 300, 1200))};
       for (uint8_t index = 0;
            control_mode != Wm8960MidiControlMode::Local && index < 4; ++index) {
         if (last_control_inputs[index] != inputs[index]) {
           const uint8_t value = index == 3
-              ? ((inputs[index] - 300u) * 127u + 350u) / 700u
+              ? ((inputs[index] - 300u) * 127u + 450u) / 900u
               : (inputs[index] * 127u + 50u) / 100u;
           if (enqueue_control(controls[index], value)) {
             last_control_inputs[index] = inputs[index];
@@ -540,7 +540,7 @@ bool wm8960_midi_take_host_control(Wm8960MidiHostControl control, uint16_t *valu
       speed_reported = true;
       return true;
     case Wm8960MidiHostControl::SidetoneFrequency:
-      *value = static_cast<uint16_t>(300u + (midi * 700u + 63u) / 127u);
+      *value = static_cast<uint16_t>(300u + (midi * 900u + 63u) / 127u);
       last_control_inputs[3] = *value;
       return true;
     default:
